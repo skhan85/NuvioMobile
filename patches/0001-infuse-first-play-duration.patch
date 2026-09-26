@@ -1,0 +1,71 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
+index f9c8ba7..2837e75 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
+@@ -7,6 +7,8 @@ import com.nuvio.app.features.collection.CollectionEditorPage
+ import com.nuvio.app.features.collection.CollectionEditorRepository
+ import com.nuvio.app.features.collection.FolderDetailRepository
+ import com.nuvio.app.features.collection.disposeCollectionEditorPage
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.details.parseRuntimeMinutes
+ import com.nuvio.app.features.home.MetaPreview
+ import com.nuvio.app.features.library.LibraryItem
+ import com.nuvio.app.features.player.ExternalPlayerPlaybackRequest
+@@ -85,21 +87,49 @@ internal data class PosterActionTarget(
+     val libraryListKey: String? = null,
+ )
+ 
+-internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlaybackRequest =
+-    ExternalPlayerPlaybackRequest(
++internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlaybackRequest {
++    // Duration from a previous in-app playback is exact, so prefer it. On a first play in an
++    // external player (e.g. Infuse) nothing is stored yet, so fall back to the metadata runtime.
++    // Without a duration, completion (90%) is never detected and tracker scrobbles are skipped
++    // (NuvioMedia/NuvioMobile#2072).
++    val storedDurationMs = WatchProgressRepository.progressForVideo(
++        videoId = videoId ?: parentMetaId,
++        parentMetaId = parentMetaId,
++        seasonNumber = seasonNumber,
++        episodeNumber = episodeNumber,
++    )?.durationMs?.takeIf { it > 0L }
++
++    return ExternalPlayerPlaybackRequest(
+         sourceUrl = sourceUrl,
+         title = title,
+         streamTitle = streamTitle,
+         sourceHeaders = sourceHeaders,
+         resumePositionMs = initialPositionMs,
+-        durationMs = WatchProgressRepository.progressForVideo(
+-            videoId = videoId ?: parentMetaId,
+-            parentMetaId = parentMetaId,
+-            seasonNumber = seasonNumber,
+-            episodeNumber = episodeNumber,
+-        )?.durationMs?.takeIf { it > 0L },
++        durationMs = storedDurationMs ?: metadataRuntimeMs(),
+         playbackSession = externalPlaybackSession(),
+         season = seasonNumber,
+         episode = episodeNumber,
+         episodeTitle = episodeTitle,
+     )
++}
++
++/**
++ * Runtime from already-loaded metadata (no network call). Uses the episode's own runtime when
++ * the addon provides one, otherwise the title-level runtime (movie length, or a series'
++ * typical episode length).
++ */
++private fun PlayerLaunch.metadataRuntimeMs(): Long? {
++    val meta = MetaDetailsRepository.peek(parentMetaType, parentMetaId) ?: return null
++    val episodeRuntimeMinutes = meta.videos
++        .firstOrNull { video ->
++            (videoId != null && video.id == videoId) ||
++                (seasonNumber != null && episodeNumber != null &&
++                    video.season == seasonNumber && video.episode == episodeNumber)
++        }
++        ?.runtime
++        ?.takeIf { it > 0 }
++    val runtimeMinutes = episodeRuntimeMinutes
++        ?: parseRuntimeMinutes(meta.runtime)?.takeIf { it > 0 }
++        ?: return null
++    return runtimeMinutes * 60_000L
++}
