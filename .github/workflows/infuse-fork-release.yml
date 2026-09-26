@@ -1,0 +1,180 @@
+name: Infuse Fork Release
+
+# Builds an unsigned iOS IPA of upstream Nuvio with the patches in /patches applied,
+# and publishes it as a GitHub release (picked up by the Raspberry Pi release watcher).
+# Daily, it first syncs this fork with NuvioMedia/NuvioMobile, then builds only if
+# something changed since the last release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if a release for this commit already exists
+        type: boolean
+        default: false
+  schedule:
+    - cron: "40 9 * * *" # daily, ~5:40 AM Toronto
+  push:
+    paths:
+      - "patches/**"
+      - ".github/workflows/infuse-fork-release.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: infuse-fork-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Sync upstream and decide
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      sha: ${{ steps.decide.outputs.sha }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Sync fork with upstream
+        if: github.event_name != 'push'
+        run: |
+          # Fast-forwards this fork from NuvioMedia/NuvioMobile. Fails harmlessly (and the
+          # build continues on the current code) if upstream changed workflow files, which the
+          # built-in token isn't allowed to push. Use GitHub's "Sync fork" button in that case.
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/merge-upstream" -f branch="${BRANCH}" \
+            || echo "::warning::Automatic upstream sync failed. Use 'Sync fork' on GitHub."
+
+      - name: Check out synced source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.BRANCH }}
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          version="$(sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' iosApp/Configuration/Version.xcconfig | head -n 1)"
+          sha="$(git rev-parse HEAD)"
+          short="$(git rev-parse --short=7 HEAD)"
+          tag="v${version}-infuse.${short}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+             && [[ "${{ inputs.force }}" != "true" ]]; then
+            echo "Release ${tag} already exists; nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will build ${tag}."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build unsigned iOS IPA
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      GRADLE_OPTS: -Dfile.encoding=UTF-8
+      IOS_CONFIGURATION: Release
+      KOTLIN_DAEMON_JVMARGS: -Xmx2048M
+      NUVIO_GRADLE_JVMARGS: -Xmx4608M -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=768M
+      NUVIO_KOTLIN_NATIVE_JVMARGS: -Xmx4608M
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Apply fork patches
+        run: |
+          shopt -s nullglob
+          for patch in patches/*.patch; do
+            if git apply --check "${patch}" 2>/dev/null; then
+              git apply "${patch}"
+              echo "Applied ${patch}"
+            elif git apply -R --check "${patch}" 2>/dev/null; then
+              echo "::notice::${patch} is already in upstream; skipping it. You can delete it."
+            else
+              echo "::error::${patch} no longer applies to upstream. It needs updating."
+              exit 1
+            fi
+          done
+
+      - name: Write runtime config
+        env:
+          # Official Nuvio server (Nuvio account + Nuvio Sync). These are the public client
+          # values shipped inside every official Nuvio app (the key's role is "anon"), so they
+          # are defaults here; set repository secrets with the same names to override them.
+          NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL || 'https://api.nuvio.tv' }}
+          NUVIO_SUPABASE_FALLBACK_URL: ${{ secrets.NUVIO_SUPABASE_FALLBACK_URL || 'https://api-two.nuvioapp.space' }}
+          NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI' }}
+          # Optional, from your own free developer accounts:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
+          MDBLIST_CLIENT_ID: ${{ secrets.MDBLIST_CLIENT_ID }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        run: |
+          : > local.properties
+          for key in NUVIO_SUPABASE_URL NUVIO_SUPABASE_FALLBACK_URL NUVIO_SUPABASE_ANON_KEY \
+                     TMDB_API_KEY SIMKL_CLIENT_ID MDBLIST_CLIENT_ID \
+                     TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET; do
+            value="${!key}"
+            if [[ -n "${value}" ]]; then
+              printf '%s=%s\n' "${key}" "${value}" >> local.properties
+              echo "Set ${key}"
+            else
+              echo "Skipped ${key} (no secret)"
+            fi
+          done
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Cache Kotlin Native
+        uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Prepare iOS dependencies
+        run: ./scripts/prepare-ios-dependencies.sh
+
+      - name: Build IPA
+        run: ./scripts/build-ios-ipa.sh
+
+      - name: Publish release
+        run: |
+          src="build/ios-ipa/nuvio-${VERSION}-full-release.ipa"
+          dst="build/ios-ipa/nuvio-${VERSION}-infuse-ios.ipa"
+          if [[ ! -f "${src}" ]]; then
+            echo "::error::Expected ${src} was not produced."
+            ls -la build/ios-ipa || true
+            exit 1
+          fi
+          mv "${src}" "${dst}"
+          notes="Upstream NuvioMedia/NuvioMobile @ ${{ needs.prepare.outputs.sha }} with fork patches:"
+          for patch in patches/*.patch; do notes+=$'\n'"- $(basename "${patch}")"; done
+          gh release create "${TAG}" "${dst}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${{ needs.prepare.outputs.sha }}" \
+            --title "Nuvio ${VERSION} (Infuse fork)" \
+            --notes "${notes}" \
+            || gh release upload "${TAG}" "${dst}" --clobber --repo "${GITHUB_REPOSITORY}"
