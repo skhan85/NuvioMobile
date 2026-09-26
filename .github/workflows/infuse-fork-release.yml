@@ -117,6 +117,11 @@ jobs:
           NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL || 'https://api.nuvio.tv' }}
           NUVIO_SUPABASE_FALLBACK_URL: ${{ secrets.NUVIO_SUPABASE_FALLBACK_URL || 'https://api-two.nuvioapp.space' }}
           NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI' }}
+          # Public feature endpoints the official Nuvio build ships with (IMDb episode ratings,
+          # IntroDB skip-intro). Set repository secrets with the same names to override them.
+          IMDB_RATINGS_API_BASE_URL: ${{ secrets.IMDB_RATINGS_API_BASE_URL || 'https://seriesgraph.com/' }}
+          IMDB_TAPFRAME_API_BASE_URL: ${{ secrets.IMDB_TAPFRAME_API_BASE_URL || 'https://imdb.tapframe.space/' }}
+          INTRODB_API_URL: ${{ secrets.INTRODB_API_URL || 'https://api.introdb.app/' }}
           # Optional, from your own free developer accounts:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
@@ -126,6 +131,7 @@ jobs:
         run: |
           : > local.properties
           for key in NUVIO_SUPABASE_URL NUVIO_SUPABASE_FALLBACK_URL NUVIO_SUPABASE_ANON_KEY \
+                     IMDB_RATINGS_API_BASE_URL IMDB_TAPFRAME_API_BASE_URL INTRODB_API_URL \
                      TMDB_API_KEY SIMKL_CLIENT_ID MDBLIST_CLIENT_ID \
                      TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET; do
             value="${!key}"
