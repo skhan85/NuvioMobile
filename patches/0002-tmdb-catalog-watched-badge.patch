@@ -1,0 +1,74 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/PosterImdbAliases.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/PosterImdbAliases.kt
+new file mode 100644
+index 0000000..4679412
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/PosterImdbAliases.kt
+@@ -0,0 +1,49 @@
++package com.nuvio.app.features.watching.application
++
++import androidx.compose.runtime.mutableStateMapOf
++import com.nuvio.app.features.tmdb.TmdbService
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withPermit
++import kotlinx.coroutines.withContext
++
++/**
++ * Built-in TMDB catalogs give posters "tmdb:<id>" ids, while watched history is keyed by IMDb ids,
++ * so their watched badge never matched (NuvioMedia/NuvioMobile#2073). This resolves and caches the
++ * IMDb id for such posters. Results live in Compose snapshot state, so a badge appears as soon as
++ * its lookup finishes. Lookups go through TmdbService's own cache and need a TMDB API key.
++ */
++internal object PosterImdbAliases {
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val lookupLimit = Semaphore(permits = 4)
++    private val resolved = mutableStateMapOf<String, String>()
++
++    // Touched only from the main thread (composition and the Main hand-off below).
++    private val requested = HashSet<String>()
++
++    fun imdbIdFor(type: String, id: String): String? {
++        if (!id.startsWith("tmdb:", ignoreCase = true)) return null
++        val tmdbId = id.substring("tmdb:".length).substringBefore(':').trim().toIntOrNull() ?: return null
++        val mediaType = TmdbService.normalizeMediaType(type).let { normalized ->
++            if (normalized == "tv" || normalized == "anime") "tv" else "movie"
++        }
++        val key = "$mediaType:$tmdbId"
++        resolved[key]?.let { return it }
++        if (requested.add(key)) {
++            scope.launch {
++                val imdbId = runCatching {
++                    lookupLimit.withPermit {
++                        TmdbService.tmdbToImdb(tmdbId = tmdbId, mediaType = mediaType)
++                    }
++                }.getOrNull()?.trim()?.takeIf { value -> value.startsWith("tt", ignoreCase = true) }
++                if (imdbId != null) {
++                    withContext(Dispatchers.Main) { resolved[key] = imdbId }
++                }
++            }
++        }
++        return null
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingState.kt
+index 8ddf1ad..848609e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingState.kt
+@@ -22,7 +22,13 @@ object WatchingState {
+     ): Boolean {
+         val posterKeys = watchedItemKeys(type = item.type, id = item.id)
+         if (posterKeys.any(watchedKeys::contains)) return true
+-        return item.type.isSeriesLikePosterType() && posterKeys.any(fullyWatchedSeriesKeys::contains)
++        if (item.type.isSeriesLikePosterType() && posterKeys.any(fullyWatchedSeriesKeys::contains)) return true
++
++        // Built-in TMDB catalogs use "tmdb:<id>" poster ids; watched history uses IMDb ids (#2073).
++        val imdbId = PosterImdbAliases.imdbIdFor(type = item.type, id = item.id) ?: return false
++        val aliasKeys = watchedItemKeys(type = item.type, id = imdbId)
++        if (aliasKeys.any(watchedKeys::contains)) return true
++        return item.type.isSeriesLikePosterType() && aliasKeys.any(fullyWatchedSeriesKeys::contains)
+     }
+ 
+     fun isEpisodeWatched(
