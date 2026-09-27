@@ -1,0 +1,147 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+index 1429106..c920d4c 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+@@ -19,6 +19,13 @@ internal data class InfusePlaybackSession(
+     val durationMs: Long?,
+     val returnedPositionMs: Long? = null,
+     val failed: Boolean = false,
++    // Fallback for when Infuse is swiped away instead of closed with its ✕ button, in which
++    // case Infuse never calls back with a position. Nuvio is suspended while Infuse plays, so
++    // the only signal left is how long Nuvio was away; see estimatedResumeMs().
++    val startPositionMs: Long = 0L,
++    val launchedAtMs: Long = 0L,
++    val awayMs: Long = 0L,
++    val awaySinceMs: Long? = null,
+ ) {
+     fun playbackResult(): ExternalPlaybackResult? = returnedPositionMs?.let {
+         ExternalPlaybackResult(it, durationMs, endedByUser = true, playbackSession = playbackSession, callbackId = id)
+@@ -44,6 +51,10 @@ internal class InfusePlaybackCallbacks(
+             sourceUrl = request.sourceUrl,
+             playbackSession = request.playbackSession,
+             durationMs = request.durationMs?.takeIf { it > 0L },
++            startPositionMs = request.resumePositionMs.coerceAtLeast(0L),
++            launchedAtMs = nowMs(),
++            // Opening Infuse sends Nuvio to the background straight away.
++            awaySinceMs = nowMs(),
+         )
+         save(json.encodeToString(session))
+         pending.value = null
+@@ -79,6 +90,51 @@ internal class InfusePlaybackCallbacks(
+         return true
+     }
+ 
++    private fun pendingSession(): InfusePlaybackSession? =
++        storedSession()?.takeIf { it.returnedPositionMs == null && !it.failed }
++
++    /** Nuvio left the foreground while a handoff to Infuse is still waiting for its callback. */
++    fun onAppBackground() {
++        val session = pendingSession() ?: return
++        if (session.awaySinceMs != null) return
++        save(json.encodeToString(session.copy(awaySinceMs = nowMs())))
++    }
++
++    /**
++     * Nuvio is back in the foreground. The time it was away is added to the estimate, except for
++     * a stretch longer than the rest of the title plus a margin (e.g. Infuse swiped away and Nuvio
++     * only reopened the next day), which says nothing about how much was watched.
++     */
++    fun onAppForeground() {
++        val session = pendingSession() ?: return
++        val since = session.awaySinceMs ?: return
++        val stretch = (nowMs() - since).coerceAtLeast(0L)
++        val remaining = session.durationMs?.let { it - session.startPositionMs - session.awayMs }
++        val counted = if (remaining != null && stretch > remaining + AWAY_STRETCH_MARGIN_MS) 0L else stretch
++        save(json.encodeToString(session.copy(awayMs = session.awayMs + counted, awaySinceMs = null)))
++    }
++
++    /**
++     * Estimated resume position when Infuse was left without its callback, or null when there is
++     * nothing to estimate. Deliberately conservative: it is set back a little (so resuming rewinds
++     * rather than skips) and capped below the watched threshold, so an estimate can never mark
++     * a title watched. Pauses in Infuse cannot be seen and count as watching.
++     */
++    fun estimatedResumeMs(): Pair<InfusePlaybackSession, Long>? {
++        val session = pendingSession() ?: return null
++        val duration = session.durationMs ?: return null
++        if (session.playbackSession == null) return null
++        if (nowMs() - session.launchedAtMs > ESTIMATE_WINDOW_MS) return null
++        if (session.awayMs < MIN_ESTIMATE_AWAY_MS) return null
++        val margin = maxOf(ESTIMATE_SETBACK_MIN_MS, session.awayMs / 20)
++        val estimate = minOf(
++            session.startPositionMs + session.awayMs - margin,
++            (duration * ESTIMATE_CAP_FRACTION).toLong(),
++        )
++        if (estimate <= session.startPositionMs) return null
++        return session to estimate
++    }
++
+     fun consume(id: String) {
+         if (storedSession()?.id == id) save(null)
+         if (pending.value?.id == id) pending.value = null
+@@ -91,6 +147,15 @@ internal class InfusePlaybackCallbacks(
+     }
+ }
+ 
++private fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
++
++private const val AWAY_STRETCH_MARGIN_MS = 30L * 60_000L
++private const val ESTIMATE_WINDOW_MS = 6L * 60L * 60_000L
++private const val MIN_ESTIMATE_AWAY_MS = 2L * 60_000L
++private const val ESTIMATE_SETBACK_MIN_MS = 60_000L
++// Below Nuvio's 90% watched threshold and the 80% at which trackers such as Simkl count a play.
++private const val ESTIMATE_CAP_FRACTION = 0.79
++
+ internal val infusePlaybackCallbacks = InfusePlaybackCallbacks(
+     load = PlayerSettingsStorage::loadPendingExternalPlayback,
+     save = PlayerSettingsStorage::savePendingExternalPlayback,
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt
+index c3f7057..0444256 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt
+@@ -5,7 +5,11 @@ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.rememberUpdatedState
++import com.nuvio.app.core.sync.AppForegroundMonitor
++import com.nuvio.app.core.sync.AppVisibility
+ import com.nuvio.app.core.ui.NuvioToastController
++import com.nuvio.app.features.watchprogress.WatchProgressRepository
++import kotlinx.coroutines.delay
+ import nuvio.composeapp.generated.resources.Res
+ import nuvio.composeapp.generated.resources.external_player_failed
+ import org.jetbrains.compose.resources.getString
+@@ -29,6 +33,33 @@ actual fun rememberExternalPlayerLauncher(
+             }
+         }
+     }
++    // Infuse swiped away instead of closed with ✕: no callback arrives, so record an estimate
++    // from the time Nuvio was away. A later ✕ callback for the same playback still wins.
++    LaunchedEffect(Unit) {
++        AppForegroundMonitor.events().collect { visibility ->
++            when (visibility) {
++                AppVisibility.Background -> infusePlaybackCallbacks.onAppBackground()
++                AppVisibility.Foreground -> {
++                    infusePlaybackCallbacks.onAppForeground()
++                    // Give Infuse's x-success URL (✕ button) time to arrive first.
++                    delay(3_000)
++                    val (session, positionMs) = infusePlaybackCallbacks.estimatedResumeMs()
++                        ?: return@collect
++                    val playbackSession = session.playbackSession ?: return@collect
++                    WatchProgressRepository.upsertPlaybackProgress(
++                        session = playbackSession,
++                        snapshot = PlayerPlaybackSnapshot(
++                            isLoading = false,
++                            isPlaying = false,
++                            isEnded = false,
++                            durationMs = session.durationMs ?: 0L,
++                            positionMs = positionMs,
++                        ),
++                    )
++                }
++            }
++        }
++    }
+     return remember {
+         { intentResult: ExternalPlayerIntentResult.Success ->
+             val url = intentResult.intent
