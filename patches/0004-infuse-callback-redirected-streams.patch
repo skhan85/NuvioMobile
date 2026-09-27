@@ -1,0 +1,16 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+index d0d2ac4..1429106 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+@@ -63,7 +63,10 @@ internal class InfusePlaybackCallbacks(
+         if (path[1] != session.id || session.returnedPositionMs != null || session.failed) return true
+         val result = when (path[2]) {
+             "success" -> {
+-                if (url.parameters["lastPlayedUrl"] != session.sourceUrl) return true
++                // The session id in this callback's path already ties it to the playback Nuvio
++                // started. Infuse reports lastPlayedUrl as the URL it finally played, which differs
++                // from the one Nuvio sent when the stream redirects (debrid/addon resolver links) or
++                // is re-encoded, so requiring an exact match silently dropped the returned position.
+                 val seconds = url.parameters["position"]?.toLongOrNull()
+                     ?.takeIf { it in 0..Long.MAX_VALUE / 1000L } ?: return true
+                 session.copy(returnedPositionMs = seconds * 1000L)
