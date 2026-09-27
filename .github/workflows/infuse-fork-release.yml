@@ -1,5 +1,214 @@
 name: Infuse Fork Release
 
+# Builds an unsigned iOS IPA of each official NuvioMedia/NuvioMobile release with the patches in
+# /patches applied, and publishes it as a GitHub release (picked up by the Raspberry Pi release
+# watcher). Checks hourly, so a new official release is rebuilt within about an hour of it
+# appearing. A change to /patches or this file also triggers a rebuild.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if a release for this upstream release + patch set already exists
+        type: boolean
+        default: false
+  schedule:
+    - cron: "23 * * * *" # hourly
+  push:
+    paths:
+      - "patches/**"
+      - ".github/workflows/infuse-fork-release.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: infuse-fork-release
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPO: NuvioMedia/NuvioMobile
+
+jobs:
+  prepare:
+    name: Check upstream release and decide
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      source_sha: ${{ steps.decide.outputs.source_sha }}
+      upstream_tag: ${{ steps.decide.outputs.upstream_tag }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v6
+
+      # GitHub pauses scheduled workflows in repos with no commits for 60 days. This fork
+      # otherwise never changes, so push an empty commit every ~45 days (it touches no watched
+      # path, so it does not trigger a build).
+      - name: Keep scheduled checks alive
+        if: github.event_name == 'schedule'
+        run: |
+          last="$(git log -1 --format=%ct)"
+          if (( $(date +%s) - last > 45 * 86400 )); then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "keepalive: keep scheduled release checks enabled"
+            git push
+          fi
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          upstream_tag="$(gh api "repos/${SOURCE_REPO}/releases?per_page=10" --jq '[.[] | select(.draft | not)][0].tag_name')"
+          [[ -n "${upstream_tag}" ]] || { echo "::error::No published release found on ${SOURCE_REPO}."; exit 1; }
+          source_sha="$(gh api "repos/${SOURCE_REPO}/commits/${upstream_tag}" --jq .sha)"
+          version="$(gh api "repos/${SOURCE_REPO}/contents/iosApp/Configuration/Version.xcconfig?ref=${source_sha}" --jq .content \
+            | base64 -d | sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' | head -n 1)"
+          # Fingerprint of what this fork adds, so a patch or build change rebuilds but an
+          # unrelated commit (like the keepalive) does not.
+          fork_hash="$(cat patches/*.patch .github/workflows/infuse-fork-release.yml | sha256sum | cut -c1-7)"
+          tag="v${version}-infuse.${source_sha::7}.${fork_hash}"
+          echo "upstream_tag=${upstream_tag}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream release: ${upstream_tag} (${source_sha::7}), version ${version}"
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+             && [[ "${{ inputs.force }}" != "true" ]]; then
+            echo "Release ${tag} already exists; nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will build ${tag}."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build unsigned iOS IPA
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      GRADLE_OPTS: -Dfile.encoding=UTF-8
+      IOS_CONFIGURATION: Release
+      KOTLIN_DAEMON_JVMARGS: -Xmx2048M
+      NUVIO_GRADLE_JVMARGS: -Xmx4608M -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=768M
+      NUVIO_KOTLIN_NATIVE_JVMARGS: -Xmx4608M
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Check out this repo (patches)
+        uses: actions/checkout@v6
+        with:
+          path: fork
+
+      - name: Check out upstream release
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          path: src
+
+      - name: Apply fork patches
+        working-directory: src
+        run: |
+          shopt -s nullglob
+          for patch in ../fork/patches/*.patch; do
+            if git apply --check "${patch}" 2>/dev/null; then
+              git apply "${patch}"
+              echo "Applied $(basename "${patch}")"
+            elif git apply -R --check "${patch}" 2>/dev/null; then
+              echo "::notice::$(basename "${patch}") is already in upstream; skipping it. You can delete it."
+            else
+              echo "::error::$(basename "${patch}") no longer applies to upstream. It needs updating."
+              exit 1
+            fi
+          done
+
+      - name: Write runtime config
+        env:
+          # Official Nuvio server (Nuvio account + Nuvio Sync). These are the public client
+          # values shipped inside every official Nuvio app (the key's role is "anon"), so they
+          # are defaults here; set repository secrets with the same names to override them.
+          NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL || 'https://api.nuvio.tv' }}
+          NUVIO_SUPABASE_FALLBACK_URL: ${{ secrets.NUVIO_SUPABASE_FALLBACK_URL || 'https://api-two.nuvioapp.space' }}
+          NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzgxNTIxMzQ2LCJleHAiOjE5MzkyMDEzNDZ9.tmQaj682pwzehpqlgCDMnySOqiUvpgRbrE43T4VJpDI' }}
+          # Public feature endpoints the official Nuvio build ships with (IMDb episode ratings,
+          # IntroDB skip-intro). Set repository secrets with the same names to override them.
+          IMDB_RATINGS_API_BASE_URL: ${{ secrets.IMDB_RATINGS_API_BASE_URL || 'https://seriesgraph.com/' }}
+          IMDB_TAPFRAME_API_BASE_URL: ${{ secrets.IMDB_TAPFRAME_API_BASE_URL || 'https://imdb.tapframe.space/' }}
+          INTRODB_API_URL: ${{ secrets.INTRODB_API_URL || 'https://api.introdb.app/' }}
+          # From repository secrets:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
+          MDBLIST_CLIENT_ID: ${{ secrets.MDBLIST_CLIENT_ID }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+        run: |
+          : > src/local.properties
+          for key in NUVIO_SUPABASE_URL NUVIO_SUPABASE_FALLBACK_URL NUVIO_SUPABASE_ANON_KEY \
+                     IMDB_RATINGS_API_BASE_URL IMDB_TAPFRAME_API_BASE_URL INTRODB_API_URL \
+                     TMDB_API_KEY SIMKL_CLIENT_ID MDBLIST_CLIENT_ID \
+                     TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET; do
+            value="${!key}"
+            if [[ -n "${value}" ]]; then
+              printf '%s=%s\n' "${key}" "${value}" >> src/local.properties
+              echo "Set ${key}"
+            else
+              echo "Skipped ${key} (no secret)"
+            fi
+          done
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Cache Kotlin Native
+        uses: actions/cache@v5
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Prepare iOS dependencies
+        working-directory: src
+        run: ./scripts/prepare-ios-dependencies.sh
+
+      - name: Build IPA
+        working-directory: src
+        run: ./scripts/build-ios-ipa.sh
+
+      - name: Publish release
+        run: |
+          src_ipa="src/build/ios-ipa/nuvio-${VERSION}-full-release.ipa"
+          dst="nuvio-${VERSION}-infuse-ios.ipa"
+          if [[ ! -f "${src_ipa}" ]]; then
+            echo "::error::Expected ${src_ipa} was not produced."
+            ls -la src/build/ios-ipa || true
+            exit 1
+          fi
+          mv "${src_ipa}" "${dst}"
+          notes="Official NuvioMedia/NuvioMobile ${{ needs.prepare.outputs.upstream_tag }} (${{ needs.prepare.outputs.source_sha }}) with fork patches:"
+          for patch in fork/patches/*.patch; do notes+=$'\n'"- $(basename "${patch}")"; done
+          gh release create "${TAG}" "${dst}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${{ github.ref_name }}" \
+            --title "Nuvio ${VERSION} (Infuse fork)" \
+            --notes "${notes}" \
+            || gh release upload "${TAG}" "${dst}" --clobber --repo "${GITHUB_REPOSITORY}"
+name: Infuse Fork Release
+
 # Builds an unsigned iOS IPA of upstream Nuvio with the patches in /patches applied,
 # and publishes it as a GitHub release (picked up by the Raspberry Pi release watcher).
 # Daily, it first syncs this fork with NuvioMedia/NuvioMobile, then builds only if
