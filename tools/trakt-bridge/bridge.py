@@ -138,6 +138,8 @@ class Nuvio:
                 self.state = {}
         self.state.setdefault("client_id", str(uuid.uuid4()))
         self.profile_index = None
+        self._profiles = None
+        self._profiles_at = 0.0
 
     def _save(self):
         tmp = self.state_file + ".tmp"
@@ -179,9 +181,17 @@ class Nuvio:
             payload=params or {},
         )
 
+    def profiles(self):
+        """All Nuvio profiles, refreshed every 10 minutes."""
+        if self._profiles is None or self._profiles_at < time.time() - 600:
+            self._profiles = self.rpc("sync_pull_profiles") or []
+            self._profiles_at = time.time()
+        return self._profiles
+
     def profile(self):
+        """The default profile: NUVIO_PROFILE_NAME, else the first one."""
         if self.profile_index is None:
-            profiles = self.rpc("sync_pull_profiles") or []
+            profiles = self.profiles()
             names = ", ".join(f"{p.get('name')} (#{p.get('profile_index')})" for p in profiles)
             log(f"Nuvio profiles: {names}")
             wanted = norm(NUVIO_PROFILE_NAME)
@@ -190,26 +200,32 @@ class Nuvio:
             if wanted and not match:
                 log(f"WARNING: no profile named '{NUVIO_PROFILE_NAME}', using '{chosen.get('name')}'")
             self.profile_index = int(chosen.get("profile_index", 1))
-            log(f"Writing to Nuvio profile '{chosen.get('name')}' (#{self.profile_index})")
+            log(f"Default Nuvio profile '{chosen.get('name')}' (#{self.profile_index}); a play goes to "
+                f"another profile when that profile started this show in Nuvio")
         return self.profile_index
 
-    def progress_entries(self):
-        return self.rpc("sync_pull_watch_progress", {"p_profile_id": self.profile()}) or []
+    def profile_name(self, index):
+        for p in self.profiles():
+            if int(p.get("profile_index", 0)) == index:
+                return p.get("name") or f"#{index}"
+        return f"#{index}"
 
-    def push_progress(self, entry):
+    def progress_entries(self, profile):
+        return self.rpc("sync_pull_watch_progress", {"p_profile_id": profile}) or []
+
+    def push_progress(self, profile, entry):
         self.rpc("sync_push_watch_progress", {
-            "p_profile_id": self.profile(),
+            "p_profile_id": profile,
             "p_entries": [entry],
             "p_origin_client_id": self.state["client_id"],
         })
 
-    def push_watched(self, item):
+    def push_watched(self, profile, item):
         self.rpc("sync_push_watched_items", {
-            "p_profile_id": self.profile(),
+            "p_profile_id": profile,
             "p_items": [item],
             "p_origin_client_id": self.state["client_id"],
         })
-
 
 NUVIO = Nuvio()
 
@@ -366,6 +382,47 @@ def build_entry(info, progress, entries):
     }
 
 
+# A show belongs to whichever profile touched it most recently in this window: Nuvio writes a
+# progress entry for the active profile when it hands a stream to Infuse, and the bridge's own
+# saves keep the same profile for the rest of that session (pauses, stops, the next episode).
+ROUTE_WINDOW_MS = 6 * 3600 * 1000
+
+
+def stamp_ms(value):
+    """Nuvio's last_watched as epoch ms, whether it comes back as a number or an ISO string."""
+    if isinstance(value, (int, float)):
+        return int(value if value > 1e11 else value * 1000)
+    if isinstance(value, str) and value:
+        try:
+            return int(datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() * 1000)
+        except ValueError:
+            try:
+                return int(float(value))
+            except ValueError:
+                return 0
+    return 0
+
+
+def route(info):
+    """(profile, that profile's progress entries) for this title."""
+    candidates = {c for c in (info["imdb"], f"tmdb:{info['tmdb']}") if c}
+    default = NUVIO.profile()
+    best, best_at, best_entries, default_entries = default, 0, None, None
+    cutoff = now_ms() - ROUTE_WINDOW_MS
+    for p in NUVIO.profiles():
+        index = int(p.get("profile_index", 0))
+        entries = NUVIO.progress_entries(index)
+        if index == default:
+            default_entries = entries
+        touched = max((stamp_ms(e.get("last_watched")) for e in entries
+                       if e.get("content_id") in candidates), default=0)
+        if touched >= cutoff and touched > best_at:
+            best, best_at, best_entries = index, touched, entries
+    if best_entries is None:
+        best_entries = default_entries if default_entries is not None else NUVIO.progress_entries(default)
+    return best, best_entries
+
+
 def clock(ms):
     s = ms // 1000
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
@@ -379,15 +436,19 @@ def handle_scrobble(action, body):
             log(f"  could not identify {json.dumps(body)[:200]} - not saved")
             return
         label = info["title"] + (f" S{info['season']:02d}E{info['episode']:02d}" if info["season"] is not None else "")
-        entry = build_entry(info, progress, NUVIO.progress_entries())
+        if action == "start":
+            # Give Nuvio's handoff entry a moment to reach the server before choosing a profile.
+            time.sleep(3)
+        profile, entries = route(info)
+        entry = build_entry(info, progress, entries)
         if not entry:
             log(f"  {label}: length unknown - not saved")
             return
-        NUVIO.push_progress(entry)
+        NUVIO.push_progress(profile, entry)
         HEALTH["last_error"] = None
-        log(f"  saved {label} at {clock(entry['position'])} of {clock(entry['duration'])} ({progress:.1f}%, {action})")
+        log(f"  saved {label} at {clock(entry['position'])} of {clock(entry['duration'])} ({progress:.1f}%, {action}) to {NUVIO.profile_name(profile)}")
         if action == "stop" and progress >= WATCHED_AT_PERCENT:
-            NUVIO.push_watched({
+            NUVIO.push_watched(profile, {
                 "content_id": entry["content_id"],
                 "content_type": entry["content_type"],
                 "title": info["title"],
