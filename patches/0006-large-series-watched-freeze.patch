@@ -1,0 +1,74 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
+index 1bd1164b..5796cda7 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
+@@ -77,13 +77,21 @@ fun MetaDetails.releasedEpisodesForSeason(
+ fun MetaDetails.hasWatchedAllMainSeasonEpisodes(
+     todayIsoDate: String,
+     isEpisodeWatched: (MetaVideo) -> Boolean,
+-): Boolean = domainHasWatchedAllMainSeasonEpisodes(
+-    episodes = sortedPlayableEpisodes().map(MetaVideo::toDomainReleasedEpisode),
+-    todayIsoDate = todayIsoDate,
+-    isEpisodeWatched = { domainEpisode ->
+-        sortedPlayableEpisodes().firstOrNull { episode -> episode.id == domainEpisode.videoId }?.let(isEpisodeWatched) == true
+-    },
+-)
++): Boolean {
++    // sortedPlayableEpisodes() filters+sorts every video and isn't cached, so it must be
++    // computed once here rather than once per episode inside the isEpisodeWatched callback
++    // below (which .all() evaluates for every episode whenever none of them are unwatched —
++    // i.e. exactly when the series is, or becomes, fully watched).
++    val episodes = sortedPlayableEpisodes()
++    val episodeByVideoId = episodes.associateBy(MetaVideo::id)
++    return domainHasWatchedAllMainSeasonEpisodes(
++        episodes = episodes.map(MetaVideo::toDomainReleasedEpisode),
++        todayIsoDate = todayIsoDate,
++        isEpisodeWatched = { domainEpisode ->
++            episodeByVideoId[domainEpisode.videoId]?.let(isEpisodeWatched) == true
++        },
++    )
++}
+ 
+ fun MetaDetails.episodePlaybackId(video: MetaVideo): String =
+     buildPlaybackVideoId(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
+index d3d46372..7c48e77e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
+@@ -140,16 +140,15 @@ object WatchingActions {
+     ) {
+         if (!meta.type.isSeriesLikeType()) return
+ 
++        // Looked up once here instead of once per episode below: progressForVideo() re-scans
++        // every progress entry across all shows on every call, which made unmarking a whole
++        // series with hundreds of episodes freeze the UI (one full rescan per episode).
++        val progressByVideoId = WatchProgressRepository.uiState.value.byVideoIdForContent(meta.id)
+         WatchedRepository.reconcileSeriesWatchedState(
+             meta = meta,
+             todayIsoDate = todayIsoDate,
+             isEpisodeCompleted = { episode ->
+-                WatchProgressRepository.progressForVideo(
+-                    videoId = meta.episodePlaybackId(episode),
+-                    parentMetaId = meta.id,
+-                    seasonNumber = episode.season,
+-                    episodeNumber = episode.episode,
+-                )?.isCompleted == true
++                progressByVideoId[meta.episodePlaybackId(episode)]?.isCompleted == true
+             },
+         )
+     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
+index 753f1e0a..3419793d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
+@@ -1127,8 +1127,9 @@ object WatchProgressRepository {
+         if (videoIds.isEmpty()) return
+ 
+         activeProgressProvider()?.let { provider ->
++            val videoIdSet = videoIds.toSet()
+             val entriesToRemove = currentEntries().filter { entry ->
+-                entry.videoId in videoIds &&
++                entry.videoId in videoIdSet &&
+                     (parentMetaId == null || entry.parentMetaId == parentMetaId)
+             }
+             val locallyRemovedEntries = removeStoredLocalEntries(entriesToRemove)
