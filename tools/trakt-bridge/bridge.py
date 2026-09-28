@@ -469,6 +469,15 @@ class Server(ThreadingHTTPServer):
             return
         self.RequestHandlerClass(conn, client_address, self)
 
+    def handle_error(self, request, client_address):
+        # A device closing the connection first (Infuse swiped away, the Apple TV sleeping) is
+        # routine; log it in one line instead of a traceback.
+        err = sys.exc_info()[1]
+        if isinstance(err, (BrokenPipeError, ConnectionResetError, TimeoutError, ssl.SSLError)):
+            log(f"{client_address[0]} closed the connection early ({type(err).__name__})")
+            return
+        super().handle_error(request, client_address)
+
 
 def main():
     missing = [n for n in ("NUVIO_EMAIL", "NUVIO_PASSWORD", "TMDB_API_KEY") if not os.environ.get(n)]
