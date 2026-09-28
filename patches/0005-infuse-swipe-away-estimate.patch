@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
-index 14291068..7f8f9661 100644
+index 14291068..81478b46 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
-@@ -19,6 +19,13 @@ internal data class InfusePlaybackSession(
+@@ -19,6 +19,18 @@ internal data class InfusePlaybackSession(
      val durationMs: Long?,
      val returnedPositionMs: Long? = null,
      val failed: Boolean = false,
@@ -13,10 +13,15 @@ index 14291068..7f8f9661 100644
 +    val launchedAtMs: Long = 0L,
 +    val awayMs: Long = 0L,
 +    val awaySinceMs: Long? = null,
++    // Set when NuvioTV/Nuvio comes back to the foreground; if the user then stays in Nuvio for a
++    // while (browsing, not returning to Infuse), the estimate is closed for this handoff so later
++    // app switches do not keep adding time to it.
++    val foregroundSinceMs: Long? = null,
++    val estimationClosed: Boolean = false,
  ) {
      fun playbackResult(): ExternalPlaybackResult? = returnedPositionMs?.let {
          ExternalPlaybackResult(it, durationMs, endedByUser = true, playbackSession = playbackSession, callbackId = id)
-@@ -44,6 +51,10 @@ internal class InfusePlaybackCallbacks(
+@@ -44,6 +56,10 @@ internal class InfusePlaybackCallbacks(
              sourceUrl = request.sourceUrl,
              playbackSession = request.playbackSession,
              durationMs = request.durationMs?.takeIf { it > 0L },
@@ -27,7 +32,7 @@ index 14291068..7f8f9661 100644
          )
          save(json.encodeToString(session))
          pending.value = null
-@@ -79,6 +90,55 @@ internal class InfusePlaybackCallbacks(
+@@ -79,6 +95,68 @@ internal class InfusePlaybackCallbacks(
          return true
      }
  
@@ -37,8 +42,16 @@ index 14291068..7f8f9661 100644
 +    /** Nuvio left the foreground while a handoff to Infuse is still waiting for its callback. */
 +    fun onAppBackground() {
 +        val session = pendingSession() ?: return
-+        if (session.awaySinceMs != null) return
-+        save(json.encodeToString(session.copy(awaySinceMs = nowMs())))
++        if (session.estimationClosed || session.awaySinceMs != null) return
++        val now = nowMs()
++        val backSince = session.foregroundSinceMs
++        if (backSince != null && now - backSince > BROWSING_CLOSES_ESTIMATE_MS) {
++            // The user came back from Infuse and kept using Nuvio: whatever happens next is not
++            // Infuse playback, so stop estimating for this handoff.
++            save(json.encodeToString(session.copy(estimationClosed = true, foregroundSinceMs = null)))
++            return
++        }
++        save(json.encodeToString(session.copy(awaySinceMs = now, foregroundSinceMs = null)))
 +    }
 +
 +    /**
@@ -48,11 +61,16 @@ index 14291068..7f8f9661 100644
 +     */
 +    fun onAppForeground(): Boolean {
 +        val session = pendingSession() ?: return false
++        if (session.estimationClosed) return false
 +        val since = session.awaySinceMs ?: return false
 +        val stretch = (nowMs() - since).coerceAtLeast(0L)
 +        val remaining = session.durationMs?.let { it - session.startPositionMs - session.awayMs }
 +        val counted = if (remaining != null && stretch > remaining + AWAY_STRETCH_MARGIN_MS) 0L else stretch
-+        save(json.encodeToString(session.copy(awayMs = session.awayMs + counted, awaySinceMs = null)))
++        save(
++            json.encodeToString(
++                session.copy(awayMs = session.awayMs + counted, awaySinceMs = null, foregroundSinceMs = nowMs()),
++            ),
++        )
 +        return true
 +    }
 +
@@ -63,7 +81,7 @@ index 14291068..7f8f9661 100644
 +     * a title watched. Pauses in Infuse cannot be seen and count as watching.
 +     */
 +    fun estimatedResume(): InfuseResumeEstimate? {
-+        val session = pendingSession() ?: return null
++        val session = pendingSession()?.takeUnless { it.estimationClosed } ?: return null
 +        fun skip(reason: String) = InfuseResumeEstimate(session, null, reason)
 +        val duration = session.durationMs ?: return skip("episode length unknown")
 +        if (session.playbackSession == null) return skip("no playback details")
@@ -83,7 +101,7 @@ index 14291068..7f8f9661 100644
      fun consume(id: String) {
          if (storedSession()?.id == id) save(null)
          if (pending.value?.id == id) pending.value = null
-@@ -91,6 +151,30 @@ internal class InfusePlaybackCallbacks(
+@@ -91,6 +169,31 @@ internal class InfusePlaybackCallbacks(
      }
  }
  
@@ -104,6 +122,7 @@ index 14291068..7f8f9661 100644
 +
 +private fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 +
++private const val BROWSING_CLOSES_ESTIMATE_MS = 60_000L
 +private const val AWAY_STRETCH_MARGIN_MS = 30L * 60_000L
 +private const val ESTIMATE_WINDOW_MS = 6L * 60L * 60_000L
 +private const val MIN_ESTIMATE_AWAY_MS = 2L * 60_000L
