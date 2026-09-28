@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
-index 1429106..c920d4c 100644
+index 14291068..7f8f9661 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 @@ -19,6 +19,13 @@ internal data class InfusePlaybackSession(
@@ -27,7 +27,7 @@ index 1429106..c920d4c 100644
          )
          save(json.encodeToString(session))
          pending.value = null
-@@ -79,6 +90,51 @@ internal class InfusePlaybackCallbacks(
+@@ -79,6 +90,55 @@ internal class InfusePlaybackCallbacks(
          return true
      }
  
@@ -46,13 +46,14 @@ index 1429106..c920d4c 100644
 +     * a stretch longer than the rest of the title plus a margin (e.g. Infuse swiped away and Nuvio
 +     * only reopened the next day), which says nothing about how much was watched.
 +     */
-+    fun onAppForeground() {
-+        val session = pendingSession() ?: return
-+        val since = session.awaySinceMs ?: return
++    fun onAppForeground(): Boolean {
++        val session = pendingSession() ?: return false
++        val since = session.awaySinceMs ?: return false
 +        val stretch = (nowMs() - since).coerceAtLeast(0L)
 +        val remaining = session.durationMs?.let { it - session.startPositionMs - session.awayMs }
 +        val counted = if (remaining != null && stretch > remaining + AWAY_STRETCH_MARGIN_MS) 0L else stretch
 +        save(json.encodeToString(session.copy(awayMs = session.awayMs + counted, awaySinceMs = null)))
++        return true
 +    }
 +
 +    /**
@@ -61,28 +62,46 @@ index 1429106..c920d4c 100644
 +     * rather than skips) and capped below the watched threshold, so an estimate can never mark
 +     * a title watched. Pauses in Infuse cannot be seen and count as watching.
 +     */
-+    fun estimatedResumeMs(): Pair<InfusePlaybackSession, Long>? {
++    fun estimatedResume(): InfuseResumeEstimate? {
 +        val session = pendingSession() ?: return null
-+        val duration = session.durationMs ?: return null
-+        if (session.playbackSession == null) return null
-+        if (nowMs() - session.launchedAtMs > ESTIMATE_WINDOW_MS) return null
-+        if (session.awayMs < MIN_ESTIMATE_AWAY_MS) return null
++        fun skip(reason: String) = InfuseResumeEstimate(session, null, reason)
++        val duration = session.durationMs ?: return skip("episode length unknown")
++        if (session.playbackSession == null) return skip("no playback details")
++        if (nowMs() - session.launchedAtMs > ESTIMATE_WINDOW_MS) return skip("handoff over 6 h old")
++        if (session.awayMs < MIN_ESTIMATE_AWAY_MS) {
++            return skip("away only ${session.awayMs / 1000}s (needs 2 min)")
++        }
 +        val margin = maxOf(ESTIMATE_SETBACK_MIN_MS, session.awayMs / 20)
 +        val estimate = minOf(
 +            session.startPositionMs + session.awayMs - margin,
 +            (duration * ESTIMATE_CAP_FRACTION).toLong(),
 +        )
-+        if (estimate <= session.startPositionMs) return null
-+        return session to estimate
++        if (estimate <= session.startPositionMs) return skip("estimate not past the start point")
++        return InfuseResumeEstimate(session, estimate, null)
 +    }
 +
      fun consume(id: String) {
          if (storedSession()?.id == id) save(null)
          if (pending.value?.id == id) pending.value = null
-@@ -91,6 +147,15 @@ internal class InfusePlaybackCallbacks(
+@@ -91,6 +151,30 @@ internal class InfusePlaybackCallbacks(
      }
  }
  
++internal data class InfuseResumeEstimate(
++    val session: InfusePlaybackSession,
++    val positionMs: Long?,
++    val skipReason: String?,
++)
++
++internal fun Long.toInfuseClock(): String {
++    val totalSeconds = (this / 1000).coerceAtLeast(0)
++    val h = totalSeconds / 3600
++    val m = (totalSeconds % 3600) / 60
++    val s = totalSeconds % 60
++    fun two(v: Long) = if (v < 10) "0$v" else "$v"
++    return if (h > 0) "$h:${two(m)}:${two(s)}" else "$m:${two(s)}"
++}
++
 +private fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 +
 +private const val AWAY_STRETCH_MARGIN_MS = 30L * 60_000L
@@ -96,7 +115,7 @@ index 1429106..c920d4c 100644
      load = PlayerSettingsStorage::loadPendingExternalPlayback,
      save = PlayerSettingsStorage::savePendingExternalPlayback,
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt
-index c3f7057..0444256 100644
+index c3f70570..dfe64c44 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLauncherEffect.ios.kt
 @@ -5,7 +5,11 @@ import androidx.compose.runtime.LaunchedEffect
@@ -111,7 +130,7 @@ index c3f7057..0444256 100644
  import nuvio.composeapp.generated.resources.Res
  import nuvio.composeapp.generated.resources.external_player_failed
  import org.jetbrains.compose.resources.getString
-@@ -29,6 +33,33 @@ actual fun rememberExternalPlayerLauncher(
+@@ -29,6 +33,52 @@ actual fun rememberExternalPlayerLauncher(
              }
          }
      }
@@ -122,22 +141,41 @@ index c3f7057..0444256 100644
 +            when (visibility) {
 +                AppVisibility.Background -> infusePlaybackCallbacks.onAppBackground()
 +                AppVisibility.Foreground -> {
-+                    infusePlaybackCallbacks.onAppForeground()
++                    val cameBackFromInfuse = infusePlaybackCallbacks.onAppForeground()
 +                    // Give Infuse's x-success URL (✕ button) time to arrive first.
 +                    delay(3_000)
-+                    val (session, positionMs) = infusePlaybackCallbacks.estimatedResumeMs()
-+                        ?: return@collect
-+                    val playbackSession = session.playbackSession ?: return@collect
-+                    WatchProgressRepository.upsertPlaybackProgress(
-+                        session = playbackSession,
-+                        snapshot = PlayerPlaybackSnapshot(
-+                            isLoading = false,
-+                            isPlaying = false,
-+                            isEnded = false,
-+                            durationMs = session.durationMs ?: 0L,
-+                            positionMs = positionMs,
-+                        ),
++                    val estimate = infusePlaybackCallbacks.estimatedResume() ?: return@collect
++                    val positionMs = estimate.positionMs
++                    val playbackSession = estimate.session.playbackSession
++                    if (positionMs == null || playbackSession == null) {
++                        if (cameBackFromInfuse) {
++                            NuvioToastController.show(
++                                "Infuse left without \u2715 \u2014 no estimate: ${estimate.skipReason}",
++                                durationMillis = 5_000L,
++                            )
++                        }
++                        return@collect
++                    }
++                    val snapshot = PlayerPlaybackSnapshot(
++                        isLoading = false,
++                        isPlaying = false,
++                        isEnded = false,
++                        durationMs = estimate.session.durationMs ?: 0L,
++                        positionMs = positionMs,
 +                    )
++                    WatchProgressRepository.upsertPlaybackProgress(session = playbackSession, snapshot = snapshot)
++                    if (cameBackFromInfuse) {
++                        NuvioToastController.show(
++                            "Infuse left without \u2715 \u2014 saved an estimated spot at ${positionMs.toInfuseClock()}",
++                            durationMillis = 5_000L,
++                        )
++                    }
++                    // A cold start can load saved progress or pull Nuvio Sync after the first
++                    // write; write the estimate once more when that has settled.
++                    delay(7_000)
++                    if (infusePlaybackCallbacks.estimatedResume()?.positionMs != null) {
++                        WatchProgressRepository.upsertPlaybackProgress(session = playbackSession, snapshot = snapshot)
++                    }
 +                }
 +            }
 +        }
