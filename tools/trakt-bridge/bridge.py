@@ -384,6 +384,7 @@ def handle_scrobble(action, body):
             log(f"  {label}: length unknown - not saved")
             return
         NUVIO.push_progress(entry)
+        HEALTH["last_error"] = None
         log(f"  saved {label} at {clock(entry['position'])} of {clock(entry['duration'])} ({progress:.1f}%, {action})")
         if action == "stop" and progress >= WATCHED_AT_PERCENT:
             NUVIO.push_watched({
@@ -396,12 +397,27 @@ def handle_scrobble(action, body):
             })
             log(f"  marked {label} watched")
     except Exception as e:
+        HEALTH["last_error"] = str(e)[:200]
         log(f"  Nuvio update failed: {e}")
 
 
 # One worker saves reports strictly in arrival order, so a slow "start" can never overwrite
 # the "stop" that followed it.
 SCROBBLES = queue.Queue()
+
+
+# For the Uptime Kuma check (GET https://<pi>/bridge-health): the worker thread must be alive
+# and the last Nuvio write must not have failed.
+HEALTH = {"worker": None, "last_error": None}
+
+
+def health_status():
+    worker = HEALTH["worker"]
+    if worker is None or not worker.is_alive():
+        return 503, "scrobble worker stopped"
+    if HEALTH["last_error"]:
+        return 503, f"last Nuvio write failed: {HEALTH['last_error']}"
+    return 200, f"ok, {SCROBBLES.qsize()} queued"
 
 
 def scrobble_worker():
@@ -424,6 +440,16 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
         if host not in TRAKT_HOSTS:
+            if self.path.split("?")[0] == "/bridge-health":
+                status, text = health_status()
+                data = (text + "\n").encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(data)
+                return
             self.send_error(421, "Misdirected Request")
             return
 
@@ -489,7 +515,8 @@ def main():
         NUVIO.profile()
     except Exception as e:
         log(f"Could not reach Nuvio yet ({e}); will retry on the first scrobble")
-    threading.Thread(target=scrobble_worker, daemon=True).start()
+    HEALTH["worker"] = threading.Thread(target=scrobble_worker, daemon=True)
+    HEALTH["worker"].start()
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(CERT_FILE, KEY_FILE)
     log(f"Trakt bridge listening on :{LISTEN_PORT}")
