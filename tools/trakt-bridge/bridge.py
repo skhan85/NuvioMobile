@@ -36,6 +36,8 @@ NUVIO_ANON_KEY = os.environ.get(
 NUVIO_EMAIL = os.environ.get("NUVIO_EMAIL", "")
 NUVIO_PASSWORD = os.environ.get("NUVIO_PASSWORD", "")
 NUVIO_PROFILE_NAME = os.environ.get("NUVIO_PROFILE_NAME", "")
+# Log every request the bridge receives (set LOG_REQUESTS=0 to turn off).
+LOG_REQUESTS = os.environ.get("LOG_REQUESTS", "1") != "0"
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 WATCHED_AT_PERCENT = float(os.environ.get("WATCHED_AT_PERCENT", "90"))
 
@@ -498,6 +500,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve(self):
         host = (self.headers.get("Host") or "").split(":")[0].lower()
+        if LOG_REQUESTS and self.path.split("?")[0] != "/bridge-health":
+            log(f"{self.client_address[0]} {self.command} {host}{self.path.split('?')[0]} "
+                f"({self.headers.get('User-Agent', '?')[:60]})")
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
         if host not in TRAKT_HOSTS:
@@ -552,7 +557,9 @@ class Server(ThreadingHTTPServer):
         try:
             request.settimeout(30)
             conn = self.ctx.wrap_socket(request, server_side=True)
-        except Exception:
+        except Exception as e:
+            # A device that does not trust the certificate fails here, before any request.
+            log(f"{client_address[0]} TLS handshake failed: {type(e).__name__}: {str(e)[:160]}")
             return
         self.RequestHandlerClass(conn, client_address, self)
 
