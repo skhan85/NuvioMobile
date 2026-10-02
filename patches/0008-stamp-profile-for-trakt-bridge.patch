@@ -1,0 +1,47 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+index 14291068d..49555442f 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.player
+ 
+ import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
++import com.nuvio.app.features.watchprogress.WatchProgressRepository
+ import io.ktor.http.Url
+ import io.ktor.http.encodeURLParameter
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -47,9 +48,34 @@ internal class InfusePlaybackCallbacks(
+         )
+         save(json.encodeToString(session))
+         pending.value = null
++        stampProfileForTraktBridge(request, session)
+         return buildInfusePlaybackUrl(request, session.id)
+     }
+ 
++    /**
++     * Fork (Trakt bridge on the home Pi): write this title to the active profile in Nuvio Sync
++     * right before Infuse opens, so the bridge saves Infuse's positions to the profile that
++     * pressed Play (e.g. Kids) instead of the default one. The resume point is unchanged; a new
++     * title gets a 2 s entry that the first Infuse report overwrites.
++     */
++    private fun stampProfileForTraktBridge(request: ExternalPlayerPlaybackRequest, session: InfusePlaybackSession) {
++        val playback = session.playbackSession ?: return
++        val durationMs = session.durationMs ?: return
++        runCatching {
++            WatchProgressRepository.upsertPlaybackProgress(
++                session = playback,
++                snapshot = PlayerPlaybackSnapshot(
++                    isLoading = false,
++                    isPlaying = false,
++                    isEnded = false,
++                    durationMs = durationMs,
++                    positionMs = request.resumePositionMs.coerceAtLeast(2_000L),
++                ),
++                syncRemote = true,
++            )
++        }
++    }
++
+     fun restoreResult() {
+         pending.value = storedSession()?.takeIf { it.returnedPositionMs != null || it.failed }
+     }
