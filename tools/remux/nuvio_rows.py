@@ -147,7 +147,7 @@ for ri, row in enumerate(rows):
     # 3. The row itself: a promoted group (shows as its own library in Infuse) of those collections.
     if child_ids:
         upsert(row["title"], "collections",
-               any_of([{"field": "collection_id", "op": "in", "ids": child_ids}]), True, 10_000 + ri,
+               any_of([{"field": "collection_id", "op": "in", "ids": child_ids}]), True, ri,
                row.get("tags"))
         print(f"{row['title']}: {len(child_ids)} collections")
 
@@ -157,7 +157,26 @@ if skipped:
 if art_failed:
     print("Cover art couldn't be downloaded for:", *art_failed, sep="\n  ")
 
-# 4. Fill everything.
+# 4. Hide every other library (Remux's standard ones), so only the Nuvio sections show in Infuse.
+#    Nothing is deleted - the titles stay in the library and keep filling the collections.
+#    Undo with:  python3 nuvio_rows.py --show-standard
+ours = {r["title"] for r in rows}
+HIDDEN_FILE = os.path.expanduser("~/.remux_hidden_libraries.json")
+hidden = json.load(open(HIDDEN_FILE)) if os.path.exists(HIDDEN_FILE) else {}
+if "--show-standard" in sys.argv:
+    for name, item_id in hidden.items():
+        call("PATCH", f"/items/{item_id}", {"Promoted": True})
+        print(f"Shown again: {name}")
+    os.remove(HIDDEN_FILE) if hidden else None
+    sys.exit(0)
+for lib in call("GET", "/library/virtualfolders"):
+    if lib["Name"] not in ours:
+        call("PATCH", f"/items/{lib['ItemId']}", {"Promoted": False})
+        hidden[lib["Name"]] = lib["ItemId"]
+        print(f"Hidden: {lib['Name']}")
+json.dump(hidden, open(HIDDEN_FILE, "w"))
+
+# 5. Fill everything.
 task = next(t for t in call("GET", "/scheduledtasks") if (t.get("Name") or t.get("name")) == "Refresh Library")
 try:
     call("POST", f"/scheduledtasks/running/{task.get('Id') or task.get('id')}")

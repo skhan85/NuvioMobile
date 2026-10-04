@@ -1,78 +1,273 @@
 [
  {
-  "title": "Kids",
-  "tags": [
-   "kids"
-  ],
+  "title": "Streaming Services",
   "folders": [
    {
-    "title": "Family Movies",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.family_movies.webp?v=7",
+    "title": "Netflix",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/49571953.webp",
     "catalogs": [
-     "kids:Xperience — Family — Movie"
+     "Xperience — Netflix — Movie",
+     "Xperience — Netflix — Series",
+     "Xperience — Netflix Originals — Series"
     ]
    },
    {
-    "title": "Family Series",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.family_series.webp?v=7",
+    "title": "Prime Video",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/5c86c888.webp",
     "catalogs": [
-     "kids:Xperience — Family — Series"
+     "Xperience — Prime Video — Movie",
+     "Xperience — Prime Video — Series",
+     "Xperience — Prime Video Originals — Series"
     ]
    },
    {
-    "title": "Disney Kids",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.disney_kids.webp?v=7",
+    "title": "Disney+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/b8c0d25b.webp",
     "catalogs": [
-     "kids:Xperience — Disney Kids — Movie"
+     "Xperience — Disney+ — Movie",
+     "Xperience — Disney+ — Series",
+     "Xperience — Disney+ Originals — Series"
     ]
    },
    {
-    "title": "Animated Series",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.animated_series.webp?v=7",
+    "title": "HBO Max",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/b59babf1.webp",
     "catalogs": [
-     "kids:Xperience — Animated — Series"
+     "Xperience — HBO Max — Movie",
+     "Xperience — HBO Max — Series",
+     "Xperience — HBO Max Originals — Series"
     ]
    },
    {
-    "title": "Trending Kids Movies",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.trending_movies.webp?v=7",
+    "title": "Apple TV+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/4d8f0a8f.webp",
     "catalogs": [
-     "kids:Xperience — Trending Kids — Movie"
+     "Xperience — Apple TV+ — Movie",
+     "Xperience — Apple TV+ — Series",
+     "Xperience — Apple TV+ Originals — Series"
     ]
    },
    {
-    "title": "Trending Kids Series",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.trending_series.webp?v=7",
+    "title": "Paramount+",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/refs/heads/main/art/streaming-services/paramount-plus/paramount-plus-cover.png",
     "catalogs": [
-     "kids:Xperience — Trending Kids — Series"
+     "Xperience — Paramount+ Popular — Movie",
+     "Xperience — Paramount+ Popular — Series",
+     "Xperience — Paramount+ Originals — Series"
     ]
    },
    {
-    "title": "Top Kids Movies",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.top_movies.webp?v=7",
+    "title": "Hulu",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/3a4d1b46.webp",
     "catalogs": [
-     "kids:Xperience — Top Kids — Movie"
+     "Xperience — Hulu Popular — Movie",
+     "Xperience — Hulu Popular — Series",
+     "Xperience — Hulu Originals — Series"
     ]
    },
    {
-    "title": "Nickelodeon",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.nickelodeon.webp?v=7",
+    "title": "Peacock",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/970b675f.webp",
     "catalogs": [
-     "kids:Xperience — Nickelodeon — Series"
+     "Xperience — Peacock Popular — Movie",
+     "Xperience — Peacock Popular — Series",
+     "Xperience — Peacock Originals — Series"
     ]
    },
    {
-    "title": "Nick Jr",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.nick_jr.webp?v=7",
+    "title": "Crunchyroll",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/129a4038.webp",
     "catalogs": [
-     "kids:Xperience — Nick Jr — Series"
+     "Xperience — Crunchyroll — Movie",
+     "Xperience — Crunchyroll — Series"
     ]
    },
    {
-    "title": "DreamWorks Animated",
-    "image": "https://cdn.xperience-app.com/covers/default/kids_family.dreamworks.webp?v=7",
+    "title": "Starz",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/9e92f9b6.webp",
     "catalogs": [
-     "kids:Xperience — DreamWorks — Movie"
+     "aio~starz"
+    ]
+   },
+   {
+    "title": "AMC+",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/amcplus/amcplus-cover.png",
+    "catalogs": [
+     "aio~amc+"
+    ]
+   },
+   {
+    "title": "Crave",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/crave/crave-cover.png",
+    "catalogs": [
+     "Xperience — Latest Crave — Movie",
+     "Xperience — Latest Crave — Series"
+    ]
+   },
+   {
+    "title": "Criterion",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/criterion-channel/criterion-channel-cover.png",
+    "catalogs": [
+     "aio~criterion"
+    ]
+   },
+   {
+    "title": "Curiosity Stream",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/curiosity-stream/curiosity-stream-cover.png",
+    "catalogs": [
+     "aio~curiosity"
+    ]
+   },
+   {
+    "title": "Discovery+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/dbed63f2.webp",
+    "catalogs": [
+     "Xperience — Discovery+ — Movie",
+     "Xperience — Discovery+ — Series"
+    ]
+   },
+   {
+    "title": "Hayu",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/hayu/hayu-cover.png",
+    "catalogs": [
+     "aio~hayu"
+    ]
+   },
+   {
+    "title": "Magellan",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/magellan/magellan-cover.png",
+    "catalogs": [
+     "aio~magellan"
+    ]
+   },
+   {
+    "title": "MGM+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/d490e713.webp",
+    "catalogs": [
+     "Xperience — MGM+ — Movie"
+    ]
+   },
+   {
+    "title": "Mubi",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/7c4bd708.webp",
+    "catalogs": [
+     "aio~all movies on mubi"
+    ]
+   },
+   {
+    "title": "Pluto TV",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/pluto-tv/pluto-tv-cover.png",
+    "catalogs": [
+     "aio~pluto"
+    ]
+   },
+   {
+    "title": "Shudder",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/99e24ce1.webp",
+    "catalogs": [
+     "Xperience — Shudder — Movie",
+     "Xperience — Shudder — Series"
+    ]
+   },
+   {
+    "title": "Tubi TV",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/tubi/tubi-cover.png",
+    "catalogs": [
+     "aio~tubi"
+    ]
+   }
+  ]
+ },
+ {
+  "title": "Franchise Collections",
+  "folders": [
+   {
+    "title": "Avatar",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/67EFA0D6-7231-40C5-864C-C4E8AC444060.png",
+    "catalogs": [
+     "Xperience — Avatar — Movie"
+    ]
+   },
+   {
+    "title": "DC Universe",
+    "image": "https://i.postimg.cc/zGMpg1RJ/DC-Universe.jpg",
+    "catalogs": [
+     "Xperience — DC Universe — Movie",
+     "Xperience — DC Universe — Series"
+    ]
+   },
+   {
+    "title": "Fast & Furious",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/C007827D-1C1F-4EF3-A8C0-12C6BE422E75.png",
+    "catalogs": [
+     "Xperience — Fast & Furious — Movie"
+    ]
+   },
+   {
+    "title": "Harry Potter",
+    "image": "https://image.tmdb.org/t/p/w500/eVPs2Y0LyvTLZn6AP5Z6O2rtiGB.jpg",
+    "catalogs": [
+     "Xperience — Harry Potter — Movie"
+    ]
+   },
+   {
+    "title": "James Bond",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5E990410-CC9E-4923-8A26-54C7FADCCF1F.png",
+    "catalogs": [
+     "Xperience — James Bond — Movie"
+    ]
+   },
+   {
+    "title": "John Wick",
+    "image": "https://i.postimg.cc/W14q7rtM/JW.jpg",
+    "catalogs": [
+     "Xperience — John Wick — Movie"
+    ]
+   },
+   {
+    "title": "Lord of the Rings",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/83B91887-4F2D-43A1-B402-896ACE0A431C.png",
+    "catalogs": [
+     "Xperience — Lord of the Rings — Movie",
+     "Xperience — The Hobbit — Movie"
+    ]
+   },
+   {
+    "title": "Marvel",
+    "image": "https://i.postimg.cc/g0BNgjdf/Marvel.jpg",
+    "catalogs": [
+     "Xperience — Marvel Cinematic Universe — Movie",
+     "Xperience — Marvel TV — Series"
+    ]
+   },
+   {
+    "title": "Matrix",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/3FE07460-AB92-45BC-8241-CA723D7CD0A6.png",
+    "catalogs": [
+     "Xperience — The Matrix — Movie"
+    ]
+   },
+   {
+    "title": "Star Trek",
+    "image": "https://i.postimg.cc/qRZnC6GD/Star-Trek.jpg",
+    "catalogs": [
+     "Xperience — Star Trek — Movie",
+     "Xperience — Star Trek TV — Series"
+    ]
+   },
+   {
+    "title": "Star Wars",
+    "image": "https://i.postimg.cc/Wz08p7rv/Star-Wars.jpg",
+    "catalogs": [
+     "Xperience — Star Wars (Complete Universe) — Movie",
+     "Xperience — Star Wars TV — Series"
+    ]
+   },
+   {
+    "title": "Transformers",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5D146C3D-25F5-4AB6-85E6-478D4B5B88DE.png",
+    "catalogs": [
+     "aio~transformers"
     ]
    }
   ]
@@ -279,185 +474,6 @@
   ]
  },
  {
-  "title": "Streaming Services",
-  "folders": [
-   {
-    "title": "Netflix",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/49571953.webp",
-    "catalogs": [
-     "Xperience — Netflix — Movie",
-     "Xperience — Netflix — Series",
-     "Xperience — Netflix Originals — Series"
-    ]
-   },
-   {
-    "title": "Prime Video",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/5c86c888.webp",
-    "catalogs": [
-     "Xperience — Prime Video — Movie",
-     "Xperience — Prime Video — Series",
-     "Xperience — Prime Video Originals — Series"
-    ]
-   },
-   {
-    "title": "Disney+",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/b8c0d25b.webp",
-    "catalogs": [
-     "Xperience — Disney+ — Movie",
-     "Xperience — Disney+ — Series",
-     "Xperience — Disney+ Originals — Series"
-    ]
-   },
-   {
-    "title": "HBO Max",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/b59babf1.webp",
-    "catalogs": [
-     "Xperience — HBO Max — Movie",
-     "Xperience — HBO Max — Series",
-     "Xperience — HBO Max Originals — Series"
-    ]
-   },
-   {
-    "title": "Apple TV+",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/4d8f0a8f.webp",
-    "catalogs": [
-     "Xperience — Apple TV+ — Movie",
-     "Xperience — Apple TV+ — Series",
-     "Xperience — Apple TV+ Originals — Series"
-    ]
-   },
-   {
-    "title": "Paramount+",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/refs/heads/main/art/streaming-services/paramount-plus/paramount-plus-cover.png",
-    "catalogs": [
-     "Xperience — Paramount+ Popular — Movie",
-     "Xperience — Paramount+ Popular — Series",
-     "Xperience — Paramount+ Originals — Series"
-    ]
-   },
-   {
-    "title": "Hulu",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/3a4d1b46.webp",
-    "catalogs": [
-     "Xperience — Hulu Popular — Movie",
-     "Xperience — Hulu Popular — Series",
-     "Xperience — Hulu Originals — Series"
-    ]
-   },
-   {
-    "title": "Peacock",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/970b675f.webp",
-    "catalogs": [
-     "Xperience — Peacock Popular — Movie",
-     "Xperience — Peacock Popular — Series",
-     "Xperience — Peacock Originals — Series"
-    ]
-   },
-   {
-    "title": "Crunchyroll",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/129a4038.webp",
-    "catalogs": [
-     "Xperience — Crunchyroll — Movie",
-     "Xperience — Crunchyroll — Series"
-    ]
-   },
-   {
-    "title": "Starz",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/9e92f9b6.webp",
-    "catalogs": [
-     "aio~starz"
-    ]
-   },
-   {
-    "title": "AMC+",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/amcplus/amcplus-cover.png",
-    "catalogs": [
-     "aio~amc+"
-    ]
-   },
-   {
-    "title": "Crave",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/crave/crave-cover.png",
-    "catalogs": [
-     "Xperience — Latest Crave — Movie",
-     "Xperience — Latest Crave — Series"
-    ]
-   },
-   {
-    "title": "Criterion",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/criterion-channel/criterion-channel-cover.png",
-    "catalogs": [
-     "aio~criterion"
-    ]
-   },
-   {
-    "title": "Curiosity Stream",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/curiosity-stream/curiosity-stream-cover.png",
-    "catalogs": [
-     "aio~curiosity"
-    ]
-   },
-   {
-    "title": "Discovery+",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/dbed63f2.webp",
-    "catalogs": [
-     "Xperience — Discovery+ — Movie",
-     "Xperience — Discovery+ — Series"
-    ]
-   },
-   {
-    "title": "Hayu",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/hayu/hayu-cover.png",
-    "catalogs": [
-     "aio~hayu"
-    ]
-   },
-   {
-    "title": "Magellan",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/magellan/magellan-cover.png",
-    "catalogs": [
-     "aio~magellan"
-    ]
-   },
-   {
-    "title": "MGM+",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/d490e713.webp",
-    "catalogs": [
-     "Xperience — MGM+ — Movie"
-    ]
-   },
-   {
-    "title": "Mubi",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/7c4bd708.webp",
-    "catalogs": [
-     "aio~all movies on mubi"
-    ]
-   },
-   {
-    "title": "Pluto TV",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/pluto-tv/pluto-tv-cover.png",
-    "catalogs": [
-     "aio~pluto"
-    ]
-   },
-   {
-    "title": "Shudder",
-    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/99e24ce1.webp",
-    "catalogs": [
-     "Xperience — Shudder — Movie",
-     "Xperience — Shudder — Series"
-    ]
-   },
-   {
-    "title": "Tubi TV",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/tubi/tubi-cover.png",
-    "catalogs": [
-     "aio~tubi"
-    ]
-   }
-  ]
- },
- {
   "title": "Studios",
   "folders": [
    {
@@ -612,6 +628,54 @@
   ]
  },
  {
+  "title": "International Cinema",
+  "folders": [
+   {
+    "title": "Indian Cinema",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/indian-cinema/indian-cinema-cover.png",
+    "catalogs": [
+     "Xperience — Bollywood — Movie",
+     "Xperience — Bollywood — Series",
+     "Xperience — Latest Indian — Movie",
+     "Xperience — Top Rated Indian — Movie"
+    ]
+   },
+   {
+    "title": "Pakistani Cinema",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/pakistani-cinema/pakistani-cinema-cover.png",
+    "catalogs": [
+     "aio~pakistani"
+    ]
+   }
+  ]
+ },
+ {
+  "title": "Awards",
+  "folders": [
+   {
+    "title": "Academy Awards",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/academy-awards/academy-awards-cover.png",
+    "catalogs": [
+     "aio~oscar"
+    ]
+   },
+   {
+    "title": "Festival de Cannes",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/festival-de-cannes/festival-de-cannes-cover.png",
+    "catalogs": [
+     "aio~cannes"
+    ]
+   },
+   {
+    "title": "Golden Globes",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/golden-globes/golden-globes-cover.png",
+    "catalogs": [
+     "aio~golden globe"
+    ]
+   }
+  ]
+ },
+ {
   "title": "By Decade",
   "folders": [
    {
@@ -668,54 +732,6 @@
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/50s-movies/v2/50s-movies-cover.png",
     "catalogs": [
      "Xperience — 1950s & Before — Movie"
-    ]
-   }
-  ]
- },
- {
-  "title": "Awards",
-  "folders": [
-   {
-    "title": "Academy Awards",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/academy-awards/academy-awards-cover.png",
-    "catalogs": [
-     "aio~oscar"
-    ]
-   },
-   {
-    "title": "Festival de Cannes",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/festival-de-cannes/festival-de-cannes-cover.png",
-    "catalogs": [
-     "aio~cannes"
-    ]
-   },
-   {
-    "title": "Golden Globes",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/golden-globes/golden-globes-cover.png",
-    "catalogs": [
-     "aio~golden globe"
-    ]
-   }
-  ]
- },
- {
-  "title": "International Cinema",
-  "folders": [
-   {
-    "title": "Indian Cinema",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/indian-cinema/indian-cinema-cover.png",
-    "catalogs": [
-     "Xperience — Bollywood — Movie",
-     "Xperience — Bollywood — Series",
-     "Xperience — Latest Indian — Movie",
-     "Xperience — Top Rated Indian — Movie"
-    ]
-   },
-   {
-    "title": "Pakistani Cinema",
-    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/pakistani-cinema/pakistani-cinema-cover.png",
-    "catalogs": [
-     "aio~pakistani"
     ]
    }
   ]
@@ -782,95 +798,79 @@
   ]
  },
  {
-  "title": "Franchise Collections",
+  "title": "Kids",
+  "tags": [
+   "kids"
+  ],
   "folders": [
    {
-    "title": "Avatar",
-    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/67EFA0D6-7231-40C5-864C-C4E8AC444060.png",
+    "title": "Family Movies",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.family_movies.webp?v=7",
     "catalogs": [
-     "Xperience — Avatar — Movie"
+     "kids:Xperience — Family — Movie"
     ]
    },
    {
-    "title": "DC Universe",
-    "image": "https://i.postimg.cc/zGMpg1RJ/DC-Universe.jpg",
+    "title": "Family Series",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.family_series.webp?v=7",
     "catalogs": [
-     "Xperience — DC Universe — Movie",
-     "Xperience — DC Universe — Series"
+     "kids:Xperience — Family — Series"
     ]
    },
    {
-    "title": "Fast & Furious",
-    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/C007827D-1C1F-4EF3-A8C0-12C6BE422E75.png",
+    "title": "Disney Kids",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.disney_kids.webp?v=7",
     "catalogs": [
-     "Xperience — Fast & Furious — Movie"
+     "kids:Xperience — Disney Kids — Movie"
     ]
    },
    {
-    "title": "Harry Potter",
-    "image": "https://image.tmdb.org/t/p/w500/eVPs2Y0LyvTLZn6AP5Z6O2rtiGB.jpg",
+    "title": "Animated Series",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.animated_series.webp?v=7",
     "catalogs": [
-     "Xperience — Harry Potter — Movie"
+     "kids:Xperience — Animated — Series"
     ]
    },
    {
-    "title": "James Bond",
-    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5E990410-CC9E-4923-8A26-54C7FADCCF1F.png",
+    "title": "Trending Kids Movies",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.trending_movies.webp?v=7",
     "catalogs": [
-     "Xperience — James Bond — Movie"
+     "kids:Xperience — Trending Kids — Movie"
     ]
    },
    {
-    "title": "John Wick",
-    "image": "https://i.postimg.cc/W14q7rtM/JW.jpg",
+    "title": "Trending Kids Series",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.trending_series.webp?v=7",
     "catalogs": [
-     "Xperience — John Wick — Movie"
+     "kids:Xperience — Trending Kids — Series"
     ]
    },
    {
-    "title": "Lord of the Rings",
-    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/83B91887-4F2D-43A1-B402-896ACE0A431C.png",
+    "title": "Top Kids Movies",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.top_movies.webp?v=7",
     "catalogs": [
-     "Xperience — Lord of the Rings — Movie",
-     "Xperience — The Hobbit — Movie"
+     "kids:Xperience — Top Kids — Movie"
     ]
    },
    {
-    "title": "Marvel",
-    "image": "https://i.postimg.cc/g0BNgjdf/Marvel.jpg",
+    "title": "Nickelodeon",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.nickelodeon.webp?v=7",
     "catalogs": [
-     "Xperience — Marvel Cinematic Universe — Movie",
-     "Xperience — Marvel TV — Series"
+     "kids:Xperience — Nickelodeon — Series"
     ]
    },
    {
-    "title": "Matrix",
-    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/3FE07460-AB92-45BC-8241-CA723D7CD0A6.png",
+    "title": "Nick Jr",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.nick_jr.webp?v=7",
     "catalogs": [
-     "Xperience — The Matrix — Movie"
+     "kids:Xperience — Nick Jr — Series"
     ]
    },
    {
-    "title": "Star Trek",
-    "image": "https://i.postimg.cc/qRZnC6GD/Star-Trek.jpg",
+    "title": "DreamWorks Animated",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.dreamworks.webp?v=7",
     "catalogs": [
-     "Xperience — Star Trek — Movie",
-     "Xperience — Star Trek TV — Series"
-    ]
-   },
-   {
-    "title": "Star Wars",
-    "image": "https://i.postimg.cc/Wz08p7rv/Star-Wars.jpg",
-    "catalogs": [
-     "Xperience — Star Wars (Complete Universe) — Movie",
-     "Xperience — Star Wars TV — Series"
-    ]
-   },
-   {
-    "title": "Transformers",
-    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5D146C3D-25F5-4AB6-85E6-478D4B5B88DE.png",
-    "catalogs": [
-     "aio~transformers"
+     "kids:Xperience — DreamWorks — Movie"
     ]
    }
   ]
