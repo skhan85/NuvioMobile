@@ -139,6 +139,17 @@ def any_of(rules):
     return {"match_mode": "any", "groups": [{"match_mode": "any", "rules": rules}]}
 
 
+# The titles that carry the profile pictures for Infuse's favourites (see profile_art.py) are kept
+# out of every section, so their borrowed artwork never shows up while browsing.
+AVATAR_TAGS = ["avatar-saad", "avatar-kids"]
+
+
+def section_filter(rules):
+    return {"match_mode": "all", "groups": [
+        {"match_mode": "any", "rules": rules},
+        {"match_mode": "all", "rules": [{"field": "tag", "op": "not_in", "values": AVATAR_TAGS}]}]}
+
+
 made, updated, skipped, art_failed = 0, 0, [], []
 for ri, row in enumerate(rows):
     child_ids = []
@@ -153,7 +164,7 @@ for ri, row in enumerate(rows):
             skipped.append(f"{row['title']} / {folder['title']}")
             continue
         try:
-            item_id, new = upsert(folder["title"], "mixed", any_of(rules), False, ri * 100 + fi,
+            item_id, new = upsert(folder["title"], "mixed", section_filter(rules), False, ri * 100 + fi,
                                   row.get("tags"))
         except RuntimeError as e:
             print(f"  ! {folder['title']}: {e}")
