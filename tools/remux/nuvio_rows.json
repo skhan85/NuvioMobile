@@ -186,7 +186,9 @@
    {
     "title": "Martial Arts",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/martial-arts/v2/martial-arts-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~kung fu action"
+    ]
    },
    {
     "title": "Music / Musical",
@@ -238,7 +240,9 @@
    {
     "title": "Stand-Up Comedy",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/stand-up-comedy/v2/stand-up-comedy-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~stand-ups"
+    ]
    },
    {
     "title": "Superhero",
@@ -413,7 +417,9 @@
    {
     "title": "Mubi",
     "image": "https://imkaptain.github.io/nuvio-assets/assets/images/7c4bd708.webp",
-    "catalogs": []
+    "catalogs": [
+     "aio~all movies on mubi"
+    ]
    },
    {
     "title": "Pluto TV",
@@ -441,7 +447,10 @@
    {
     "title": "20th Century Studios",
     "image": "https://imkaptain.github.io/nuvio-assets/assets/images/a113a652.webp",
-    "catalogs": []
+    "catalogs": [
+     "aio~20th century studios",
+     "aio~20th television"
+    ]
    },
    {
     "title": "A24",
@@ -487,7 +496,9 @@
    {
     "title": "Lionsgate",
     "image": "https://imkaptain.github.io/nuvio-assets/assets/images/f878e71e.webp",
-    "catalogs": []
+    "catalogs": [
+     "aio~lionsgate"
+    ]
    },
    {
     "title": "Lucasfilm Ltd.",
@@ -508,12 +519,17 @@
    {
     "title": "MGM",
     "image": "https://imkaptain.github.io/nuvio-assets/assets/images/434d7008.webp",
-    "catalogs": []
+    "catalogs": [
+     "aio~metro-goldwyn-mayer",
+     "aio~mgm television"
+    ]
    },
    {
     "title": "New Line Cinema",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/new-line-cinema/new-line-cinema-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~new line cinema"
+    ]
    },
    {
     "title": "Paramount Pictures",
@@ -534,7 +550,9 @@
    {
     "title": "Searchlight Pictures",
     "image": "https://static.wikitide.net/avidwiki/thumb/f/f8/Searchlight_Pictures_logo.png/1067px-Searchlight_Pictures_logo.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~searchlight pictures"
+    ]
    },
    {
     "title": "Sony Pictures",
@@ -694,7 +712,11 @@
    {
     "title": "Nature, Wildlife & Earth",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/nature-wildlife-and-earth/v2/nature-wildlife-and-earth-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~attenborough",
+     "aio~bbc wildlife",
+     "aio~national geographic"
+    ]
    },
    {
     "title": "Sports & Athletic Stories",
@@ -704,22 +726,34 @@
    {
     "title": "Music & Concert Documentaries",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/music-and-concert-documentaries/v2/music-and-concert-documentaries-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~live concerts",
+     "aio~music concerts & documentaries",
+     "aio~music documentaries"
+    ]
    },
    {
     "title": "History, War & Civilizations",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/history-war-and-civilizations/v2/history-war-and-civilizations-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~history documentaries",
+     "aio~war documentaries"
+    ]
    },
    {
     "title": "Science, Tech & Cosmos",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/science-tech-and-cosmos/v2/science-tech-and-cosmos-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~hacking & programming",
+     "aio~space documentaries"
+    ]
    },
    {
     "title": "Investigative & Scandals",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/investigative-and-scandals/v2/investigative-and-scandals-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~investigative documentaries"
+    ]
    }
   ]
  },
