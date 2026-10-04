@@ -1,0 +1,738 @@
+[
+ {
+  "title": "Genres",
+  "folders": [
+   {
+    "title": "Action",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/action/v2/action-cover.png",
+    "catalogs": [
+     "Xperience — Action — Movie",
+     "Xperience — Action — Series"
+    ]
+   },
+   {
+    "title": "Adventure",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/adventure/v2/adventure-cover.png",
+    "catalogs": [
+     "Xperience — Adventure — Movie",
+     "Xperience — Adventure — Series"
+    ]
+   },
+   {
+    "title": "Animation",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/animation/v2/animation-cover.png",
+    "catalogs": [
+     "Xperience — Animated — Movie",
+     "Xperience — Animated — Series"
+    ]
+   },
+   {
+    "title": "Anime",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/anime/v2/anime-cover.png",
+    "catalogs": [
+     "Xperience — Anime — Movie",
+     "Xperience — Anime — Series"
+    ]
+   },
+   {
+    "title": "Comedy",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/comedy/v2/comedy-cover.png",
+    "catalogs": [
+     "Xperience — Comedy — Movie",
+     "Xperience — Comedy — Series"
+    ]
+   },
+   {
+    "title": "Crime",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/crime/v2/crime-cover.png",
+    "catalogs": [
+     "Xperience — Crime — Movie",
+     "Xperience — Crime — Series"
+    ]
+   },
+   {
+    "title": "Documentary",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/documentary/v2/documentary-cover.png",
+    "catalogs": [
+     "Xperience — Documentary — Movie",
+     "Xperience — Documentary — Series"
+    ]
+   },
+   {
+    "title": "Drama",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/drama/v2/drama-cover.png",
+    "catalogs": [
+     "Xperience — Drama — Movie",
+     "Xperience — Drama — Series"
+    ]
+   },
+   {
+    "title": "Family",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/family/v2/family-cover.png",
+    "catalogs": [
+     "Xperience — Family — Movie",
+     "Xperience — Family — Series"
+    ]
+   },
+   {
+    "title": "Fantasy",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/fantasy/v2/fantasy-cover.png",
+    "catalogs": [
+     "Xperience — Fantasy — Movie",
+     "Xperience — Fantasy — Series"
+    ]
+   },
+   {
+    "title": "History",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/history/v2/history-cover.png",
+    "catalogs": [
+     "Xperience — History — Movie"
+    ]
+   },
+   {
+    "title": "Horror",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/horror/v2/horror-cover.png",
+    "catalogs": [
+     "Xperience — Horror — Movie",
+     "Xperience — Horror — Series"
+    ]
+   },
+   {
+    "title": "K-Drama",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/k-drama/v2/k-drama-cover.png",
+    "catalogs": [
+     "Xperience — Popular K-Drama — Series",
+     "Xperience — Latest K-Drama — Series"
+    ]
+   },
+   {
+    "title": "Martial Arts",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/martial-arts/v2/martial-arts-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Music / Musical",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/music-musical/v2/music-musical-cover.png",
+    "catalogs": [
+     "Xperience — Musicals — Movie"
+    ]
+   },
+   {
+    "title": "Mystery",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/mystery/v2/mystery-cover.png",
+    "catalogs": [
+     "Xperience — Mystery — Movie",
+     "Xperience — Mystery — Series"
+    ]
+   },
+   {
+    "title": "Romance",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/romance/v2/romance-cover.png",
+    "catalogs": [
+     "Xperience — Romance — Movie",
+     "Xperience — Romance — Series"
+    ]
+   },
+   {
+    "title": "Romantic Comedy",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/romantic-comedy/v2/romantic-comedy-cover.png",
+    "catalogs": [
+     "Xperience — Romantic Comedy — Movie",
+     "Xperience — Romantic Comedy — Series"
+    ]
+   },
+   {
+    "title": "Science Fiction",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/science-fiction/v2/science-fiction-cover.png",
+    "catalogs": [
+     "Xperience — Sci-Fi — Movie",
+     "Xperience — Sci-Fi — Series"
+    ]
+   },
+   {
+    "title": "Sports",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/sports/v2/sports-cover.png",
+    "catalogs": [
+     "Xperience — Sports — Movie",
+     "Xperience — Sports — Series"
+    ]
+   },
+   {
+    "title": "Stand-Up Comedy",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/stand-up-comedy/v2/stand-up-comedy-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Superhero",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/superhero/v2/superhero-cover.png",
+    "catalogs": [
+     "Xperience — Superhero — Movie",
+     "Xperience — Superhero — Series"
+    ]
+   },
+   {
+    "title": "Thriller",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/thriller/v2/thriller-cover.png",
+    "catalogs": [
+     "Xperience — Thriller — Movie",
+     "Xperience — Thriller — Series"
+    ]
+   },
+   {
+    "title": "War",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/war/v2/war-cover.png",
+    "catalogs": [
+     "Xperience — War — Movie",
+     "Xperience — War — Series"
+    ]
+   },
+   {
+    "title": "Western",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/genres/western/v2/western-cover.png",
+    "catalogs": [
+     "Xperience — Westerns — Movie",
+     "Xperience — Westerns — Series"
+    ]
+   }
+  ]
+ },
+ {
+  "title": "Streaming Services",
+  "folders": [
+   {
+    "title": "Netflix",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/49571953.webp",
+    "catalogs": [
+     "Xperience — Netflix — Movie",
+     "Xperience — Netflix — Series",
+     "Xperience — Netflix Originals — Series"
+    ]
+   },
+   {
+    "title": "Prime Video",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/5c86c888.webp",
+    "catalogs": [
+     "Xperience — Prime Video — Movie",
+     "Xperience — Prime Video — Series",
+     "Xperience — Prime Video Originals — Series"
+    ]
+   },
+   {
+    "title": "Disney+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/b8c0d25b.webp",
+    "catalogs": [
+     "Xperience — Disney+ — Movie",
+     "Xperience — Disney+ — Series",
+     "Xperience — Disney+ Originals — Series"
+    ]
+   },
+   {
+    "title": "HBO Max",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/b59babf1.webp",
+    "catalogs": [
+     "Xperience — HBO Max — Movie",
+     "Xperience — HBO Max — Series",
+     "Xperience — HBO Max Originals — Series"
+    ]
+   },
+   {
+    "title": "Apple TV+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/4d8f0a8f.webp",
+    "catalogs": [
+     "Xperience — Apple TV+ — Movie",
+     "Xperience — Apple TV+ — Series",
+     "Xperience — Apple TV+ Originals — Series"
+    ]
+   },
+   {
+    "title": "Paramount+",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/refs/heads/main/art/streaming-services/paramount-plus/paramount-plus-cover.png",
+    "catalogs": [
+     "Xperience — Paramount+ Popular — Movie",
+     "Xperience — Paramount+ Popular — Series",
+     "Xperience — Paramount+ Originals — Series"
+    ]
+   },
+   {
+    "title": "Hulu",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/3a4d1b46.webp",
+    "catalogs": [
+     "Xperience — Hulu Popular — Movie",
+     "Xperience — Hulu Popular — Series",
+     "Xperience — Hulu Originals — Series"
+    ]
+   },
+   {
+    "title": "Peacock",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/970b675f.webp",
+    "catalogs": [
+     "Xperience — Peacock Popular — Movie",
+     "Xperience — Peacock Popular — Series",
+     "Xperience — Peacock Originals — Series"
+    ]
+   },
+   {
+    "title": "Crunchyroll",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/129a4038.webp",
+    "catalogs": [
+     "Xperience — Crunchyroll — Movie",
+     "Xperience — Crunchyroll — Series"
+    ]
+   },
+   {
+    "title": "Starz",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/9e92f9b6.webp",
+    "catalogs": []
+   },
+   {
+    "title": "AMC+",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/amcplus/amcplus-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Crave",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/crave/crave-cover.png",
+    "catalogs": [
+     "Xperience — Latest Crave — Movie",
+     "Xperience — Latest Crave — Series"
+    ]
+   },
+   {
+    "title": "Criterion",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/criterion-channel/criterion-channel-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Curiosity Stream",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/curiosity-stream/curiosity-stream-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Discovery+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/dbed63f2.webp",
+    "catalogs": [
+     "Xperience — Discovery+ — Movie",
+     "Xperience — Discovery+ — Series"
+    ]
+   },
+   {
+    "title": "Hayu",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/hayu/hayu-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Magellan",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/magellan/magellan-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "MGM+",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/d490e713.webp",
+    "catalogs": [
+     "Xperience — MGM+ — Movie"
+    ]
+   },
+   {
+    "title": "Mubi",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/7c4bd708.webp",
+    "catalogs": []
+   },
+   {
+    "title": "Pluto TV",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/pluto-tv/pluto-tv-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Shudder",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/99e24ce1.webp",
+    "catalogs": [
+     "Xperience — Shudder — Movie",
+     "Xperience — Shudder — Series"
+    ]
+   },
+   {
+    "title": "Tubi TV",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/tubi/tubi-cover.png",
+    "catalogs": []
+   }
+  ]
+ },
+ {
+  "title": "Studios",
+  "folders": [
+   {
+    "title": "20th Century Studios",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/a113a652.webp",
+    "catalogs": []
+   },
+   {
+    "title": "A24",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/59095acb.webp",
+    "catalogs": [
+     "Xperience — A24 — Movie",
+     "Xperience — A24 — Series"
+    ]
+   },
+   {
+    "title": "Blumhouse Productions",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/f85766ed.webp",
+    "catalogs": [
+     "Xperience — Blumhouse — Movie",
+     "Xperience — Blumhouse — Series"
+    ]
+   },
+   {
+    "title": "DC",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/eb3ea02f.webp",
+    "catalogs": [
+     "Xperience — DC — Movie",
+     "Xperience — DC — Series"
+    ]
+   },
+   {
+    "title": "DreamWorks Pictures",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/studios/dreamworks-pictures/dreamworks-pictures-cover.png",
+    "catalogs": [
+     "kids:Xperience — DreamWorks — Movie"
+    ]
+   },
+   {
+    "title": "Focus Features",
+    "image": "https://cdn2.nbcuni.com/NBCUniversal/styles/newsroom_stories_16_9_image_style/s3/2026-03/Untitled%20design%20%2810%29.jpg?VersionId=WLTG9zL_wpyJ62As0LwNmdNG4oF5JPAu&h=d1cb525d&itok=0JSMP23S",
+    "catalogs": []
+   },
+   {
+    "title": "Illumination",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/07b05be8.webp",
+    "catalogs": []
+   },
+   {
+    "title": "Lionsgate",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/f878e71e.webp",
+    "catalogs": []
+   },
+   {
+    "title": "Lucasfilm Ltd.",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/ff1124ea.webp",
+    "catalogs": [
+     "Xperience — Lucasfilm — Movie",
+     "Xperience — Lucasfilm — Series"
+    ]
+   },
+   {
+    "title": "Marvel Studios",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/67a54fdf.webp",
+    "catalogs": [
+     "Xperience — Marvel — Movie",
+     "Xperience — Marvel — Series"
+    ]
+   },
+   {
+    "title": "MGM",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/434d7008.webp",
+    "catalogs": []
+   },
+   {
+    "title": "New Line Cinema",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/new-line-cinema/new-line-cinema-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Paramount Pictures",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/f0b7cba7.webp",
+    "catalogs": [
+     "Xperience — Paramount Pictures — Movie",
+     "Xperience — Paramount Pictures — Series"
+    ]
+   },
+   {
+    "title": "Pixar",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/01ca52c7.webp",
+    "catalogs": [
+     "Xperience — Pixar — Movie",
+     "Xperience — Pixar — Series"
+    ]
+   },
+   {
+    "title": "Searchlight Pictures",
+    "image": "https://static.wikitide.net/avidwiki/thumb/f/f8/Searchlight_Pictures_logo.png/1067px-Searchlight_Pictures_logo.png",
+    "catalogs": []
+   },
+   {
+    "title": "Sony Pictures",
+    "image": "https://raw.githubusercontent.com/bramst0ne/prism-wallpapers/refs/heads/main/collections/companies/34-sony-pictures/cards/dual_2d1d2d_231a3a_0e0914_0.3_0.5_0.7_0.5/card_34_color_1.png",
+    "catalogs": [
+     "Xperience — Sony Pictures — Movie",
+     "Xperience — Sony Pictures — Series"
+    ]
+   },
+   {
+    "title": "Studio Ghibli",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/5072d59e.webp",
+    "catalogs": [
+     "Xperience — Studio Ghibli — Movie"
+    ]
+   },
+   {
+    "title": "Universal Pictures",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/50e0231c.webp",
+    "catalogs": [
+     "Xperience — Universal Pictures — Movie",
+     "Xperience — Universal Pictures — Series"
+    ]
+   },
+   {
+    "title": "Walt Disney Studio",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/399ea613.webp",
+    "catalogs": [
+     "Xperience — Disney Animated — Movie",
+     "Xperience — Disney Animated — Series"
+    ]
+   },
+   {
+    "title": "Warner Bros. Entertainment",
+    "image": "https://imkaptain.github.io/nuvio-assets/assets/images/532da5e0.webp",
+    "catalogs": [
+     "Xperience — Warner Bros — Movie",
+     "Xperience — Warner Bros — Series"
+    ]
+   }
+  ]
+ },
+ {
+  "title": "By Decade",
+  "folders": [
+   {
+    "title": "2020s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/2020s-movies/v2/2020s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 2020s — Movie"
+    ]
+   },
+   {
+    "title": "10s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/10s-movies/v2/10s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 2010s — Movie"
+    ]
+   },
+   {
+    "title": "00s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/00s-movies/v2/00s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 2000s — Movie"
+    ]
+   },
+   {
+    "title": "90s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/90s-movies/v2/90s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 1990s — Movie"
+    ]
+   },
+   {
+    "title": "80s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/80s-movies/v2/80s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 1980s — Movie"
+    ]
+   },
+   {
+    "title": "70s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/70s-movies/v2/70s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 1970s — Movie"
+    ]
+   },
+   {
+    "title": "60s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/60s-movies/v2/60s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 1960s — Movie"
+    ]
+   },
+   {
+    "title": "50s Movies",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/by-decade/50s-movies/v2/50s-movies-cover.png",
+    "catalogs": [
+     "Xperience — 1950s & Before — Movie"
+    ]
+   }
+  ]
+ },
+ {
+  "title": "Awards",
+  "folders": [
+   {
+    "title": "Academy Awards",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/academy-awards/academy-awards-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Festival de Cannes",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/festival-de-cannes/festival-de-cannes-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Golden Globes",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/golden-globes/golden-globes-cover.png",
+    "catalogs": []
+   }
+  ]
+ },
+ {
+  "title": "International Cinema",
+  "folders": [
+   {
+    "title": "Indian Cinema",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/indian-cinema/indian-cinema-cover.png",
+    "catalogs": [
+     "Xperience — Bollywood — Movie",
+     "Xperience — Bollywood — Series",
+     "Xperience — Latest Indian — Movie",
+     "Xperience — Top Rated Indian — Movie"
+    ]
+   },
+   {
+    "title": "Pakistani Cinema",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/pakistani-cinema/pakistani-cinema-cover.png",
+    "catalogs": []
+   }
+  ]
+ },
+ {
+  "title": "Documentaries",
+  "folders": [
+   {
+    "title": "True Crime & Serial Killers",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/true-crime-and-serial-killers/v2/true-crime-and-serial-killers-cover.png",
+    "catalogs": [
+     "Xperience — True Crime Documentaries — Movie",
+     "Xperience — True Crime — Series"
+    ]
+   },
+   {
+    "title": "Nature, Wildlife & Earth",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/nature-wildlife-and-earth/v2/nature-wildlife-and-earth-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Sports & Athletic Stories",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/sports-and-athletic-stories/v2/sports-and-athletic-stories-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Music & Concert Documentaries",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/music-and-concert-documentaries/v2/music-and-concert-documentaries-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "History, War & Civilizations",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/history-war-and-civilizations/v2/history-war-and-civilizations-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Science, Tech & Cosmos",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/science-tech-and-cosmos/v2/science-tech-and-cosmos-cover.png",
+    "catalogs": []
+   },
+   {
+    "title": "Investigative & Scandals",
+    "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/investigative-and-scandals/v2/investigative-and-scandals-cover.png",
+    "catalogs": []
+   }
+  ]
+ },
+ {
+  "title": "Franchise Collections",
+  "folders": [
+   {
+    "title": "Avatar",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/67EFA0D6-7231-40C5-864C-C4E8AC444060.png",
+    "catalogs": [
+     "Xperience — Avatar — Movie"
+    ]
+   },
+   {
+    "title": "DC Universe",
+    "image": "https://i.postimg.cc/zGMpg1RJ/DC-Universe.jpg",
+    "catalogs": [
+     "Xperience — DC Universe — Movie",
+     "Xperience — DC Universe — Series"
+    ]
+   },
+   {
+    "title": "Fast & Furious",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/C007827D-1C1F-4EF3-A8C0-12C6BE422E75.png",
+    "catalogs": [
+     "Xperience — Fast & Furious — Movie"
+    ]
+   },
+   {
+    "title": "Harry Potter",
+    "image": "https://image.tmdb.org/t/p/w500/eVPs2Y0LyvTLZn6AP5Z6O2rtiGB.jpg",
+    "catalogs": [
+     "Xperience — Harry Potter — Movie"
+    ]
+   },
+   {
+    "title": "James Bond",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5E990410-CC9E-4923-8A26-54C7FADCCF1F.png",
+    "catalogs": [
+     "Xperience — James Bond — Movie"
+    ]
+   },
+   {
+    "title": "John Wick",
+    "image": "https://i.postimg.cc/W14q7rtM/JW.jpg",
+    "catalogs": [
+     "Xperience — John Wick — Movie"
+    ]
+   },
+   {
+    "title": "Lord of the Rings",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/83B91887-4F2D-43A1-B402-896ACE0A431C.png",
+    "catalogs": [
+     "Xperience — Lord of the Rings — Movie",
+     "Xperience — The Hobbit — Movie"
+    ]
+   },
+   {
+    "title": "Marvel",
+    "image": "https://i.postimg.cc/g0BNgjdf/Marvel.jpg",
+    "catalogs": [
+     "Xperience — Marvel Cinematic Universe — Movie",
+     "Xperience — Marvel TV — Series"
+    ]
+   },
+   {
+    "title": "Matrix",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/3FE07460-AB92-45BC-8241-CA723D7CD0A6.png",
+    "catalogs": [
+     "Xperience — The Matrix — Movie"
+    ]
+   },
+   {
+    "title": "Star Trek",
+    "image": "https://i.postimg.cc/qRZnC6GD/Star-Trek.jpg",
+    "catalogs": [
+     "Xperience — Star Trek — Movie",
+     "Xperience — Star Trek TV — Series"
+    ]
+   },
+   {
+    "title": "Star Wars",
+    "image": "https://i.postimg.cc/Wz08p7rv/Star-Wars.jpg",
+    "catalogs": [
+     "Xperience — Star Wars (Complete Universe) — Movie",
+     "Xperience — Star Wars TV — Series"
+    ]
+   },
+   {
+    "title": "Transformers",
+    "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5D146C3D-25F5-4AB6-85E6-478D4B5B88DE.png",
+    "catalogs": []
+   }
+  ]
+ }
+]
