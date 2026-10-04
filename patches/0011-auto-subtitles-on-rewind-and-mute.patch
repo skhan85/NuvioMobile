@@ -1,0 +1,498 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
+index 974be935..6baf756d 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
+@@ -30,6 +30,8 @@ actual object PlayerSettingsStorage {
+     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
+     private const val holdToSpeedValueKey = "hold_to_speed_value"
+     private const val touchGesturesEnabledKey = "touch_gestures_enabled"
++    private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
++    private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
+     private const val externalPlayerEnabledKey = "external_player_enabled"
+     private const val externalPlayerForwardSubtitlesKey = "external_player_forward_subtitles"
+     private const val externalPlayerSendSkipSegmentsKey = "external_player_send_skip_segments"
+@@ -334,6 +336,40 @@ actual object PlayerSettingsStorage {
+             ?.apply()
+     }
+ 
++    actual fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean? =
++        preferences?.let { sharedPreferences ->
++            val key = ProfileScopedKey.of(autoShowSubtitlesOnRewindEnabledKey)
++            if (sharedPreferences.contains(key)) {
++                sharedPreferences.getBoolean(key, true)
++            } else {
++                null
++            }
++        }
++
++    actual fun saveAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
++        preferences
++            ?.edit()
++            ?.putBoolean(ProfileScopedKey.of(autoShowSubtitlesOnRewindEnabledKey), enabled)
++            ?.apply()
++    }
++
++    actual fun loadAutoShowSubtitlesOnMuteEnabled(): Boolean? =
++        preferences?.let { sharedPreferences ->
++            val key = ProfileScopedKey.of(autoShowSubtitlesOnMuteEnabledKey)
++            if (sharedPreferences.contains(key)) {
++                sharedPreferences.getBoolean(key, true)
++            } else {
++                null
++            }
++        }
++
++    actual fun saveAutoShowSubtitlesOnMuteEnabled(enabled: Boolean) {
++        preferences
++            ?.edit()
++            ?.putBoolean(ProfileScopedKey.of(autoShowSubtitlesOnMuteEnabledKey), enabled)
++            ?.apply()
++    }
++
+     actual fun loadExternalPlayerEnabled(): Boolean? =
+         preferences?.let { sharedPreferences ->
+             val key = ProfileScopedKey.of(externalPlayerEnabledKey)
+@@ -1228,6 +1264,8 @@ actual object PlayerSettingsStorage {
+         loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
+         loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
+         loadTouchGesturesEnabled()?.let { put(touchGesturesEnabledKey, encodeSyncBoolean(it)) }
++        loadAutoShowSubtitlesOnRewindEnabled()?.let { put(autoShowSubtitlesOnRewindEnabledKey, encodeSyncBoolean(it)) }
++        loadAutoShowSubtitlesOnMuteEnabled()?.let { put(autoShowSubtitlesOnMuteEnabledKey, encodeSyncBoolean(it)) }
+         loadExternalPlayerEnabled()?.let { put(externalPlayerEnabledKey, encodeSyncBoolean(it)) }
+         loadExternalPlayerForwardSubtitles()?.let { put(externalPlayerForwardSubtitlesKey, encodeSyncBoolean(it)) }
+         loadExternalPlayerSendSkipSegments()?.let { put(externalPlayerSendSkipSegmentsKey, encodeSyncBoolean(it)) }
+@@ -1310,6 +1348,8 @@ actual object PlayerSettingsStorage {
+         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
+         payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
+         payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
++        payload.decodeSyncBoolean(autoShowSubtitlesOnRewindEnabledKey)?.let(::saveAutoShowSubtitlesOnRewindEnabled)
++        payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
+         payload.decodeSyncBoolean(externalPlayerEnabledKey)?.let(::saveExternalPlayerEnabled)
+         payload.decodeSyncBoolean(externalPlayerForwardSubtitlesKey)?.let(::saveExternalPlayerForwardSubtitles)
+         payload.decodeSyncBoolean(externalPlayerSendSkipSegmentsKey)?.let(::saveExternalPlayerSendSkipSegments)
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 375ff28e..613e2217 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -2420,4 +2420,8 @@
+     <string name="compose_player_sync_by_ear_offset">Now: %1$s</string>
+     <string name="compose_player_sync_by_ear_waiting_saw">Heard captured. Tap Saw when its subtitle shows.</string>
+     <string name="compose_player_sync_by_ear_waiting_heard">Saw captured. Tap Heard when you hear the line.</string>
++    <string name="settings_playback_auto_show_subtitles_on_rewind">Auto-Show Subtitles on Rewind</string>
++    <string name="settings_playback_auto_show_subtitles_on_rewind_description">When subtitles are off, automatically turn them on while you rewind, then hide them again once playback catches back up to where you rewound from.</string>
++    <string name="settings_playback_auto_show_subtitles_on_mute">Auto-Show Subtitles on Mute</string>
++    <string name="settings_playback_auto_show_subtitles_on_mute_description">When subtitles are off, automatically turn them on while muted or with the volume at zero, then hide them again once you unmute.</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeAutoSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeAutoSubtitles.kt
+new file mode 100644
+index 00000000..dd8656ae
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeAutoSubtitles.kt
+@@ -0,0 +1,115 @@
++package com.nuvio.app.features.player
++
++import co.touchlab.kermit.Logger
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.launch
++
++private val autoSubtitleLog = Logger.withTag("AutoSubtitle")
++
++private fun PlayerScreenRuntime.hasRealSubtitleSelection(): Boolean =
++    (selectedSubtitleIndex != -1 || selectedAddonSubtitleId != null) && !isAutoSubtitleShowing
++
++private fun PlayerScreenRuntime.pickAutoShowSubtitleTrackIndex(): Int? {
++    if (subtitleTracks.isEmpty()) return null
++
++    val preferredLanguage = normalizeLanguageCode(playerSettingsUiState.preferredSubtitleLanguage)
++    val targets = if (
++        preferredLanguage == SubtitleLanguageOption.NONE || preferredLanguage == SubtitleLanguageOption.FORCED
++    ) {
++        emptyList()
++    } else {
++        resolvePreferredSubtitleLanguageTargets(
++            preferredSubtitleLanguage = playerSettingsUiState.preferredSubtitleLanguage,
++            secondaryPreferredSubtitleLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
++            deviceLanguages = DeviceLanguagePreferences.preferredLanguageCodes(),
++        )
++    }
++    targets.forEach { target ->
++        subtitleTracks.firstOrNull { SubtitleLanguageMatching.matchesLanguageCode(it.language, target) }
++            ?.let { return it.index }
++    }
++    return (subtitleTracks.firstOrNull { it.isSelected } ?: subtitleTracks.first()).index
++}
++
++private fun PlayerScreenRuntime.activateAutoSubtitleIfNeeded() {
++    if (isAutoSubtitleShowing) {
++        autoSubtitleLog.d("activate: skipped, already showing")
++        return
++    }
++    if (hasRealSubtitleSelection()) {
++        autoSubtitleLog.d("activate: skipped, real selection already active")
++        return
++    }
++    val index = pickAutoShowSubtitleTrackIndex()
++    if (index == null) {
++        autoSubtitleLog.d("activate: no track to show (tracks=${subtitleTracks.size})")
++        return
++    }
++    playerController?.selectSubtitleTrack(index)
++    selectedSubtitleIndex = index
++    isAutoSubtitleShowing = true
++    autoSubtitleLog.d("activate: turned on index=$index")
++}
++
++private fun PlayerScreenRuntime.deactivateAutoSubtitleIfNeeded() {
++    if (!isAutoSubtitleShowing) return
++    if (autoSubtitleRewindWatermarkMs != null || isAutoSubtitleMuteActive) {
++        autoSubtitleLog.d("deactivate: skipped, still needed (watermark=$autoSubtitleRewindWatermarkMs, mute=$isAutoSubtitleMuteActive)",
++        )
++        return
++    }
++    playerController?.selectSubtitleTrack(-1)
++    selectedSubtitleIndex = -1
++    isAutoSubtitleShowing = false
++    autoSubtitleLog.d("deactivate: turned off")
++}
++
++internal fun PlayerScreenRuntime.notifyRewindOccurred(fromPositionMs: Long) {
++    autoSubtitleLog.d("notifyRewindOccurred: fromPositionMs=$fromPositionMs")
++    if (!playerSettingsUiState.autoShowSubtitlesOnRewindEnabled) {
++        autoSubtitleLog.d("notifyRewindOccurred: skipped, setting disabled")
++        return
++    }
++    if (hasRealSubtitleSelection()) {
++        autoSubtitleLog.d("notifyRewindOccurred: skipped, real selection active")
++        return
++    }
++    val safeFrom = fromPositionMs.coerceAtLeast(0L)
++    autoSubtitleRewindWatermarkMs = maxOf(autoSubtitleRewindWatermarkMs ?: safeFrom, safeFrom)
++    autoSubtitleLog.d("notifyRewindOccurred: watermark now $autoSubtitleRewindWatermarkMs")
++    activateAutoSubtitleIfNeeded()
++}
++
++internal fun PlayerScreenRuntime.checkAutoSubtitleRewindWatermark(currentPositionMs: Long) {
++    val watermark = autoSubtitleRewindWatermarkMs ?: return
++    if (currentPositionMs >= watermark) {
++        autoSubtitleLog.d("checkAutoSubtitleRewindWatermark: reached (current=$currentPositionMs, watermark=$watermark)",
++        )
++        autoSubtitleRewindWatermarkMs = null
++        deactivateAutoSubtitleIfNeeded()
++    }
++}
++
++internal fun PlayerScreenRuntime.notifyVolumeLevelForAutoSubtitle(level: PlayerAudioLevel) {
++    if (!playerSettingsUiState.autoShowSubtitlesOnMuteEnabled) {
++        wasAutoSubtitleVolumeMuted = level.isMuted
++        return
++    }
++    if (level.isMuted == wasAutoSubtitleVolumeMuted) return
++    wasAutoSubtitleVolumeMuted = level.isMuted
++    autoSubtitleMuteActivationJob?.cancel()
++    if (level.isMuted && hasRealSubtitleSelection()) return
++    isAutoSubtitleMuteActive = level.isMuted
++    autoSubtitleMuteActivationJob = scope.launch {
++        delay(16)
++        if (isAutoSubtitleMuteActive) activateAutoSubtitleIfNeeded() else deactivateAutoSubtitleIfNeeded()
++    }
++}
++
++internal fun PlayerScreenRuntime.clearAutoSubtitleState() {
++    autoSubtitleMuteActivationJob?.cancel()
++    autoSubtitleMuteActivationJob = null
++    isAutoSubtitleShowing = false
++    autoSubtitleRewindWatermarkMs = null
++    isAutoSubtitleMuteActive = false
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+index 5947cb8b..9d83a76b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+@@ -105,6 +105,8 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
+         isUserExplicitAudioSelection = false
+         isUserExplicitSubtitleSelection = false
+         hasScannedTextTracksOnce = false
++        clearAutoSubtitleState()
++        wasAutoSubtitleVolumeMuted = false
+         selectedSubtitleIndex = -1
+         selectedAddonSubtitleId = null
+         useCustomSubtitles = false
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
+index e0a89996..0489a703 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
+@@ -135,6 +135,7 @@ internal fun PlayerScreenRuntime.showBrightnessFeedback(level: Float) {
+ }
+ 
+ internal fun PlayerScreenRuntime.showVolumeFeedback(level: PlayerAudioLevel) {
++    notifyVolumeLevelForAutoSubtitle(level)
+     val percentage = (level.fraction.coerceIn(0f, 1f) * 100f).roundToInt()
+     showGestureFeedback(
+         GestureFeedbackState(
+@@ -166,6 +167,7 @@ internal fun PlayerScreenRuntime.togglePlayback() {
+ }
+ 
+ internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
++    val fromPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
+     val fromMs = playbackSnapshot.positionMs
+     val targetMs = (fromMs + offsetMs).coerceAtLeast(0L)
+         .let { if (playbackSnapshot.durationMs > 0L) it.coerceAtMost(playbackSnapshot.durationMs) else it }
+@@ -175,7 +177,10 @@ internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
+     controlsVisible = true
+     when {
+         offsetMs > 0L -> showSeekFeedback(PlayerSeekDirection.Forward, offsetMs)
+-        offsetMs < 0L -> showSeekFeedback(PlayerSeekDirection.Backward, abs(offsetMs))
++        offsetMs < 0L -> {
++            showSeekFeedback(PlayerSeekDirection.Backward, abs(offsetMs))
++            notifyRewindOccurred(fromPositionMs)
++        }
+     }
+ }
+ 
+@@ -207,6 +212,9 @@ internal fun PlayerScreenRuntime.handleDoubleTapSeek(direction: PlayerSeekDirect
+     playerController?.seekTo(targetPositionMs)
+     scheduleProgressSyncAfterSeek()
+     showSeekFeedback(direction, nextState.amountMs)
++    if (direction == PlayerSeekDirection.Backward) {
++        notifyRewindOccurred(nextState.baselinePositionMs)
++    }
+ 
+     accumulatedSeekResetJob?.cancel()
+     accumulatedSeekResetJob = scope.launch {
+@@ -316,9 +324,13 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
+         currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
+         currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
+         commitHorizontalSeek = rememberUpdatedState { targetPositionMs: Long ->
++            val fromPositionMs = playbackSnapshot.positionMs.coerceAtLeast(0L)
+             lastManualSkipSeekPositions = playbackSnapshot.positionMs to targetPositionMs
+             playerController?.seekTo(targetPositionMs)
+             scheduleProgressSyncAfterSeek()
++            if (targetPositionMs < fromPositionMs) {
++                notifyRewindOccurred(fromPositionMs)
++            }
+         },
+     )
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt
+index ca541b82..792beee8 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt
+@@ -137,6 +137,8 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
+         isUserExplicitAudioSelection = false
+         isUserExplicitSubtitleSelection = false
+         hasScannedTextTracksOnce = false
++        clearAutoSubtitleState()
++        wasAutoSubtitleVolumeMuted = false
+     }
+ 
+     val videoIdentity = "$identity:$activeVideoId:$activeSeasonNumber:$activeEpisodeNumber"
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+index 215bf30a..f7c68656 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+@@ -212,6 +212,11 @@ internal class PlayerScreenRuntime(
+     var showSubtitleSyncByEar by mutableStateOf(false)
+     var subtitleSyncHeardPositionMs by mutableStateOf<Long?>(null)
+     var subtitleSyncSawPositionMs by mutableStateOf<Long?>(null)
++    var isAutoSubtitleShowing by mutableStateOf(false)
++    var autoSubtitleRewindWatermarkMs by mutableStateOf<Long?>(null)
++    var isAutoSubtitleMuteActive by mutableStateOf(false)
++    var wasAutoSubtitleVolumeMuted by mutableStateOf(false)
++    var autoSubtitleMuteActivationJob by mutableStateOf<Job?>(null)
+ 
+     var lastSyncedSettingsResizeMode: PlayerResizeMode? = null
+     var lastResetPlaybackIdentity: PlaybackKey? = null
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+index a7ddb42e..9dd06871 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+@@ -183,6 +183,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+                     },
+                     onSnapshot = { snapshot ->
+                         if (!active.value || !updatePlaybackSnapshot(snapshot, playbackKey)) return@PlatformPlayerSurface
++                        checkAutoSubtitleRewindWatermark(snapshot.positionMs)
+                         refreshAudioTracksIfChanged()
+                         if (!snapshot.isLoading) initialLoadCompleted = true
+                         if (snapshot.isEnded) {
+@@ -514,6 +515,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+         subtitleAutoSyncState = subtitleAutoSyncState,
+         onBuiltInSubtitleTrackSelected = { index ->
+             val wasCustom = useCustomSubtitles
++            clearAutoSubtitleState()
+             isUserExplicitSubtitleSelection = true
+             preferredSubtitleSelectionApplied = true
+             selectedSubtitleIndex = index
+@@ -527,6 +529,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+             }
+         },
+         onAddonSubtitleSelected = { addon ->
++            clearAutoSubtitleState()
+             isUserExplicitSubtitleSelection = true
+             selectedAddonSubtitleId = addon.selectionKey
+             selectedSubtitleIndex = -1
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
+index 9ba6b66b..eb4818b2 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
+@@ -42,6 +42,8 @@ data class PlayerSettingsUiState(
+     val holdToSpeedEnabled: Boolean = true,
+     val holdToSpeedValue: Float = 2f,
+     val touchGesturesEnabled: Boolean = true,
++    val autoShowSubtitlesOnRewindEnabled: Boolean = true,
++    val autoShowSubtitlesOnMuteEnabled: Boolean = true,
+     val externalPlayerEnabled: Boolean = false,
+     val externalPlayerForwardSubtitles: Boolean = false,
+     val externalPlayerSendSkipSegments: Boolean = false,
+@@ -113,6 +115,8 @@ object PlayerSettingsRepository {
+     private var holdToSpeedEnabled = true
+     private var holdToSpeedValue = 2f
+     private var touchGesturesEnabled = true
++    private var autoShowSubtitlesOnRewindEnabled = true
++    private var autoShowSubtitlesOnMuteEnabled = true
+     private var externalPlayerEnabled = false
+     private var externalPlayerForwardSubtitles = false
+     private var externalPlayerSendSkipSegments = false
+@@ -189,6 +193,8 @@ object PlayerSettingsRepository {
+         holdToSpeedEnabled = true
+         holdToSpeedValue = 2f
+         touchGesturesEnabled = true
++        autoShowSubtitlesOnRewindEnabled = true
++        autoShowSubtitlesOnMuteEnabled = true
+         externalPlayerEnabled = false
+         externalPlayerForwardSubtitles = false
+         externalPlayerSendSkipSegments = false
+@@ -260,6 +266,8 @@ object PlayerSettingsRepository {
+         holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
+         holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
+         touchGesturesEnabled = PlayerSettingsStorage.loadTouchGesturesEnabled() ?: true
++        autoShowSubtitlesOnRewindEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnRewindEnabled() ?: true
++        autoShowSubtitlesOnMuteEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnMuteEnabled() ?: true
+         externalPlayerEnabled = PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
+         externalPlayerForwardSubtitles = PlayerSettingsStorage.loadExternalPlayerForwardSubtitles() ?: false
+         externalPlayerSendSkipSegments = PlayerSettingsStorage.loadExternalPlayerSendSkipSegments() ?: false
+@@ -463,6 +471,22 @@ object PlayerSettingsRepository {
+         PlayerSettingsStorage.saveTouchGesturesEnabled(enabled)
+     }
+ 
++    fun setAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (autoShowSubtitlesOnRewindEnabled == enabled) return
++        autoShowSubtitlesOnRewindEnabled = enabled
++        publish()
++        PlayerSettingsStorage.saveAutoShowSubtitlesOnRewindEnabled(enabled)
++    }
++
++    fun setAutoShowSubtitlesOnMuteEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (autoShowSubtitlesOnMuteEnabled == enabled) return
++        autoShowSubtitlesOnMuteEnabled = enabled
++        publish()
++        PlayerSettingsStorage.saveAutoShowSubtitlesOnMuteEnabled(enabled)
++    }
++
+     fun setExternalPlayerEnabled(enabled: Boolean) {
+         ensureLoaded()
+         if (enabled && externalPlayerId.isNullOrBlank()) {
+@@ -986,6 +1010,8 @@ object PlayerSettingsRepository {
+             holdToSpeedEnabled = holdToSpeedEnabled,
+             holdToSpeedValue = holdToSpeedValue,
+             touchGesturesEnabled = touchGesturesEnabled,
++            autoShowSubtitlesOnRewindEnabled = autoShowSubtitlesOnRewindEnabled,
++            autoShowSubtitlesOnMuteEnabled = autoShowSubtitlesOnMuteEnabled,
+             externalPlayerEnabled = externalPlayerEnabled,
+             externalPlayerForwardSubtitles = externalPlayerForwardSubtitles,
+             externalPlayerSendSkipSegments = externalPlayerSendSkipSegments,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
+index 444a3725..1d4ed836 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
+@@ -25,6 +25,10 @@ internal expect object PlayerSettingsStorage {
+     fun saveHoldToSpeedValue(speed: Float)
+     fun loadTouchGesturesEnabled(): Boolean?
+     fun saveTouchGesturesEnabled(enabled: Boolean)
++    fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean?
++    fun saveAutoShowSubtitlesOnRewindEnabled(enabled: Boolean)
++    fun loadAutoShowSubtitlesOnMuteEnabled(): Boolean?
++    fun saveAutoShowSubtitlesOnMuteEnabled(enabled: Boolean)
+     fun loadExternalPlayerEnabled(): Boolean?
+     fun saveExternalPlayerEnabled(enabled: Boolean)
+     fun loadExternalPlayerForwardSubtitles(): Boolean?
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index 1ff99b97..24806ded 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -558,6 +558,24 @@ private fun PlaybackSettingsSection(
+                         )
+                     },
+                 )
++                SettingsGroupDivider(isTablet = isTablet)
++                SettingsSwitchRow(
++                    title = stringResource(Res.string.settings_playback_auto_show_subtitles_on_rewind),
++                    description = stringResource(Res.string.settings_playback_auto_show_subtitles_on_rewind_description),
++                    checked = autoPlayPlayerSettings.autoShowSubtitlesOnRewindEnabled,
++                    enabled = otherSubtitleOptionsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = PlayerSettingsRepository::setAutoShowSubtitlesOnRewindEnabled,
++                )
++                SettingsGroupDivider(isTablet = isTablet)
++                SettingsSwitchRow(
++                    title = stringResource(Res.string.settings_playback_auto_show_subtitles_on_mute),
++                    description = stringResource(Res.string.settings_playback_auto_show_subtitles_on_mute_description),
++                    checked = autoPlayPlayerSettings.autoShowSubtitlesOnMuteEnabled,
++                    enabled = otherSubtitleOptionsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = PlayerSettingsRepository::setAutoShowSubtitlesOnMuteEnabled,
++                )
+             }
+         }
+ 
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
+index d831397f..361febc4 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
+@@ -28,6 +28,8 @@ actual object PlayerSettingsStorage {
+     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
+     private const val holdToSpeedValueKey = "hold_to_speed_value"
+     private const val touchGesturesEnabledKey = "touch_gestures_enabled"
++    private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
++    private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
+     private const val externalPlayerEnabledKey = "external_player_enabled"
+     private const val externalPlayerForwardSubtitlesKey = "external_player_forward_subtitles"
+     private const val externalPlayerSendSkipSegmentsKey = "external_player_send_skip_segments"
+@@ -317,6 +319,18 @@ actual object PlayerSettingsStorage {
+         saveBoolean(touchGesturesEnabledKey, enabled)
+     }
+ 
++    actual fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean? = loadBoolean(autoShowSubtitlesOnRewindEnabledKey)
++
++    actual fun saveAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
++        saveBoolean(autoShowSubtitlesOnRewindEnabledKey, enabled)
++    }
++
++    actual fun loadAutoShowSubtitlesOnMuteEnabled(): Boolean? = loadBoolean(autoShowSubtitlesOnMuteEnabledKey)
++
++    actual fun saveAutoShowSubtitlesOnMuteEnabled(enabled: Boolean) {
++        saveBoolean(autoShowSubtitlesOnMuteEnabledKey, enabled)
++    }
++
+     actual fun loadExternalPlayerEnabled(): Boolean? {
+         val defaults = NSUserDefaults.standardUserDefaults
+         val key = ProfileScopedKey.of(externalPlayerEnabledKey)
+@@ -1022,6 +1036,8 @@ actual object PlayerSettingsStorage {
+         loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
+         loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
+         loadTouchGesturesEnabled()?.let { put(touchGesturesEnabledKey, encodeSyncBoolean(it)) }
++        loadAutoShowSubtitlesOnRewindEnabled()?.let { put(autoShowSubtitlesOnRewindEnabledKey, encodeSyncBoolean(it)) }
++        loadAutoShowSubtitlesOnMuteEnabled()?.let { put(autoShowSubtitlesOnMuteEnabledKey, encodeSyncBoolean(it)) }
+         loadExternalPlayerEnabled()?.let { put(externalPlayerEnabledKey, encodeSyncBoolean(it)) }
+         loadExternalPlayerForwardSubtitles()?.let { put(externalPlayerForwardSubtitlesKey, encodeSyncBoolean(it)) }
+         loadExternalPlayerId()?.let { put(externalPlayerIdKey, encodeSyncString(it)) }
+@@ -1103,6 +1119,8 @@ actual object PlayerSettingsStorage {
+         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
+         payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
+         payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
++        payload.decodeSyncBoolean(autoShowSubtitlesOnRewindEnabledKey)?.let(::saveAutoShowSubtitlesOnRewindEnabled)
++        payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
+         payload.decodeSyncBoolean(externalPlayerEnabledKey)?.let(::saveExternalPlayerEnabled)
+         payload.decodeSyncBoolean(externalPlayerForwardSubtitlesKey)?.let(::saveExternalPlayerForwardSubtitles)
+         payload.decodeSyncString(externalPlayerIdKey)?.let(::saveExternalPlayerId)

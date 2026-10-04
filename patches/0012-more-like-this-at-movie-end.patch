@@ -1,0 +1,594 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
+index 6baf756d..15406fc7 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
+@@ -30,6 +30,7 @@ actual object PlayerSettingsStorage {
+     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
+     private const val holdToSpeedValueKey = "hold_to_speed_value"
+     private const val touchGesturesEnabledKey = "touch_gestures_enabled"
++    private const val movieRecommendationsEnabledKey = "movie_recommendations_enabled"
+     private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
+     private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
+     private const val externalPlayerEnabledKey = "external_player_enabled"
+@@ -336,6 +337,23 @@ actual object PlayerSettingsStorage {
+             ?.apply()
+     }
+ 
++    actual fun loadMovieRecommendationsEnabled(): Boolean? =
++        preferences?.let { sharedPreferences ->
++            val key = ProfileScopedKey.of(movieRecommendationsEnabledKey)
++            if (sharedPreferences.contains(key)) {
++                sharedPreferences.getBoolean(key, true)
++            } else {
++                null
++            }
++        }
++
++    actual fun saveMovieRecommendationsEnabled(enabled: Boolean) {
++        preferences
++            ?.edit()
++            ?.putBoolean(ProfileScopedKey.of(movieRecommendationsEnabledKey), enabled)
++            ?.apply()
++    }
++
+     actual fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean? =
+         preferences?.let { sharedPreferences ->
+             val key = ProfileScopedKey.of(autoShowSubtitlesOnRewindEnabledKey)
+@@ -1348,6 +1366,7 @@ actual object PlayerSettingsStorage {
+         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
+         payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
+         payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
++        payload.decodeSyncBoolean(movieRecommendationsEnabledKey)?.let(::saveMovieRecommendationsEnabled)
+         payload.decodeSyncBoolean(autoShowSubtitlesOnRewindEnabledKey)?.let(::saveAutoShowSubtitlesOnRewindEnabled)
+         payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
+         payload.decodeSyncBoolean(externalPlayerEnabledKey)?.let(::saveExternalPlayerEnabled)
+diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
+index 613e2217..f3a45e23 100644
+--- a/composeApp/src/commonMain/composeResources/values/strings.xml
++++ b/composeApp/src/commonMain/composeResources/values/strings.xml
+@@ -2424,4 +2424,6 @@
+     <string name="settings_playback_auto_show_subtitles_on_rewind_description">When subtitles are off, automatically turn them on while you rewind, then hide them again once playback catches back up to where you rewound from.</string>
+     <string name="settings_playback_auto_show_subtitles_on_mute">Auto-Show Subtitles on Mute</string>
+     <string name="settings_playback_auto_show_subtitles_on_mute_description">When subtitles are off, automatically turn them on while muted or with the volume at zero, then hide them again once you unmute.</string>
++    <string name="settings_playback_movie_recommendations">Movie Recommendations</string>
++    <string name="settings_playback_movie_recommendations_description">Suggest titles from More Like This when a movie reaches its end credits.</string>
+ </resources>
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt
+index e3f7e784..6caa445b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt
+@@ -13,6 +13,7 @@ import com.nuvio.app.features.player.PlayerLaunch
+ import com.nuvio.app.features.player.PlayerLaunchStore
+ import com.nuvio.app.features.player.PlayerScreen
+ import com.nuvio.app.features.watchprogress.ResumePromptRepository
++import com.nuvio.app.navigation.DetailRoute
+ import com.nuvio.app.navigation.NuvioNavigator
+ import com.nuvio.app.navigation.PlayerRoute
+ 
+@@ -124,6 +125,16 @@ internal fun PlayerDestination(
+         onOpenExternalUrl = { url ->
+             openExternalStreamUrl(url)
+         },
++        onOpenMetaDetails = { preview ->
++            onBack()
++            navController.navigate(
++                DetailRoute(
++                    type = preview.type,
++                    id = preview.id,
++                    title = preview.name,
++                ),
++            )
++        },
+         modifier = Modifier.fillMaxSize(),
+     )
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
+index 36f5ef69..4b74ccd9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
+@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.unit.Dp
+ import androidx.compose.ui.unit.dp
+ import com.nuvio.app.features.p2p.P2pLoadingStatus
++import com.nuvio.app.features.home.MetaPreview
++import com.nuvio.app.features.player.skip.MovieRecommendationCard
+ import com.nuvio.app.features.player.skip.NextEpisodeCard
+ import com.nuvio.app.features.player.skip.NextEpisodeInfo
+ import com.nuvio.app.features.player.skip.SkipIntroButton
+@@ -59,6 +61,10 @@ internal fun BoxScope.PlayerPlaybackOverlays(
+     blurUnwatchedEpisodes: Boolean,
+     onPlayNextEpisode: () -> Unit,
+     onDismissNextEpisode: () -> Unit,
++    movieRecommendations: List<MetaPreview> = emptyList(),
++    showMovieRecommendationCard: Boolean = false,
++    onOpenMovieRecommendation: (MetaPreview) -> Unit = {},
++    onDismissMovieRecommendations: () -> Unit = {},
+     errorMessage: String?,
+     onDismissError: () -> Unit,
+ ) {
+@@ -145,6 +151,18 @@ internal fun BoxScope.PlayerPlaybackOverlays(
+         )
+     }
+ 
++    if (!isSeries && !playerControlsLocked) {
++        MovieRecommendationCard(
++            recommendations = movieRecommendations,
++            visible = showMovieRecommendationCard,
++            onOpen = onOpenMovieRecommendation,
++            onDismiss = onDismissMovieRecommendations,
++            modifier = Modifier
++                .align(Alignment.BottomEnd)
++                .padding(end = sliderEdgePadding, bottom = overlayBottomPadding),
++        )
++    }
++
+     if (errorMessage != null) {
+         ErrorModal(
+             message = errorMessage,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt
+index 3342d628..6f0d4f98 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt
+@@ -21,6 +21,7 @@ fun PlayerScreen(
+     onBack: () -> Unit,
+     onOpenInExternalPlayer: ((ExternalPlayerPlaybackRequest) -> Unit)? = null,
+     onOpenExternalUrl: ((String) -> Unit)? = null,
++    onOpenMetaDetails: ((com.nuvio.app.features.home.MetaPreview) -> Unit)? = null,
+     modifier: Modifier = Modifier,
+     logo: String? = null,
+     poster: String? = null,
+@@ -61,6 +62,7 @@ fun PlayerScreen(
+             onBack = onBack,
+             onOpenInExternalPlayer = onOpenInExternalPlayer,
+             onOpenExternalUrl = onOpenExternalUrl,
++            onOpenMetaDetails = onOpenMetaDetails,
+             modifier = modifier,
+             logo = logo,
+             poster = poster,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt
+index 40f08c6c..bb8cd66e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt
+@@ -18,6 +18,7 @@ internal data class PlayerScreenArgs(
+     val onBack: () -> Unit,
+     val onOpenInExternalPlayer: ((ExternalPlayerPlaybackRequest) -> Unit)?,
+     val onOpenExternalUrl: ((String) -> Unit)?,
++    val onOpenMetaDetails: ((com.nuvio.app.features.home.MetaPreview) -> Unit)? = null,
+     val modifier: Modifier,
+     val logo: String?,
+     val poster: String?,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+index 9d83a76b..465f7705 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
+@@ -683,6 +683,30 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
+             showNextEpisodeCard = false
+         }
+     }
++
++    LaunchedEffect(
++        playbackSnapshot.positionMs,
++        playbackSnapshot.durationMs,
++        playbackSnapshot.isEnded,
++        playerMeta?.moreLikeThis,
++        watchedUiState.watchedKeys,
++        movieRecommendationDismissedStage,
++        playerSettingsUiState.movieRecommendationsEnabled,
++    ) {
++        if (!isMoviePlayback || !playerSettingsUiState.movieRecommendationsEnabled || movieRecommendationCandidates.isEmpty()) {
++            showMovieRecommendationCard = false
++            return@LaunchedEffect
++        }
++        val stage = PlayerNextEpisodeRules.movieRecommendationStage(
++            positionMs = playbackSnapshot.positionMs,
++            durationMs = playbackSnapshot.durationMs,
++            isEnded = playbackSnapshot.isEnded,
++        )
++        if (stage == 0 && movieRecommendationDismissedStage != 0) {
++            movieRecommendationDismissedStage = 0
++        }
++        showMovieRecommendationCard = stage > movieRecommendationDismissedStage
++    }
+ }
+ 
+ private fun PlayerScreenRuntime.buildNowPlayingInfo(): PlayerNowPlayingInfo {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+index f7c68656..59097791 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
+@@ -179,6 +179,9 @@ internal class PlayerScreenRuntime(
+     var nextEpisodeInfo by mutableStateOf<NextEpisodeInfo?>(null)
+     var showNextEpisodeCard by mutableStateOf(false)
+     var nextEpisodeCardDismissed by mutableStateOf(false)
++    var showMovieRecommendationCard by mutableStateOf(false)
++    var movieRecommendationDismissedStage by mutableStateOf(0)
++    val isMoviePlayback: Boolean get() = parentMetaType == "movie" && !isLiveTvPlayback
+     var nextEpisodeAutoPlaySearching by mutableStateOf(false)
+     var nextEpisodeAutoPlaySourceName by mutableStateOf<String?>(null)
+     var nextEpisodeAutoPlayCountdown by mutableStateOf<Int?>(null)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+index 9dd06871..d607f76b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
+@@ -1,5 +1,7 @@
+ package com.nuvio.app.features.player
+ 
++import com.nuvio.app.features.watching.application.WatchingState
++import com.nuvio.app.features.home.MetaPreview
+ import androidx.compose.animation.AnimatedVisibility
+ import androidx.compose.animation.core.tween
+ import androidx.compose.animation.fadeIn
+@@ -18,6 +20,7 @@ import androidx.compose.runtime.rememberUpdatedState
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.layout.onSizeChanged
++import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
+ import com.nuvio.app.features.p2p.P2pStreamingState
+ import com.nuvio.app.features.p2p.formatP2pMegabytes
+ import com.nuvio.app.features.p2p.formatP2pSpeed
+@@ -469,6 +472,24 @@ private fun BoxScope.RenderPlaybackOverlays(
+             nextEpisodeCardDismissed = true
+             showNextEpisodeCard = false
+         },
++        movieRecommendations = if (isMoviePlayback && args.onOpenMetaDetails != null) {
++            movieRecommendationCandidates
++        } else {
++            emptyList()
++        },
++        showMovieRecommendationCard = showMovieRecommendationCard,
++        onOpenMovieRecommendation = { preview ->
++            flushWatchProgress()
++            args.onOpenMetaDetails?.invoke(preview)
++        },
++        onDismissMovieRecommendations = {
++            movieRecommendationDismissedStage = PlayerNextEpisodeRules.movieRecommendationStage(
++                positionMs = playbackSnapshot.positionMs,
++                durationMs = playbackSnapshot.durationMs,
++                isEnded = playbackSnapshot.isEnded,
++            )
++            showMovieRecommendationCard = false
++        },
+         errorMessage = errorMessage,
+             onDismissError = {
+                 flushWatchProgress()
+@@ -649,3 +670,17 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+         },
+     )
+ }
++
++private const val MOVIE_RECOMMENDATION_LIMIT = 10
++
++internal val PlayerScreenRuntime.movieRecommendationCandidates: List<MetaPreview>
++    get() {
++        val watchedKeys = watchedUiState.watchedKeys
++        return playerMeta?.moreLikeThis.orEmpty()
++            .asSequence()
++            .filterNot { it.id == parentMetaId }
++            .filterNot { WatchingState.isPosterWatched(watchedKeys = watchedKeys, item = it) }
++            .take(MOVIE_RECOMMENDATION_LIMIT)
++            .toList()
++    }
++
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
+index eb4818b2..d99a35ea 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
+@@ -42,6 +42,7 @@ data class PlayerSettingsUiState(
+     val holdToSpeedEnabled: Boolean = true,
+     val holdToSpeedValue: Float = 2f,
+     val touchGesturesEnabled: Boolean = true,
++    val movieRecommendationsEnabled: Boolean = true,
+     val autoShowSubtitlesOnRewindEnabled: Boolean = true,
+     val autoShowSubtitlesOnMuteEnabled: Boolean = true,
+     val externalPlayerEnabled: Boolean = false,
+@@ -115,6 +116,7 @@ object PlayerSettingsRepository {
+     private var holdToSpeedEnabled = true
+     private var holdToSpeedValue = 2f
+     private var touchGesturesEnabled = true
++    private var movieRecommendationsEnabled = true
+     private var autoShowSubtitlesOnRewindEnabled = true
+     private var autoShowSubtitlesOnMuteEnabled = true
+     private var externalPlayerEnabled = false
+@@ -193,6 +195,7 @@ object PlayerSettingsRepository {
+         holdToSpeedEnabled = true
+         holdToSpeedValue = 2f
+         touchGesturesEnabled = true
++        movieRecommendationsEnabled = true
+         autoShowSubtitlesOnRewindEnabled = true
+         autoShowSubtitlesOnMuteEnabled = true
+         externalPlayerEnabled = false
+@@ -266,6 +269,7 @@ object PlayerSettingsRepository {
+         holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
+         holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
+         touchGesturesEnabled = PlayerSettingsStorage.loadTouchGesturesEnabled() ?: true
++        movieRecommendationsEnabled = PlayerSettingsStorage.loadMovieRecommendationsEnabled() ?: true
+         autoShowSubtitlesOnRewindEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnRewindEnabled() ?: true
+         autoShowSubtitlesOnMuteEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnMuteEnabled() ?: true
+         externalPlayerEnabled = PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
+@@ -471,6 +475,14 @@ object PlayerSettingsRepository {
+         PlayerSettingsStorage.saveTouchGesturesEnabled(enabled)
+     }
+ 
++    fun setMovieRecommendationsEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (movieRecommendationsEnabled == enabled) return
++        movieRecommendationsEnabled = enabled
++        publish()
++        PlayerSettingsStorage.saveMovieRecommendationsEnabled(enabled)
++    }
++
+     fun setAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
+         ensureLoaded()
+         if (autoShowSubtitlesOnRewindEnabled == enabled) return
+@@ -1010,6 +1022,7 @@ object PlayerSettingsRepository {
+             holdToSpeedEnabled = holdToSpeedEnabled,
+             holdToSpeedValue = holdToSpeedValue,
+             touchGesturesEnabled = touchGesturesEnabled,
++            movieRecommendationsEnabled = movieRecommendationsEnabled,
+             autoShowSubtitlesOnRewindEnabled = autoShowSubtitlesOnRewindEnabled,
+             autoShowSubtitlesOnMuteEnabled = autoShowSubtitlesOnMuteEnabled,
+             externalPlayerEnabled = externalPlayerEnabled,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
+index 1d4ed836..845d82ef 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
+@@ -25,6 +25,8 @@ internal expect object PlayerSettingsStorage {
+     fun saveHoldToSpeedValue(speed: Float)
+     fun loadTouchGesturesEnabled(): Boolean?
+     fun saveTouchGesturesEnabled(enabled: Boolean)
++    fun loadMovieRecommendationsEnabled(): Boolean?
++    fun saveMovieRecommendationsEnabled(enabled: Boolean)
+     fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean?
+     fun saveAutoShowSubtitlesOnRewindEnabled(enabled: Boolean)
+     fun loadAutoShowSubtitlesOnMuteEnabled(): Boolean?
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/MovieRecommendationCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/MovieRecommendationCard.kt
+new file mode 100644
+index 00000000..bd79b56a
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/MovieRecommendationCard.kt
+@@ -0,0 +1,142 @@
++package com.nuvio.app.features.player.skip
++
++import androidx.compose.animation.AnimatedVisibility
++import androidx.compose.animation.core.tween
++import androidx.compose.animation.fadeIn
++import androidx.compose.animation.fadeOut
++import androidx.compose.animation.slideInHorizontally
++import androidx.compose.animation.slideOutHorizontally
++import androidx.compose.foundation.background
++import androidx.compose.foundation.border
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.layout.widthIn
++import androidx.compose.foundation.lazy.LazyRow
++import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Close
++import androidx.compose.material3.Icon
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.layout.ContentScale
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import coil3.compose.AsyncImage
++import com.nuvio.app.core.ui.PlatformBackHandler
++import com.nuvio.app.features.home.MetaPreview
++import nuvio.composeapp.generated.resources.Res
++import nuvio.composeapp.generated.resources.action_close
++import nuvio.composeapp.generated.resources.details_more_like_this
++import org.jetbrains.compose.resources.stringResource
++
++@Composable
++fun MovieRecommendationCard(
++    recommendations: List<MetaPreview>,
++    visible: Boolean,
++    onOpen: (MetaPreview) -> Unit,
++    onDismiss: () -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    if (recommendations.isEmpty()) return
++
++    PlatformBackHandler(enabled = visible, onBack = onDismiss)
++
++    AnimatedVisibility(
++        visible = visible,
++        enter = slideInHorizontally(animationSpec = tween(260), initialOffsetX = { it / 2 }) +
++            fadeIn(animationSpec = tween(220)),
++        exit = slideOutHorizontally(animationSpec = tween(200), targetOffsetX = { it / 2 }) +
++            fadeOut(animationSpec = tween(160)),
++        modifier = modifier,
++    ) {
++        val shape = RoundedCornerShape(16.dp)
++        Column(
++            modifier = Modifier
++                .widthIn(max = 320.dp)
++                .clip(shape)
++                .background(Color(0xFF191919).copy(alpha = 0.89f))
++                .border(1.dp, Color.White.copy(alpha = 0.12f), shape)
++                .padding(vertical = 8.dp),
++        ) {
++            Row(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .padding(start = 11.dp, end = 6.dp),
++                verticalAlignment = Alignment.CenterVertically,
++            ) {
++                Text(
++                    text = stringResource(Res.string.details_more_like_this),
++                    color = Color.White.copy(alpha = 0.8f),
++                    fontSize = 11.sp,
++                    fontWeight = FontWeight.SemiBold,
++                    modifier = Modifier.weight(1f),
++                )
++                Box(
++                    modifier = Modifier
++                        .size(24.dp)
++                        .clip(CircleShape)
++                        .clickable(enabled = visible, onClick = onDismiss),
++                    contentAlignment = Alignment.Center,
++                ) {
++                    Icon(
++                        imageVector = Icons.Default.Close,
++                        contentDescription = stringResource(Res.string.action_close),
++                        tint = Color.White.copy(alpha = 0.75f),
++                        modifier = Modifier.size(15.dp),
++                    )
++                }
++            }
++            Spacer(modifier = Modifier.height(6.dp))
++            LazyRow(
++                contentPadding = PaddingValues(horizontal = 9.dp),
++                horizontalArrangement = Arrangement.spacedBy(8.dp),
++            ) {
++                items(recommendations, key = { "${it.type}:${it.id}" }) { preview ->
++                    Column(
++                        modifier = Modifier
++                            .width(72.dp)
++                            .clip(RoundedCornerShape(9.dp))
++                            .clickable(enabled = visible) { onOpen(preview) },
++                    ) {
++                        AsyncImage(
++                            model = preview.poster ?: preview.banner,
++                            contentDescription = preview.name,
++                            modifier = Modifier
++                                .size(width = 72.dp, height = 108.dp)
++                                .clip(RoundedCornerShape(9.dp))
++                                .background(Color.White.copy(alpha = 0.08f)),
++                            contentScale = ContentScale.Crop,
++                        )
++                        Spacer(modifier = Modifier.height(4.dp))
++                        Text(
++                            text = preview.name,
++                            color = Color.White,
++                            fontSize = 10.sp,
++                            maxLines = 1,
++                            overflow = TextOverflow.Ellipsis,
++                            fontWeight = FontWeight.Medium,
++                        )
++                    }
++                }
++            }
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt
+index 628b06f9..7d10d525 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt
+@@ -101,6 +101,28 @@ object PlayerNextEpisodeRules {
+         }
+     }
+ 
++    /**
++     * How far a movie is into its ending, for the More Like This card:
++     * 0 = not yet, 1 = last 2 minutes, 2 = last 30 seconds, 3 = playback ended.
++     * The card shows while the stage is above the one the user last dismissed it at, so a
++     * dismissal in the 2-minute window brings it back at 30 seconds, and it always returns
++     * when playback really ends.
++     */
++    fun movieRecommendationStage(positionMs: Long, durationMs: Long, isEnded: Boolean): Int {
++        if (isEnded) return MOVIE_RECOMMENDATION_STAGE_ENDED
++        if (durationMs <= 0L) return 0
++        val remainingMs = durationMs - positionMs
++        return when {
++            remainingMs <= MOVIE_RECOMMENDATION_FINAL_MS -> 2
++            remainingMs <= MOVIE_RECOMMENDATION_FIRST_MS -> 1
++            else -> 0
++        }
++    }
++
++    const val MOVIE_RECOMMENDATION_STAGE_ENDED = 3
++    private const val MOVIE_RECOMMENDATION_FIRST_MS = 2L * 60_000L
++    private const val MOVIE_RECOMMENDATION_FINAL_MS = 30_000L
++
+     fun hasEpisodeAired(raw: String?): Boolean {
+         val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return true
+         val dateStr = when {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index 24806ded..3ed1dac4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -389,6 +389,14 @@ private fun PlaybackSettingsSection(
+                     onCheckedChange = PlayerSettingsRepository::setShowParentalGuide,
+                 )
+                 SettingsGroupDivider(isTablet = isTablet)
++                SettingsSwitchRow(
++                    title = stringResource(Res.string.settings_playback_movie_recommendations),
++                    description = stringResource(Res.string.settings_playback_movie_recommendations_description),
++                    checked = autoPlayPlayerSettings.movieRecommendationsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = PlayerSettingsRepository::setMovieRecommendationsEnabled,
++                )
++                SettingsGroupDivider(isTablet = isTablet)
+                 // Player preference picker: Internal / External
+                 SettingsNavigationRow(
+                     title = stringResource(Res.string.settings_playback_player_preference),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
+index 61e622f2..1a6ccf35 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
+@@ -588,6 +588,11 @@ internal fun settingsSearchEntries(
+                 stringResource(Res.string.settings_playback_touch_gestures),
+                 stringResource(Res.string.settings_playback_touch_gestures_description),
+             ),
++            PlaybackSearchRow(
++                "movie-recommendations",
++                stringResource(Res.string.settings_playback_movie_recommendations),
++                stringResource(Res.string.settings_playback_movie_recommendations_description),
++            ),
+             PlaybackSearchRow("hold-speed", stringResource(Res.string.settings_playback_hold_speed)),
+         ),
+     )
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
+index 361febc4..84c697d4 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
+@@ -28,6 +28,7 @@ actual object PlayerSettingsStorage {
+     private const val holdToSpeedEnabledKey = "hold_to_speed_enabled"
+     private const val holdToSpeedValueKey = "hold_to_speed_value"
+     private const val touchGesturesEnabledKey = "touch_gestures_enabled"
++    private const val movieRecommendationsEnabledKey = "movie_recommendations_enabled"
+     private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
+     private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
+     private const val externalPlayerEnabledKey = "external_player_enabled"
+@@ -319,6 +320,14 @@ actual object PlayerSettingsStorage {
+         saveBoolean(touchGesturesEnabledKey, enabled)
+     }
+ 
++
++
++    actual fun loadMovieRecommendationsEnabled(): Boolean? = loadBoolean(movieRecommendationsEnabledKey)
++
++    actual fun saveMovieRecommendationsEnabled(enabled: Boolean) {
++        saveBoolean(movieRecommendationsEnabledKey, enabled)
++    }
++
+     actual fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean? = loadBoolean(autoShowSubtitlesOnRewindEnabledKey)
+ 
+     actual fun saveAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
+@@ -1119,6 +1128,7 @@ actual object PlayerSettingsStorage {
+         payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
+         payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
+         payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
++        payload.decodeSyncBoolean(movieRecommendationsEnabledKey)?.let(::saveMovieRecommendationsEnabled)
+         payload.decodeSyncBoolean(autoShowSubtitlesOnRewindEnabledKey)?.let(::saveAutoShowSubtitlesOnRewindEnabled)
+         payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
+         payload.decodeSyncBoolean(externalPlayerEnabledKey)?.let(::saveExternalPlayerEnabled)

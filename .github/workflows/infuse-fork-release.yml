@@ -189,7 +189,18 @@ jobs:
         working-directory: src
         run: ./scripts/build-ios-ipa.sh
 
+      # Branches other than cmp-rewrite only test that the patches still build; their IPA is kept
+      # as a run artifact instead of a release, so the Raspberry Pi never installs a test build.
+      - name: Keep test build as an artifact
+        if: github.ref_name != 'cmp-rewrite'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-ipa
+          path: src/build/ios-ipa/*.ipa
+          retention-days: 7
+
       - name: Publish release
+        if: github.ref_name == 'cmp-rewrite'
         run: |
           src_ipa="src/build/ios-ipa/nuvio-${VERSION}-full-release.ipa"
           dst="nuvio-${VERSION}-infuse-ios.ipa"
