@@ -111,6 +111,30 @@ def upsert(name, ctype, smart_filter, promoted, sort_order, tags=None):
     return item_id, new
 
 
+# Cover art. Remux treats an upload on a collection as the *source* for a generated poster (title text
+# over a poster grid) unless the collection's image config says otherwise, so set "no grid, no text"
+# first and the Nuvio cover becomes the tile as-is. Art is uploaded once per collection and URL
+# (remembered in ~/.remux_art.json); pass --art to upload everything again.
+ART_FILE = os.path.expanduser("~/.remux_art.json")
+art_done = json.load(open(ART_FILE)) if os.path.exists(ART_FILE) and "--art" not in sys.argv else {}
+ROW_COVER = {"Streaming Services": "Netflix", "Franchise Collections": "Star Wars", "Genres": "Action",
+             "Studios": "20th Century Studios", "International Cinema": "Indian Cinema",
+             "Awards": "Academy Awards", "By Decade": "2020s Movies",
+             "Documentaries": "True Crime & Serial Killers", "Kids": "Disney Kids"}
+
+
+def set_art(name, item_id, url):
+    if not url or art_done.get(item_id) == url:
+        return
+    try:
+        img = fetch(url)
+        call("PATCH", f"/items/{item_id}", {"ImageConfig": {"layout": "none", "overlay": {"type": "none"}}})
+        call("POST", f"/Items/{item_id}/Images/Primary", raw=base64.b64encode(img), ctype="image/*")
+        art_done[item_id] = url
+    except Exception as e:
+        art_failed.append(f"{name} ({e.__class__.__name__}: {str(e)[:80]})")
+
+
 def any_of(rules):
     return {"match_mode": "any", "groups": [{"match_mode": "any", "rules": rules}]}
 
@@ -137,19 +161,17 @@ for ri, row in enumerate(rows):
         made += new
         updated += not new
         child_ids.append(item_id)
-        if folder["image"] and new:
-            try:
-                img = fetch(folder["image"])
-                call("POST", f"/Items/{item_id}/Images/Primary",
-                     raw=base64.b64encode(img), ctype="image/*")
-            except Exception as e:
-                art_failed.append(f"{folder['title']} ({e.__class__.__name__})")
+        set_art(folder["title"], item_id, folder["image"])
     # 3. The row itself: a promoted group (shows as its own library in Infuse) of those collections.
     if child_ids:
-        upsert(row["title"], "collections",
-               any_of([{"field": "collection_id", "op": "in", "ids": child_ids}]), True, ri,
-               row.get("tags"))
+        group_id, _ = upsert(row["title"], "collections",
+                             any_of([{"field": "collection_id", "op": "in", "ids": child_ids}]), True, ri,
+                             row.get("tags"))
+        cover = next((f["image"] for f in row["folders"] if f["title"] == ROW_COVER.get(row["title"])),
+                     next((f["image"] for f in row["folders"] if f["image"]), ""))
+        set_art(row["title"], group_id, cover)
         print(f"{row['title']}: {len(child_ids)} collections")
+json.dump(art_done, open(ART_FILE, "w"))
 
 print(f"\nCreated {made}, updated {updated}.")
 if skipped:
@@ -175,6 +197,16 @@ for lib in call("GET", "/library/virtualfolders"):
         hidden[lib["Name"]] = lib["ItemId"]
         print(f"Hidden: {lib['Name']}")
 json.dump(hidden, open(HIDDEN_FILE, "w"))
+
+# 4b. The kids user sees only the Kids section (tags already limit what's inside every section,
+#     but section tiles themselves aren't tag-filtered, so the grown-up ones showed up empty).
+kids_group = existing.get("Kids")
+kids_user = next((u for u in call("GET", "/users") if u["Name"] == "kids"), None)
+if kids_group and kids_user:
+    policy = kids_user.get("Policy") or {}
+    policy.update({"EnableAllFolders": False, "EnabledFolders": [kids_group]})
+    call("POST", f"/users/{kids_user['Id']}/policy", policy)
+    print("kids user: only the Kids section")
 
 # 5. Fill everything.
 task = next(t for t in call("GET", "/scheduledtasks") if (t.get("Name") or t.get("name")) == "Refresh Library")
