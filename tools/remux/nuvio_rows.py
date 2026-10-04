@@ -182,7 +182,7 @@ if art_failed:
 # 4. Hide every other library (Remux's standard ones), so only the Nuvio sections show in Infuse.
 #    Nothing is deleted - the titles stay in the library and keep filling the collections.
 #    Undo with:  python3 nuvio_rows.py --show-standard
-ours = {r["title"] for r in rows}
+ours = {r["title"] for r in rows} | {"Profile", "Kids Profile"}   # artwork holders for Infuse favourites
 HIDDEN_FILE = os.path.expanduser("~/.remux_hidden_libraries.json")
 hidden = json.load(open(HIDDEN_FILE)) if os.path.exists(HIDDEN_FILE) else {}
 if "--show-standard" in sys.argv:
@@ -204,7 +204,8 @@ kids_group = existing.get("Kids")
 kids_user = next((u for u in call("GET", "/users") if u["Name"] == "kids"), None)
 if kids_group and kids_user:
     policy = kids_user.get("Policy") or {}
-    policy.update({"EnableAllFolders": False, "EnabledFolders": [kids_group]})
+    folders = [kids_group] + ([existing["Kids Profile"]] if existing.get("Kids Profile") else [])
+    policy.update({"EnableAllFolders": False, "EnabledFolders": folders})
     call("POST", f"/users/{kids_user['Id']}/policy", policy)
     print("kids user: only the Kids section")
 
