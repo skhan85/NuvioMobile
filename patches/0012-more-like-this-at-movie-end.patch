@@ -193,7 +193,7 @@ index 9d83a76b..465f7705 100644
  
  private fun PlayerScreenRuntime.buildNowPlayingInfo(): PlayerNowPlayingInfo {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index f7c68656..59097791 100644
+index f7c68656..0cf85ad3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 @@ -179,6 +179,9 @@ internal class PlayerScreenRuntime(
@@ -202,7 +202,7 @@ index f7c68656..59097791 100644
      var nextEpisodeCardDismissed by mutableStateOf(false)
 +    var showMovieRecommendationCard by mutableStateOf(false)
 +    var movieRecommendationDismissedStage by mutableStateOf(0)
-+    val isMoviePlayback: Boolean get() = parentMetaType == "movie" && !isLiveTvPlayback
++    val isMoviePlayback: Boolean get() = parentMetaType == "movie"
      var nextEpisodeAutoPlaySearching by mutableStateOf(false)
      var nextEpisodeAutoPlaySourceName by mutableStateOf<String?>(null)
      var nextEpisodeAutoPlayCountdown by mutableStateOf<Int?>(null)
