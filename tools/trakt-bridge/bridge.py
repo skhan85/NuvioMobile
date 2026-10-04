@@ -40,6 +40,8 @@ NUVIO_PROFILE_NAME = os.environ.get("NUVIO_PROFILE_NAME", "")
 LOG_REQUESTS = os.environ.get("LOG_REQUESTS", "1") != "0"
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 WATCHED_AT_PERCENT = float(os.environ.get("WATCHED_AT_PERCENT", "90"))
+# Infuse sends exactly this progress on stop when you quit past it without finishing.
+INFUSE_CAP_PERCENT = 79.0
 
 TRAKT_HOSTS = {"api.trakt.tv", "apiz.trakt.tv"}
 HOP_BY_HOP = {
@@ -446,6 +448,20 @@ def handle_scrobble(action, body):
         if not entry:
             log(f"  {label}: length unknown - not saved")
             return
+        if action != "start" and abs(progress - INFUSE_CAP_PERCENT) < 0.01:
+            # Infuse reports exactly 79% when you stop past that point without finishing (so Trakt
+            # won't mark it watched). The real position is somewhere after 79%, so never let this
+            # pull back a further position Nuvio already has (its own Back/x-callback save, or an
+            # earlier report from this session). Nuvio saves its position when Infuse hands back
+            # control, at about the same moment this report arrives, so give that save time to land.
+            time.sleep(5)
+            entries = NUVIO.progress_entries(profile)
+            saved = max((int(e.get("position") or 0) for e in entries
+                         if e.get("progress_key") == entry["progress_key"]), default=0)
+            if saved >= entry["position"]:
+                log(f"  {label}: Infuse capped its report at 79% - kept Nuvio's {clock(saved)}")
+                HEALTH["last_error"] = None
+                return
         NUVIO.push_progress(profile, entry)
         HEALTH["last_error"] = None
         log(f"  saved {label} at {clock(entry['position'])} of {clock(entry['duration'])} ({progress:.1f}%, {action}) to {NUVIO.profile_name(profile)}")
