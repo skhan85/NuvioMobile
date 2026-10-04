@@ -187,7 +187,14 @@ jobs:
 
       - name: Build IPA
         working-directory: src
-        run: ./scripts/build-ios-ipa.sh
+        run: |
+          set -o pipefail
+          if ! ./scripts/build-ios-ipa.sh 2>&1 | tee build.log; then
+            # Surface compile errors as annotations, readable without downloading the full log.
+            grep -E "^e: |error: |\\.kt:[0-9]+:[0-9]+ |Unresolved reference" build.log | sort -u | head -40 \
+              | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+            exit 1
+          fi
 
       # Branches other than cmp-rewrite only test that the patches still build; their IPA is kept
       # as a run artifact instead of a release, so the Raspberry Pi never installs a test build.
