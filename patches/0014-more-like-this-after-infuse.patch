@@ -1,0 +1,157 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index f47c59ff..bfd37f89 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -126,6 +126,8 @@ import com.nuvio.app.features.p2p.P2pSettingsRepository
+ import com.nuvio.app.features.player.ExternalPlayerIntentResult
+ import com.nuvio.app.features.player.externalPlaybackSession
+ import com.nuvio.app.features.player.infusePlaybackCallbacks
++import com.nuvio.app.features.player.ExternalMovieSuggestions
++import com.nuvio.app.features.player.ExternalMovieSuggestionsOverlay
+ import com.nuvio.app.features.player.recordExternalPlaybackProgress
+ import com.nuvio.app.features.player.ExternalPlayerPlatform
+ import com.nuvio.app.features.player.PlayerLaunch
+@@ -667,6 +669,7 @@ internal fun MainAppContent(
+             val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
+             coroutineScope.launch {
+                 recordExternalPlaybackProgress(result, fallbackSession)
++                ExternalMovieSuggestions.onExternalPlaybackReturned(result, fallbackSession)
+                 result.callbackId?.let(infusePlaybackCallbacks::consume)
+             }
+         }
+@@ -2009,6 +2012,21 @@ internal fun MainAppContent(
+                     .zIndex(15f),
+             )
+ 
++            ExternalMovieSuggestionsOverlay(
++                onOpen = { preview ->
++                    navController.navigate(
++                        DetailRoute(
++                            type = preview.type,
++                            id = preview.id,
++                            title = preview.name,
++                        ),
++                    )
++                },
++                modifier = Modifier
++                    .align(Alignment.BottomEnd)
++                    .zIndex(16f),
++            )
++
+             NuvioToastHost(
+                 modifier = Modifier
+                     .align(Alignment.TopCenter)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt
+new file mode 100644
+index 00000000..3adc5c12
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt
+@@ -0,0 +1,108 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.safeDrawing
++import androidx.compose.foundation.layout.windowInsetsPadding
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.home.MetaPreview
++import com.nuvio.app.features.player.skip.MovieRecommendationCard
++import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watching.application.WatchingState
++import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * Fork: the More Like This card for movies played in an external player (Infuse).
++ *
++ * Nuvio's own player shows the card during the last two minutes of a movie. Infuse plays the movie
++ * itself, so instead the card appears when Infuse hands back to Nuvio near the end: inside that
++ * window, or past 90% (where people tend to stop once the credits roll, and where Nuvio counts the
++ * movie as watched). Uses the same Movie Recommendations setting.
++ */
++internal object ExternalMovieSuggestions {
++    private val pendingMovie = MutableStateFlow<WatchProgressPlaybackSession?>(null)
++    val pending = pendingMovie.asStateFlow()
++
++    fun onExternalPlaybackReturned(result: ExternalPlaybackResult, fallbackSession: WatchProgressPlaybackSession?) {
++        val session = result.playbackSession ?: fallbackSession ?: return
++        if (session.parentMetaType != "movie" && session.contentType != "movie") return
++        PlayerSettingsRepository.ensureLoaded()
++        if (!PlayerSettingsRepository.uiState.value.movieRecommendationsEnabled) return
++        val durationMs = result.durationMs?.takeIf { it > 0L }
++        val reachedEnd = !result.endedByUser ||
++            (durationMs != null && result.positionMs >= durationMs * 9 / 10) ||
++            (durationMs != null &&
++                PlayerNextEpisodeRules.movieRecommendationStage(
++                    positionMs = result.positionMs,
++                    durationMs = durationMs,
++                    isEnded = false,
++                ) > 0)
++        if (reachedEnd) pendingMovie.value = session
++    }
++
++    fun dismiss() {
++        pendingMovie.value = null
++    }
++}
++
++private const val EXTERNAL_SUGGESTION_LIMIT = 10
++
++/** Shows the card over the whole app; place it inside the root Box. */
++@Composable
++internal fun ExternalMovieSuggestionsOverlay(
++    onOpen: (MetaPreview) -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    val movie by ExternalMovieSuggestions.pending.collectAsStateWithLifecycle()
++    val watchedUiState by remember {
++        WatchedRepository.ensureLoaded()
++        WatchedRepository.uiState
++    }.collectAsStateWithLifecycle()
++    var suggestions by remember { mutableStateOf<List<MetaPreview>>(emptyList()) }
++
++    LaunchedEffect(movie?.parentMetaId) {
++        val current = movie ?: run {
++            suggestions = emptyList()
++            return@LaunchedEffect
++        }
++        val meta = MetaDetailsRepository.peek(current.parentMetaType, current.parentMetaId)
++            ?.takeIf { it.moreLikeThis.isNotEmpty() }
++            ?: runCatching { MetaDetailsRepository.fetch(current.parentMetaType, current.parentMetaId) }.getOrNull()
++        suggestions = meta?.moreLikeThis.orEmpty()
++        if (suggestions.isEmpty()) ExternalMovieSuggestions.dismiss()
++    }
++
++    val current = movie
++    val visibleSuggestions = remember(suggestions, watchedUiState.watchedKeys, current?.parentMetaId) {
++        suggestions.asSequence()
++            .filterNot { it.id == current?.parentMetaId }
++            .filterNot { WatchingState.isPosterWatched(watchedKeys = watchedUiState.watchedKeys, item = it) }
++            .take(EXTERNAL_SUGGESTION_LIMIT)
++            .toList()
++    }
++
++    MovieRecommendationCard(
++        recommendations = visibleSuggestions,
++        visible = current != null && visibleSuggestions.isNotEmpty(),
++        onOpen = { preview ->
++            ExternalMovieSuggestions.dismiss()
++            onOpen(preview)
++        },
++        onDismiss = ExternalMovieSuggestions::dismiss,
++        modifier = modifier
++            .windowInsetsPadding(WindowInsets.safeDrawing)
++            .padding(end = 16.dp, bottom = 88.dp),
++    )
++}
