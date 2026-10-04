@@ -1,5 +1,83 @@
 [
  {
+  "title": "Kids",
+  "tags": [
+   "kids"
+  ],
+  "folders": [
+   {
+    "title": "Family Movies",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.family_movies.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Family — Movie"
+    ]
+   },
+   {
+    "title": "Family Series",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.family_series.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Family — Series"
+    ]
+   },
+   {
+    "title": "Disney Kids",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.disney_kids.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Disney Kids — Movie"
+    ]
+   },
+   {
+    "title": "Animated Series",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.animated_series.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Animated — Series"
+    ]
+   },
+   {
+    "title": "Trending Kids Movies",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.trending_movies.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Trending Kids — Movie"
+    ]
+   },
+   {
+    "title": "Trending Kids Series",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.trending_series.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Trending Kids — Series"
+    ]
+   },
+   {
+    "title": "Top Kids Movies",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.top_movies.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Top Kids — Movie"
+    ]
+   },
+   {
+    "title": "Nickelodeon",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.nickelodeon.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Nickelodeon — Series"
+    ]
+   },
+   {
+    "title": "Nick Jr",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.nick_jr.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — Nick Jr — Series"
+    ]
+   },
+   {
+    "title": "DreamWorks Animated",
+    "image": "https://cdn.xperience-app.com/covers/default/kids_family.dreamworks.webp?v=7",
+    "catalogs": [
+     "kids:Xperience — DreamWorks — Movie"
+    ]
+   }
+  ]
+ },
+ {
   "title": "Genres",
   "folders": [
    {

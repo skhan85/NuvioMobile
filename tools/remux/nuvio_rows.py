@@ -76,15 +76,17 @@ existing = {i["Name"]: i["Id"] for i in call(
     "GET", "/items?IncludeItemTypes=BoxSet&IncludeChildless=true&Recursive=true&Limit=5000")["Items"]}
 
 
-def upsert(name, ctype, smart_filter, promoted, sort_order):
+def upsert(name, ctype, smart_filter, promoted, sort_order, tags=None):
     item_id = existing.get(name)
     if not item_id:
         item_id = call("POST", "/library/virtualfolders",
                        {"Name": name, "CollectionType": ctype, "CollectionKind": "smart",
                         "Promoted": promoted, "SortOrder": sort_order})["ItemId"]
-    call("PATCH", f"/items/{item_id}",
-         {"Name": name, "CollectionType": ctype, "CollectionKind": "smart",
-          "SmartFilter": smart_filter, "Promoted": promoted, "SortOrder": sort_order})
+    patch = {"Name": name, "CollectionType": ctype, "CollectionKind": "smart",
+             "SmartFilter": smart_filter, "Promoted": promoted, "SortOrder": sort_order}
+    if tags:
+        patch["Tags"] = tags   # the Kids user only sees items carrying its allowed tag
+    call("PATCH", f"/items/{item_id}", patch)
     new = name not in existing
     existing[name] = item_id
     return item_id, new
@@ -108,7 +110,8 @@ for ri, row in enumerate(rows):
             skipped.append(f"{row['title']} / {folder['title']}")
             continue
         try:
-            item_id, new = upsert(folder["title"], "mixed", any_of(rules), False, ri * 100 + fi)
+            item_id, new = upsert(folder["title"], "mixed", any_of(rules), False, ri * 100 + fi,
+                                  row.get("tags"))
         except RuntimeError as e:
             print(f"  ! {folder['title']}: {e}")
             continue
@@ -125,7 +128,8 @@ for ri, row in enumerate(rows):
     # 3. The row itself: a promoted group (shows as its own library in Infuse) of those collections.
     if child_ids:
         upsert(row["title"], "collections",
-               any_of([{"field": "collection_id", "op": "in", "ids": child_ids}]), True, 10_000 + ri)
+               any_of([{"field": "collection_id", "op": "in", "ids": child_ids}]), True, 10_000 + ri,
+               row.get("tags"))
         print(f"{row['title']}: {len(child_ids)} collections")
 
 print(f"\nCreated {made}, updated {updated}.")
