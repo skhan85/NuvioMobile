@@ -46,29 +46,48 @@ def fetch(url, timeout=30):
 
 rows = json.loads(fetch(os.environ.get("ROWS_URL", ROWS_URL)))
 
-# 1. Turn on every Xperience catalog the rows need (leave the ones already on alone).
+# 1. Turn on every catalog the rows need (leave the ones already on alone).
+#    "Name — Type"        exact catalog name in Xperience
+#    "kids:Name — Type"   exact catalog name in Xperience Kids
+#    "aio~text"           every Aiometadata catalog whose name or id contains `text`
+#                         (Aiometadata is used for catalogs only, so its slow details lookups stay off)
+SOURCES = (("Xperience", "", False), ("Xperience Kids", "kids:", False), ("Aiometadata", "aio~", True))
 addons = {a["name"]: a for a in call("GET", "/addons")}
-cat_ids = {}   # "Xperience — Netflix — Movie" (or "kids:...") -> catalog collection UUID
-for addon_name, prefix in (("Xperience", ""), ("Xperience Kids", "kids:")):
+cat_ids = {}   # source string as written in nuvio_rows.json -> catalog collection UUIDs
+all_entries = {c for r in rows for f in r["folders"] for c in f["catalogs"]}
+for addon_name, prefix, fuzzy in SOURCES:
+    if prefix:
+        wanted = {c[len(prefix):] for c in all_entries if c.startswith(prefix)}
+    else:
+        wanted = {c for c in all_entries if not c.startswith(("kids:", "aio~"))}
+    if not wanted:
+        continue
     addon = addons.get(addon_name)
     if not addon:
-        sys.exit(f"Addon '{addon_name}' not found - run remux_setup.py first.")
-    wanted = {c[len(prefix):] for r in rows for f in r["folders"] for c in f["catalogs"]
-              if (c.startswith("kids:") if prefix else not c.startswith("kids:"))}
+        print(f"Addon '{addon_name}' not found - skipping {len(wanted)} sources.")
+        continue
+    if fuzzy and (not addon.get("enabled", True) or addon.get("resources") != ["catalog"]):
+        call("POST", f"/addons/{addon['id']}", {"enabled": True, "resources": ["catalog"]})
+        print(f"{addon_name}: switched back on, catalogs only")
     cats = call("GET", f"/addons/{addon['id']}/catalogs")
-    updates, turned_on = [], 0
+    updates, turned_on, found = [], 0, set()
     for c in cats:
         local = c["catalogId"].split(":", 2)[2] if c["catalogId"].startswith("addon:") else c["catalogId"]
-        on = c["enabled"] or c["name"] in wanted
+        hits = ([w for w in wanted if w.lower() in (c["name"] + " " + local).lower()] if fuzzy
+                else [c["name"]] if c["name"] in wanted else [])
+        on = c["enabled"] or bool(hits)
         turned_on += on and not c["enabled"]
         updates.append({"catalogId": local, "enabled": on,
                         "maxItems": c.get("maxItems") or NEW_CATALOG_MAX, "tags": c.get("tags") or []})
-        if c["name"] in wanted and c.get("collectionId"):
-            cat_ids.setdefault(prefix + c["name"], []).append(c["collectionId"])
+        for w in hits:
+            found.add(w)
+            if c.get("collectionId"):
+                cat_ids.setdefault(prefix + w, []).append(c["collectionId"])
+            if fuzzy:
+                print(f"  {addon_name} '{w}' -> {c['name']}")
     call("POST", f"/addons/{addon['id']}/catalogs", updates)
-    missing = wanted - {c["name"] for c in cats}
     print(f"{addon_name}: {turned_on} more catalogs switched on")
-    for m in sorted(missing):
+    for m in sorted(wanted - found):
         print(f"  not found in {addon_name}: {m}")
 
 # 2. One smart collection per Nuvio folder, with its Nuvio cover art.

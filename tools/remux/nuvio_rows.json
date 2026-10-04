@@ -674,7 +674,9 @@
    {
     "title": "Pakistani Cinema",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/international/pakistani-cinema/pakistani-cinema-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~pakistani"
+    ]
    }
   ]
  },
@@ -809,7 +811,9 @@
    {
     "title": "Transformers",
     "image": "https://pub-c3220058d0b8427593faaf225ea539fd.r2.dev/5D146C3D-25F5-4AB6-85E6-478D4B5B88DE.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~transformers"
+    ]
    }
   ]
  }
