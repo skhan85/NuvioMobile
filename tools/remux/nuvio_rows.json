@@ -364,12 +364,16 @@
    {
     "title": "Starz",
     "image": "https://imkaptain.github.io/nuvio-assets/assets/images/9e92f9b6.webp",
-    "catalogs": []
+    "catalogs": [
+     "aio~starz"
+    ]
    },
    {
     "title": "AMC+",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/amcplus/amcplus-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~amc+"
+    ]
    },
    {
     "title": "Crave",
@@ -382,12 +386,16 @@
    {
     "title": "Criterion",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/criterion-channel/criterion-channel-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~criterion"
+    ]
    },
    {
     "title": "Curiosity Stream",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/curiosity-stream/curiosity-stream-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~curiosity"
+    ]
    },
    {
     "title": "Discovery+",
@@ -400,12 +408,16 @@
    {
     "title": "Hayu",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/hayu/hayu-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~hayu"
+    ]
    },
    {
     "title": "Magellan",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/magellan/magellan-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~magellan"
+    ]
    },
    {
     "title": "MGM+",
@@ -424,7 +436,9 @@
    {
     "title": "Pluto TV",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/pluto-tv/pluto-tv-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~pluto"
+    ]
    },
    {
     "title": "Shudder",
@@ -437,7 +451,9 @@
    {
     "title": "Tubi TV",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/streaming-services/tubi/tubi-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~tubi"
+    ]
    }
   ]
  },
@@ -662,17 +678,23 @@
    {
     "title": "Academy Awards",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/academy-awards/academy-awards-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~oscar"
+    ]
    },
    {
     "title": "Festival de Cannes",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/festival-de-cannes/festival-de-cannes-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~cannes"
+    ]
    },
    {
     "title": "Golden Globes",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/awards/golden-globes/golden-globes-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~golden globe"
+    ]
    }
   ]
  },
@@ -721,7 +743,9 @@
    {
     "title": "Sports & Athletic Stories",
     "image": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/documentaries/sports-and-athletic-stories/v2/sports-and-athletic-stories-cover.png",
-    "catalogs": []
+    "catalogs": [
+     "aio~sports documentaries"
+    ]
    },
    {
     "title": "Music & Concert Documentaries",
