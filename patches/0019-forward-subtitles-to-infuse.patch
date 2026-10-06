@@ -1,0 +1,73 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+index 49555442f..9435176e9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+@@ -128,7 +128,7 @@ internal fun buildInfusePlaybackUrl(request: ExternalPlayerPlaybackRequest, sess
+     append("&position=${request.resumePositionMs.coerceAtLeast(0L) / 1000L}")
+     append("&filename=")
+     append(request.buildPlayerTitle(includeEpisodeTitle = true).encodeURLParameter())
+-    request.subtitles?.forEach { subtitle ->
++    infuseSubtitles(request.subtitles).forEach { subtitle ->
+         append("&sub=")
+         append(subtitle.url.encodeURLParameter())
+     }
+@@ -137,3 +137,14 @@ internal fun buildInfusePlaybackUrl(request: ExternalPlayerPlaybackRequest, sess
+     append("&x-error=")
+     append("nuvio://external-player/infuse/$sessionId/error".encodeURLParameter())
+ }
++
++/** Fork: most subtitle addons return a dozen files per language; Infuse only needs a few to pick from. */
++internal const val INFUSE_MAX_SUBTITLES_PER_LANGUAGE = 3
++
++/** Keeps the first few distinct subtitles of each language, in the order the addon ranked them. */
++internal fun infuseSubtitles(subtitles: List<SubtitleInput>?): List<SubtitleInput> =
++    subtitles.orEmpty()
++        .distinctBy { it.url }
++        .groupBy { it.lang.lowercase() }
++        .values
++        .flatMap { it.take(INFUSE_MAX_SUBTITLES_PER_LANGUAGE) }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+index 8d387b9f2..f92c90be0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
+@@ -422,7 +422,8 @@ private fun PlaybackSettingsSection(
+                         onClick = { showExternalPlayerAppDialog = true },
+                     )
+                 }
+-                if (!isIos && autoPlayPlayerSettings.externalPlayerEnabled) {
++                // Fork: Infuse and VLC take subtitle URLs too, so iOS gets the forwarding toggle.
++                if (autoPlayPlayerSettings.externalPlayerEnabled) {
+                     SettingsGroupDivider(isTablet = isTablet)
+                     SettingsSwitchRow(
+                         title = stringResource(Res.string.settings_playback_external_player_forward_subtitles),
+@@ -431,6 +432,8 @@ private fun PlaybackSettingsSection(
+                         isTablet = isTablet,
+                         onCheckedChange = PlayerSettingsRepository::setExternalPlayerForwardSubtitles,
+                     )
++                }
++                if (!isIos && autoPlayPlayerSettings.externalPlayerEnabled) {
+                     SettingsGroupDivider(isTablet = isTablet)
+                     SettingsSwitchRow(
+                         title = stringResource(Res.string.settings_playback_external_player_send_skip_segments),
+diff --git a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
+index af9b18042..56bded815 100644
+--- a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
++++ b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
+@@ -41,6 +41,17 @@ class InfusePlaybackTest {
+         assertEquals("0", Url(buildInfusePlaybackUrl(request.copy(resumePositionMs = -1), "session-1")).parameters["position"])
+     }
+ 
++    @Test
++    fun launchForwardsAFewSubtitlesPerLanguage() {
++        val english = (1..6).map { SubtitleInput("https://subs.example/en/$it", "English $it", "en") }
++        val arabic = listOf(SubtitleInput("https://subs.example/ar/1", "Arabic", "ar"))
++        val url = Url(buildInfusePlaybackUrl(request.copy(subtitles = english + english.first() + arabic), "s"))
++        assertEquals(
++            english.take(INFUSE_MAX_SUBTITLES_PER_LANGUAGE).map { it.url } + arabic.map { it.url },
++            url.parameters.getAll("sub"),
++        )
++    }
++
+     @Test
+     fun returnedPositionRetainsVideoAndProfileAfterAppRestart() {
+         val launch = Url(callbacks().prepare(request))
