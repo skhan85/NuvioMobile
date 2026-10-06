@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
-index 15406fc73..fa7440454 100644
+index 326487baf..9d2c52bc7 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
 @@ -30,6 +30,7 @@ actual object PlayerSettingsStorage {
@@ -10,7 +10,7 @@ index 15406fc73..fa7440454 100644
      private const val movieRecommendationsEnabledKey = "movie_recommendations_enabled"
      private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
      private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
-@@ -337,6 +338,23 @@ actual object PlayerSettingsStorage {
+@@ -352,6 +353,23 @@ actual object PlayerSettingsStorage {
              ?.apply()
      }
  
@@ -34,7 +34,7 @@ index 15406fc73..fa7440454 100644
      actual fun loadMovieRecommendationsEnabled(): Boolean? =
          preferences?.let { sharedPreferences ->
              val key = ProfileScopedKey.of(movieRecommendationsEnabledKey)
-@@ -1282,6 +1300,7 @@ actual object PlayerSettingsStorage {
+@@ -1383,6 +1401,7 @@ actual object PlayerSettingsStorage {
          loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
          loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
          loadTouchGesturesEnabled()?.let { put(touchGesturesEnabledKey, encodeSyncBoolean(it)) }
@@ -42,7 +42,7 @@ index 15406fc73..fa7440454 100644
          loadAutoShowSubtitlesOnRewindEnabled()?.let { put(autoShowSubtitlesOnRewindEnabledKey, encodeSyncBoolean(it)) }
          loadAutoShowSubtitlesOnMuteEnabled()?.let { put(autoShowSubtitlesOnMuteEnabledKey, encodeSyncBoolean(it)) }
          loadExternalPlayerEnabled()?.let { put(externalPlayerEnabledKey, encodeSyncBoolean(it)) }
-@@ -1366,6 +1385,7 @@ actual object PlayerSettingsStorage {
+@@ -1467,6 +1486,7 @@ actual object PlayerSettingsStorage {
          payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
          payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
          payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
@@ -51,7 +51,7 @@ index 15406fc73..fa7440454 100644
          payload.decodeSyncBoolean(autoShowSubtitlesOnRewindEnabledKey)?.let(::saveAutoShowSubtitlesOnRewindEnabled)
          payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 51dbb6067..a99a8b171 100644
+index d8610c52a..4f63a0f07 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
 @@ -1098,6 +1098,8 @@
@@ -64,7 +64,7 @@ index 51dbb6067..a99a8b171 100644
      <string name="settings_playback_last_link_cache_duration">Last Link Cache Duration</string>
      <string name="settings_playback_map_dv7_to_hevc">DV7 - HEVC Fallback</string>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index bf25e05e7..63b2db280 100644
+index f83101abd..d86acbe88 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 @@ -24,6 +24,7 @@ internal data class PlayerSurfaceGestureCallbacks(
@@ -75,7 +75,7 @@ index bf25e05e7..63b2db280 100644
      val playerControlsLocked: State<Boolean>,
      val currentPositionMs: State<Long>,
      val currentDurationMs: State<Long>,
-@@ -321,6 +322,7 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
+@@ -322,6 +323,7 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
          revealLockedOverlay = rememberUpdatedState(::revealLockedOverlay),
          isHoldToSpeedGestureActive = rememberUpdatedState(isHoldToSpeedGestureActive),
          touchGesturesEnabled = rememberUpdatedState(playerSettingsUiState.touchGesturesEnabled),
@@ -84,10 +84,10 @@ index bf25e05e7..63b2db280 100644
          currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
          currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index d1ca3e78a..7a1ec3550 100644
+index 04e0574df..5a97dd80a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -146,6 +146,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -147,6 +147,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                  sideGestureSystemEdgeExclusionPx = sideGestureSystemEdgeExclusionPx,
                  playerControlsLockedState = gestureCallbacks.playerControlsLocked,
                  touchGesturesEnabledState = gestureCallbacks.touchGesturesEnabled,
@@ -109,7 +109,7 @@ index 20970103d..79dc4d933 100644
  internal const val P2pInitialByteProgressMidpoint = 5_242_880L
  internal const val P2pInitialBufferTargetMs = 10_000L
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
-index d99a35ea7..ca8ac483d 100644
+index 2dca54b47..09c42e632 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
 @@ -42,6 +42,7 @@ data class PlayerSettingsUiState(
@@ -120,7 +120,7 @@ index d99a35ea7..ca8ac483d 100644
      val movieRecommendationsEnabled: Boolean = true,
      val autoShowSubtitlesOnRewindEnabled: Boolean = true,
      val autoShowSubtitlesOnMuteEnabled: Boolean = true,
-@@ -116,6 +117,7 @@ object PlayerSettingsRepository {
+@@ -127,6 +128,7 @@ object PlayerSettingsRepository {
      private var holdToSpeedEnabled = true
      private var holdToSpeedValue = 2f
      private var touchGesturesEnabled = true
@@ -128,7 +128,7 @@ index d99a35ea7..ca8ac483d 100644
      private var movieRecommendationsEnabled = true
      private var autoShowSubtitlesOnRewindEnabled = true
      private var autoShowSubtitlesOnMuteEnabled = true
-@@ -195,6 +197,7 @@ object PlayerSettingsRepository {
+@@ -217,6 +219,7 @@ object PlayerSettingsRepository {
          holdToSpeedEnabled = true
          holdToSpeedValue = 2f
          touchGesturesEnabled = true
@@ -136,7 +136,7 @@ index d99a35ea7..ca8ac483d 100644
          movieRecommendationsEnabled = true
          autoShowSubtitlesOnRewindEnabled = true
          autoShowSubtitlesOnMuteEnabled = true
-@@ -269,6 +272,7 @@ object PlayerSettingsRepository {
+@@ -303,6 +306,7 @@ object PlayerSettingsRepository {
          holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
          holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
          touchGesturesEnabled = PlayerSettingsStorage.loadTouchGesturesEnabled() ?: true
@@ -144,7 +144,7 @@ index d99a35ea7..ca8ac483d 100644
          movieRecommendationsEnabled = PlayerSettingsStorage.loadMovieRecommendationsEnabled() ?: true
          autoShowSubtitlesOnRewindEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnRewindEnabled() ?: true
          autoShowSubtitlesOnMuteEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnMuteEnabled() ?: true
-@@ -475,6 +479,14 @@ object PlayerSettingsRepository {
+@@ -530,6 +534,14 @@ object PlayerSettingsRepository {
          PlayerSettingsStorage.saveTouchGesturesEnabled(enabled)
      }
  
@@ -159,7 +159,7 @@ index d99a35ea7..ca8ac483d 100644
      fun setMovieRecommendationsEnabled(enabled: Boolean) {
          ensureLoaded()
          if (movieRecommendationsEnabled == enabled) return
-@@ -1022,6 +1034,7 @@ object PlayerSettingsRepository {
+@@ -1200,6 +1212,7 @@ object PlayerSettingsRepository {
              holdToSpeedEnabled = holdToSpeedEnabled,
              holdToSpeedValue = holdToSpeedValue,
              touchGesturesEnabled = touchGesturesEnabled,
@@ -168,7 +168,7 @@ index d99a35ea7..ca8ac483d 100644
              autoShowSubtitlesOnRewindEnabled = autoShowSubtitlesOnRewindEnabled,
              autoShowSubtitlesOnMuteEnabled = autoShowSubtitlesOnMuteEnabled,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
-index 845d82ef2..93384661e 100644
+index 76b233e29..5f446510e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
 @@ -25,6 +25,8 @@ internal expect object PlayerSettingsStorage {
@@ -209,10 +209,10 @@ index e1ff67227..2247e08da 100644
                          !holdToSpeedActive &&
                              abs(totalDy) > verticalGestureActivationSlop &&
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 3ed1dac45..8d387b9f2 100644
+index 748da4ccd..b4aa594b8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -449,6 +449,16 @@ private fun PlaybackSettingsSection(
+@@ -490,6 +490,16 @@ private fun PlaybackSettingsSection(
                      isTablet = isTablet,
                      onCheckedChange = PlayerSettingsRepository::setTouchGesturesEnabled,
                  )
@@ -230,7 +230,7 @@ index 3ed1dac45..8d387b9f2 100644
                  SettingsSwitchRow(
                      title = stringResource(Res.string.settings_playback_hold_to_speed),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
-index 1a6ccf354..ff172638e 100644
+index 80884c0e3..bb8741921 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
 @@ -588,6 +588,11 @@ internal fun settingsSearchEntries(
@@ -246,7 +246,7 @@ index 1a6ccf354..ff172638e 100644
                  "movie-recommendations",
                  stringResource(Res.string.settings_playback_movie_recommendations),
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
-index 84c697d4e..192ed3a39 100644
+index 14c055e94..3e312d16b 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
 @@ -28,6 +28,7 @@ actual object PlayerSettingsStorage {
@@ -257,7 +257,7 @@ index 84c697d4e..192ed3a39 100644
      private const val movieRecommendationsEnabledKey = "movie_recommendations_enabled"
      private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
      private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
-@@ -320,6 +321,12 @@ actual object PlayerSettingsStorage {
+@@ -331,6 +332,12 @@ actual object PlayerSettingsStorage {
          saveBoolean(touchGesturesEnabledKey, enabled)
      }
  
@@ -270,7 +270,7 @@ index 84c697d4e..192ed3a39 100644
  
  
      actual fun loadMovieRecommendationsEnabled(): Boolean? = loadBoolean(movieRecommendationsEnabledKey)
-@@ -1045,6 +1052,7 @@ actual object PlayerSettingsStorage {
+@@ -1111,6 +1118,7 @@ actual object PlayerSettingsStorage {
          loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
          loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
          loadTouchGesturesEnabled()?.let { put(touchGesturesEnabledKey, encodeSyncBoolean(it)) }
@@ -278,7 +278,7 @@ index 84c697d4e..192ed3a39 100644
          loadAutoShowSubtitlesOnRewindEnabled()?.let { put(autoShowSubtitlesOnRewindEnabledKey, encodeSyncBoolean(it)) }
          loadAutoShowSubtitlesOnMuteEnabled()?.let { put(autoShowSubtitlesOnMuteEnabledKey, encodeSyncBoolean(it)) }
          loadExternalPlayerEnabled()?.let { put(externalPlayerEnabledKey, encodeSyncBoolean(it)) }
-@@ -1128,6 +1136,7 @@ actual object PlayerSettingsStorage {
+@@ -1194,6 +1202,7 @@ actual object PlayerSettingsStorage {
          payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
          payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
          payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)

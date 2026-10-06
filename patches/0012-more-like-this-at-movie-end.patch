@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
-index 6baf756d..15406fc7 100644
+index 26cc7c0c6..326487baf 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
 @@ -30,6 +30,7 @@ actual object PlayerSettingsStorage {
@@ -10,7 +10,7 @@ index 6baf756d..15406fc7 100644
      private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
      private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
      private const val externalPlayerEnabledKey = "external_player_enabled"
-@@ -336,6 +337,23 @@ actual object PlayerSettingsStorage {
+@@ -351,6 +352,23 @@ actual object PlayerSettingsStorage {
              ?.apply()
      }
  
@@ -34,7 +34,7 @@ index 6baf756d..15406fc7 100644
      actual fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean? =
          preferences?.let { sharedPreferences ->
              val key = ProfileScopedKey.of(autoShowSubtitlesOnRewindEnabledKey)
-@@ -1348,6 +1366,7 @@ actual object PlayerSettingsStorage {
+@@ -1449,6 +1467,7 @@ actual object PlayerSettingsStorage {
          payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
          payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
          payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
@@ -43,10 +43,10 @@ index 6baf756d..15406fc7 100644
          payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
          payload.decodeSyncBoolean(externalPlayerEnabledKey)?.let(::saveExternalPlayerEnabled)
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 613e2217..f3a45e23 100644
+index a865cf362..34d57ffc1 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2424,4 +2424,6 @@
+@@ -2471,4 +2471,6 @@
      <string name="settings_playback_auto_show_subtitles_on_rewind_description">When subtitles are off, automatically turn them on while you rewind, then hide them again once playback catches back up to where you rewound from.</string>
      <string name="settings_playback_auto_show_subtitles_on_mute">Auto-Show Subtitles on Mute</string>
      <string name="settings_playback_auto_show_subtitles_on_mute_description">When subtitles are off, automatically turn them on while muted or with the volume at zero, then hide them again once you unmute.</string>
@@ -54,7 +54,7 @@ index 613e2217..f3a45e23 100644
 +    <string name="settings_playback_movie_recommendations_description">Suggest titles from More Like This when a movie reaches its end credits.</string>
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt
-index e3f7e784..6caa445b 100644
+index e3f7e7844..6caa445be 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/PlayerDestination.kt
 @@ -13,6 +13,7 @@ import com.nuvio.app.features.player.PlayerLaunch
@@ -83,7 +83,7 @@ index e3f7e784..6caa445b 100644
      )
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
-index 36f5ef69..4b74ccd9 100644
+index 36f5ef695..4b74ccd98 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerPlaybackOverlays.kt
 @@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
@@ -126,7 +126,7 @@ index 36f5ef69..4b74ccd9 100644
          ErrorModal(
              message = errorMessage,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt
-index 3342d628..6f0d4f98 100644
+index 3342d628e..6f0d4f984 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreen.kt
 @@ -21,6 +21,7 @@ fun PlayerScreen(
@@ -146,7 +146,7 @@ index 3342d628..6f0d4f98 100644
              logo = logo,
              poster = poster,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt
-index 40f08c6c..bb8cd66e 100644
+index 40f08c6c0..bb8cd66eb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenArgs.kt
 @@ -18,6 +18,7 @@ internal data class PlayerScreenArgs(
@@ -158,7 +158,7 @@ index 40f08c6c..bb8cd66e 100644
      val logo: String?,
      val poster: String?,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-index 9d83a76b..465f7705 100644
+index 9d83a76b5..465f77050 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 @@ -683,6 +683,30 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
@@ -193,7 +193,7 @@ index 9d83a76b..465f7705 100644
  
  private fun PlayerScreenRuntime.buildNowPlayingInfo(): PlayerNowPlayingInfo {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index f7c68656..0cf85ad3 100644
+index 05a5c6bbf..e60d24275 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 @@ -179,6 +179,9 @@ internal class PlayerScreenRuntime(
@@ -207,7 +207,7 @@ index f7c68656..0cf85ad3 100644
      var nextEpisodeAutoPlaySourceName by mutableStateOf<String?>(null)
      var nextEpisodeAutoPlayCountdown by mutableStateOf<Int?>(null)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 9dd06871..d607f76b 100644
+index f3b3a1083..30ac6d387 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 @@ -1,5 +1,7 @@
@@ -226,7 +226,7 @@ index 9dd06871..d607f76b 100644
  import com.nuvio.app.features.p2p.P2pStreamingState
  import com.nuvio.app.features.p2p.formatP2pMegabytes
  import com.nuvio.app.features.p2p.formatP2pSpeed
-@@ -469,6 +472,24 @@ private fun BoxScope.RenderPlaybackOverlays(
+@@ -482,6 +485,24 @@ private fun BoxScope.RenderPlaybackOverlays(
              nextEpisodeCardDismissed = true
              showNextEpisodeCard = false
          },
@@ -251,8 +251,8 @@ index 9dd06871..d607f76b 100644
          errorMessage = errorMessage,
              onDismissError = {
                  flushWatchProgress()
-@@ -649,3 +670,17 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
-         },
+@@ -675,3 +696,17 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+         onDismiss = { showStreamInfo = false },
      )
  }
 +
@@ -270,7 +270,7 @@ index 9dd06871..d607f76b 100644
 +    }
 +
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
-index eb4818b2..d99a35ea 100644
+index 7982499c4..2dca54b47 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
 @@ -42,6 +42,7 @@ data class PlayerSettingsUiState(
@@ -281,7 +281,7 @@ index eb4818b2..d99a35ea 100644
      val autoShowSubtitlesOnRewindEnabled: Boolean = true,
      val autoShowSubtitlesOnMuteEnabled: Boolean = true,
      val externalPlayerEnabled: Boolean = false,
-@@ -115,6 +116,7 @@ object PlayerSettingsRepository {
+@@ -126,6 +127,7 @@ object PlayerSettingsRepository {
      private var holdToSpeedEnabled = true
      private var holdToSpeedValue = 2f
      private var touchGesturesEnabled = true
@@ -289,7 +289,7 @@ index eb4818b2..d99a35ea 100644
      private var autoShowSubtitlesOnRewindEnabled = true
      private var autoShowSubtitlesOnMuteEnabled = true
      private var externalPlayerEnabled = false
-@@ -193,6 +195,7 @@ object PlayerSettingsRepository {
+@@ -215,6 +217,7 @@ object PlayerSettingsRepository {
          holdToSpeedEnabled = true
          holdToSpeedValue = 2f
          touchGesturesEnabled = true
@@ -297,7 +297,7 @@ index eb4818b2..d99a35ea 100644
          autoShowSubtitlesOnRewindEnabled = true
          autoShowSubtitlesOnMuteEnabled = true
          externalPlayerEnabled = false
-@@ -266,6 +269,7 @@ object PlayerSettingsRepository {
+@@ -300,6 +303,7 @@ object PlayerSettingsRepository {
          holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
          holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
          touchGesturesEnabled = PlayerSettingsStorage.loadTouchGesturesEnabled() ?: true
@@ -305,7 +305,7 @@ index eb4818b2..d99a35ea 100644
          autoShowSubtitlesOnRewindEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnRewindEnabled() ?: true
          autoShowSubtitlesOnMuteEnabled = PlayerSettingsStorage.loadAutoShowSubtitlesOnMuteEnabled() ?: true
          externalPlayerEnabled = PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
-@@ -471,6 +475,14 @@ object PlayerSettingsRepository {
+@@ -526,6 +530,14 @@ object PlayerSettingsRepository {
          PlayerSettingsStorage.saveTouchGesturesEnabled(enabled)
      }
  
@@ -320,7 +320,7 @@ index eb4818b2..d99a35ea 100644
      fun setAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
          ensureLoaded()
          if (autoShowSubtitlesOnRewindEnabled == enabled) return
-@@ -1010,6 +1022,7 @@ object PlayerSettingsRepository {
+@@ -1188,6 +1200,7 @@ object PlayerSettingsRepository {
              holdToSpeedEnabled = holdToSpeedEnabled,
              holdToSpeedValue = holdToSpeedValue,
              touchGesturesEnabled = touchGesturesEnabled,
@@ -329,7 +329,7 @@ index eb4818b2..d99a35ea 100644
              autoShowSubtitlesOnMuteEnabled = autoShowSubtitlesOnMuteEnabled,
              externalPlayerEnabled = externalPlayerEnabled,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
-index 1d4ed836..845d82ef 100644
+index 7b9d45bc1..76b233e29 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
 @@ -25,6 +25,8 @@ internal expect object PlayerSettingsStorage {
@@ -343,7 +343,7 @@ index 1d4ed836..845d82ef 100644
      fun loadAutoShowSubtitlesOnMuteEnabled(): Boolean?
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/MovieRecommendationCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/MovieRecommendationCard.kt
 new file mode 100644
-index 00000000..bd79b56a
+index 000000000..bd79b56a0
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/MovieRecommendationCard.kt
 @@ -0,0 +1,142 @@
@@ -490,7 +490,7 @@ index 00000000..bd79b56a
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt
-index 628b06f9..7d10d525 100644
+index 628b06f94..7d10d5252 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/skip/PlayerNextEpisodeRules.kt
 @@ -101,6 +101,28 @@ object PlayerNextEpisodeRules {
@@ -523,10 +523,10 @@ index 628b06f9..7d10d525 100644
          val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return true
          val dateStr = when {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 24806ded..3ed1dac4 100644
+index bf5083348..748da4ccd 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -389,6 +389,14 @@ private fun PlaybackSettingsSection(
+@@ -430,6 +430,14 @@ private fun PlaybackSettingsSection(
                      onCheckedChange = PlayerSettingsRepository::setShowParentalGuide,
                  )
                  SettingsGroupDivider(isTablet = isTablet)
@@ -542,7 +542,7 @@ index 24806ded..3ed1dac4 100644
                  SettingsNavigationRow(
                      title = stringResource(Res.string.settings_playback_player_preference),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
-index 61e622f2..1a6ccf35 100644
+index 24835ac9b..80884c0e3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
 @@ -588,6 +588,11 @@ internal fun settingsSearchEntries(
@@ -558,7 +558,7 @@ index 61e622f2..1a6ccf35 100644
          ),
      )
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
-index 361febc4..84c697d4 100644
+index be854a276..14c055e94 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
 @@ -28,6 +28,7 @@ actual object PlayerSettingsStorage {
@@ -569,7 +569,7 @@ index 361febc4..84c697d4 100644
      private const val autoShowSubtitlesOnRewindEnabledKey = "auto_show_subtitles_on_rewind_enabled"
      private const val autoShowSubtitlesOnMuteEnabledKey = "auto_show_subtitles_on_mute_enabled"
      private const val externalPlayerEnabledKey = "external_player_enabled"
-@@ -319,6 +320,14 @@ actual object PlayerSettingsStorage {
+@@ -330,6 +331,14 @@ actual object PlayerSettingsStorage {
          saveBoolean(touchGesturesEnabledKey, enabled)
      }
  
@@ -584,7 +584,7 @@ index 361febc4..84c697d4 100644
      actual fun loadAutoShowSubtitlesOnRewindEnabled(): Boolean? = loadBoolean(autoShowSubtitlesOnRewindEnabledKey)
  
      actual fun saveAutoShowSubtitlesOnRewindEnabled(enabled: Boolean) {
-@@ -1119,6 +1128,7 @@ actual object PlayerSettingsStorage {
+@@ -1185,6 +1194,7 @@ actual object PlayerSettingsStorage {
          payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
          payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
          payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)

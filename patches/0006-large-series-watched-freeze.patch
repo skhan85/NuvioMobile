@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
-index 1bd1164b..5796cda7 100644
+index 1bd1164bf..5796cda7e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
 @@ -77,13 +77,21 @@ fun MetaDetails.releasedEpisodesForSeason(
@@ -32,7 +32,7 @@ index 1bd1164b..5796cda7 100644
  fun MetaDetails.episodePlaybackId(video: MetaVideo): String =
      buildPlaybackVideoId(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
-index d3d46372..7c48e77e 100644
+index d3d463727..7c48e77ee 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
 @@ -140,16 +140,15 @@ object WatchingActions {
@@ -58,10 +58,10 @@ index d3d46372..7c48e77e 100644
          )
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index 753f1e0a..3419793d 100644
+index b88346f3b..a25205114 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1127,8 +1127,9 @@ object WatchProgressRepository {
+@@ -1122,8 +1122,9 @@ object WatchProgressRepository {
          if (videoIds.isEmpty()) return
  
          activeProgressProvider()?.let { provider ->

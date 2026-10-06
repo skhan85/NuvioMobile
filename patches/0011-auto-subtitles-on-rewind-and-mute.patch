@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
-index 974be935..6baf756d 100644
+index 4b80b89be..26cc7c0c6 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.android.kt
 @@ -30,6 +30,8 @@ actual object PlayerSettingsStorage {
@@ -11,7 +11,7 @@ index 974be935..6baf756d 100644
      private const val externalPlayerEnabledKey = "external_player_enabled"
      private const val externalPlayerForwardSubtitlesKey = "external_player_forward_subtitles"
      private const val externalPlayerSendSkipSegmentsKey = "external_player_send_skip_segments"
-@@ -334,6 +336,40 @@ actual object PlayerSettingsStorage {
+@@ -349,6 +351,40 @@ actual object PlayerSettingsStorage {
              ?.apply()
      }
  
@@ -52,7 +52,7 @@ index 974be935..6baf756d 100644
      actual fun loadExternalPlayerEnabled(): Boolean? =
          preferences?.let { sharedPreferences ->
              val key = ProfileScopedKey.of(externalPlayerEnabledKey)
-@@ -1228,6 +1264,8 @@ actual object PlayerSettingsStorage {
+@@ -1329,6 +1365,8 @@ actual object PlayerSettingsStorage {
          loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
          loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
          loadTouchGesturesEnabled()?.let { put(touchGesturesEnabledKey, encodeSyncBoolean(it)) }
@@ -61,7 +61,7 @@ index 974be935..6baf756d 100644
          loadExternalPlayerEnabled()?.let { put(externalPlayerEnabledKey, encodeSyncBoolean(it)) }
          loadExternalPlayerForwardSubtitles()?.let { put(externalPlayerForwardSubtitlesKey, encodeSyncBoolean(it)) }
          loadExternalPlayerSendSkipSegments()?.let { put(externalPlayerSendSkipSegmentsKey, encodeSyncBoolean(it)) }
-@@ -1310,6 +1348,8 @@ actual object PlayerSettingsStorage {
+@@ -1411,6 +1449,8 @@ actual object PlayerSettingsStorage {
          payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
          payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
          payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)
@@ -71,10 +71,10 @@ index 974be935..6baf756d 100644
          payload.decodeSyncBoolean(externalPlayerForwardSubtitlesKey)?.let(::saveExternalPlayerForwardSubtitles)
          payload.decodeSyncBoolean(externalPlayerSendSkipSegmentsKey)?.let(::saveExternalPlayerSendSkipSegments)
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 375ff28e..613e2217 100644
+index fb784d256..a865cf362 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2420,4 +2420,8 @@
+@@ -2467,4 +2467,8 @@
      <string name="compose_player_sync_by_ear_offset">Now: %1$s</string>
      <string name="compose_player_sync_by_ear_waiting_saw">Heard captured. Tap Saw when its subtitle shows.</string>
      <string name="compose_player_sync_by_ear_waiting_heard">Saw captured. Tap Heard when you hear the line.</string>
@@ -85,7 +85,7 @@ index 375ff28e..613e2217 100644
  </resources>
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeAutoSubtitles.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeAutoSubtitles.kt
 new file mode 100644
-index 00000000..dd8656ae
+index 000000000..dd8656ae9
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeAutoSubtitles.kt
 @@ -0,0 +1,115 @@
@@ -205,7 +205,7 @@ index 00000000..dd8656ae
 +    isAutoSubtitleMuteActive = false
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
-index 5947cb8b..9d83a76b 100644
+index 5947cb8b9..9d83a76b5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeEffects.kt
 @@ -105,6 +105,8 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
@@ -218,10 +218,10 @@ index 5947cb8b..9d83a76b 100644
          selectedAddonSubtitleId = null
          useCustomSubtitles = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-index e0a89996..0489a703 100644
+index d54bb1eed..e4dd9aaf5 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeGestureActions.kt
-@@ -135,6 +135,7 @@ internal fun PlayerScreenRuntime.showBrightnessFeedback(level: Float) {
+@@ -136,6 +136,7 @@ internal fun PlayerScreenRuntime.showBrightnessFeedback(level: Float) {
  }
  
  internal fun PlayerScreenRuntime.showVolumeFeedback(level: PlayerAudioLevel) {
@@ -229,7 +229,7 @@ index e0a89996..0489a703 100644
      val percentage = (level.fraction.coerceIn(0f, 1f) * 100f).roundToInt()
      showGestureFeedback(
          GestureFeedbackState(
-@@ -166,6 +167,7 @@ internal fun PlayerScreenRuntime.togglePlayback() {
+@@ -167,6 +168,7 @@ internal fun PlayerScreenRuntime.togglePlayback() {
  }
  
  internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
@@ -237,7 +237,7 @@ index e0a89996..0489a703 100644
      val fromMs = playbackSnapshot.positionMs
      val targetMs = (fromMs + offsetMs).coerceAtLeast(0L)
          .let { if (playbackSnapshot.durationMs > 0L) it.coerceAtMost(playbackSnapshot.durationMs) else it }
-@@ -175,7 +177,10 @@ internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
+@@ -176,7 +178,10 @@ internal fun PlayerScreenRuntime.seekBy(offsetMs: Long) {
      controlsVisible = true
      when {
          offsetMs > 0L -> showSeekFeedback(PlayerSeekDirection.Forward, offsetMs)
@@ -249,7 +249,7 @@ index e0a89996..0489a703 100644
      }
  }
  
-@@ -207,6 +212,9 @@ internal fun PlayerScreenRuntime.handleDoubleTapSeek(direction: PlayerSeekDirect
+@@ -208,6 +213,9 @@ internal fun PlayerScreenRuntime.handleDoubleTapSeek(direction: PlayerSeekDirect
      playerController?.seekTo(targetPositionMs)
      scheduleProgressSyncAfterSeek()
      showSeekFeedback(direction, nextState.amountMs)
@@ -259,7 +259,7 @@ index e0a89996..0489a703 100644
  
      accumulatedSeekResetJob?.cancel()
      accumulatedSeekResetJob = scope.launch {
-@@ -316,9 +324,13 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
+@@ -317,9 +325,13 @@ internal fun PlayerScreenRuntime.rememberSurfaceGestureCallbacks(): PlayerSurfac
          currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
          currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
          commitHorizontalSeek = rememberUpdatedState { targetPositionMs: Long ->
@@ -274,10 +274,10 @@ index e0a89996..0489a703 100644
      )
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt
-index ca541b82..792beee8 100644
+index 401acb652..05b8e457f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimePlaybackActions.kt
-@@ -137,6 +137,8 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
+@@ -140,6 +140,8 @@ internal fun PlayerScreenRuntime.resetIdentityStateIfNeeded() {
          isUserExplicitAudioSelection = false
          isUserExplicitSubtitleSelection = false
          hasScannedTextTracksOnce = false
@@ -287,10 +287,10 @@ index ca541b82..792beee8 100644
  
      val videoIdentity = "$identity:$activeVideoId:$activeSeasonNumber:$activeEpisodeNumber"
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index 215bf30a..f7c68656 100644
+index c8e577f7e..05a5c6bbf 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-@@ -212,6 +212,11 @@ internal class PlayerScreenRuntime(
+@@ -215,6 +215,11 @@ internal class PlayerScreenRuntime(
      var showSubtitleSyncByEar by mutableStateOf(false)
      var subtitleSyncHeardPositionMs by mutableStateOf<Long?>(null)
      var subtitleSyncSawPositionMs by mutableStateOf<Long?>(null)
@@ -303,10 +303,10 @@ index 215bf30a..f7c68656 100644
      var lastSyncedSettingsResizeMode: PlayerResizeMode? = null
      var lastResetPlaybackIdentity: PlaybackKey? = null
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index a7ddb42e..9dd06871 100644
+index 6645db779..f3b3a1083 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -183,6 +183,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -185,6 +185,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                      },
                      onSnapshot = { snapshot ->
                          if (!active.value || !updatePlaybackSnapshot(snapshot, playbackKey)) return@PlatformPlayerSurface
@@ -314,7 +314,7 @@ index a7ddb42e..9dd06871 100644
                          refreshAudioTracksIfChanged()
                          if (!snapshot.isLoading) initialLoadCompleted = true
                          if (snapshot.isEnded) {
-@@ -514,6 +515,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -527,6 +528,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
          subtitleAutoSyncState = subtitleAutoSyncState,
          onBuiltInSubtitleTrackSelected = { index ->
              val wasCustom = useCustomSubtitles
@@ -322,7 +322,7 @@ index a7ddb42e..9dd06871 100644
              isUserExplicitSubtitleSelection = true
              preferredSubtitleSelectionApplied = true
              selectedSubtitleIndex = index
-@@ -527,6 +529,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -540,6 +542,7 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
              }
          },
          onAddonSubtitleSelected = { addon ->
@@ -331,7 +331,7 @@ index a7ddb42e..9dd06871 100644
              selectedAddonSubtitleId = addon.selectionKey
              selectedSubtitleIndex = -1
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
-index 9ba6b66b..eb4818b2 100644
+index 51a711335..7982499c4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
 @@ -42,6 +42,8 @@ data class PlayerSettingsUiState(
@@ -343,7 +343,7 @@ index 9ba6b66b..eb4818b2 100644
      val externalPlayerEnabled: Boolean = false,
      val externalPlayerForwardSubtitles: Boolean = false,
      val externalPlayerSendSkipSegments: Boolean = false,
-@@ -113,6 +115,8 @@ object PlayerSettingsRepository {
+@@ -124,6 +126,8 @@ object PlayerSettingsRepository {
      private var holdToSpeedEnabled = true
      private var holdToSpeedValue = 2f
      private var touchGesturesEnabled = true
@@ -352,7 +352,7 @@ index 9ba6b66b..eb4818b2 100644
      private var externalPlayerEnabled = false
      private var externalPlayerForwardSubtitles = false
      private var externalPlayerSendSkipSegments = false
-@@ -189,6 +193,8 @@ object PlayerSettingsRepository {
+@@ -211,6 +215,8 @@ object PlayerSettingsRepository {
          holdToSpeedEnabled = true
          holdToSpeedValue = 2f
          touchGesturesEnabled = true
@@ -361,7 +361,7 @@ index 9ba6b66b..eb4818b2 100644
          externalPlayerEnabled = false
          externalPlayerForwardSubtitles = false
          externalPlayerSendSkipSegments = false
-@@ -260,6 +266,8 @@ object PlayerSettingsRepository {
+@@ -294,6 +300,8 @@ object PlayerSettingsRepository {
          holdToSpeedEnabled = PlayerSettingsStorage.loadHoldToSpeedEnabled() ?: true
          holdToSpeedValue = PlayerSettingsStorage.loadHoldToSpeedValue() ?: 2f
          touchGesturesEnabled = PlayerSettingsStorage.loadTouchGesturesEnabled() ?: true
@@ -370,7 +370,7 @@ index 9ba6b66b..eb4818b2 100644
          externalPlayerEnabled = PlayerSettingsStorage.loadExternalPlayerEnabled() ?: false
          externalPlayerForwardSubtitles = PlayerSettingsStorage.loadExternalPlayerForwardSubtitles() ?: false
          externalPlayerSendSkipSegments = PlayerSettingsStorage.loadExternalPlayerSendSkipSegments() ?: false
-@@ -463,6 +471,22 @@ object PlayerSettingsRepository {
+@@ -518,6 +526,22 @@ object PlayerSettingsRepository {
          PlayerSettingsStorage.saveTouchGesturesEnabled(enabled)
      }
  
@@ -393,7 +393,7 @@ index 9ba6b66b..eb4818b2 100644
      fun setExternalPlayerEnabled(enabled: Boolean) {
          ensureLoaded()
          if (enabled && externalPlayerId.isNullOrBlank()) {
-@@ -986,6 +1010,8 @@ object PlayerSettingsRepository {
+@@ -1164,6 +1188,8 @@ object PlayerSettingsRepository {
              holdToSpeedEnabled = holdToSpeedEnabled,
              holdToSpeedValue = holdToSpeedValue,
              touchGesturesEnabled = touchGesturesEnabled,
@@ -403,7 +403,7 @@ index 9ba6b66b..eb4818b2 100644
              externalPlayerForwardSubtitles = externalPlayerForwardSubtitles,
              externalPlayerSendSkipSegments = externalPlayerSendSkipSegments,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
-index 444a3725..1d4ed836 100644
+index 94e982e34..7b9d45bc1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.kt
 @@ -25,6 +25,10 @@ internal expect object PlayerSettingsStorage {
@@ -418,10 +418,10 @@ index 444a3725..1d4ed836 100644
      fun saveExternalPlayerEnabled(enabled: Boolean)
      fun loadExternalPlayerForwardSubtitles(): Boolean?
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index 1ff99b97..24806ded 100644
+index 38acfa08e..bf5083348 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -558,6 +558,24 @@ private fun PlaybackSettingsSection(
+@@ -599,6 +599,24 @@ private fun PlaybackSettingsSection(
                          )
                      },
                  )
@@ -447,7 +447,7 @@ index 1ff99b97..24806ded 100644
          }
  
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
-index d831397f..361febc4 100644
+index ba3c51f5a..be854a276 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/PlayerSettingsStorage.ios.kt
 @@ -28,6 +28,8 @@ actual object PlayerSettingsStorage {
@@ -459,7 +459,7 @@ index d831397f..361febc4 100644
      private const val externalPlayerEnabledKey = "external_player_enabled"
      private const val externalPlayerForwardSubtitlesKey = "external_player_forward_subtitles"
      private const val externalPlayerSendSkipSegmentsKey = "external_player_send_skip_segments"
-@@ -317,6 +319,18 @@ actual object PlayerSettingsStorage {
+@@ -328,6 +330,18 @@ actual object PlayerSettingsStorage {
          saveBoolean(touchGesturesEnabledKey, enabled)
      }
  
@@ -478,7 +478,7 @@ index d831397f..361febc4 100644
      actual fun loadExternalPlayerEnabled(): Boolean? {
          val defaults = NSUserDefaults.standardUserDefaults
          val key = ProfileScopedKey.of(externalPlayerEnabledKey)
-@@ -1022,6 +1036,8 @@ actual object PlayerSettingsStorage {
+@@ -1088,6 +1102,8 @@ actual object PlayerSettingsStorage {
          loadHoldToSpeedEnabled()?.let { put(holdToSpeedEnabledKey, encodeSyncBoolean(it)) }
          loadHoldToSpeedValue()?.let { put(holdToSpeedValueKey, encodeSyncFloat(it)) }
          loadTouchGesturesEnabled()?.let { put(touchGesturesEnabledKey, encodeSyncBoolean(it)) }
@@ -487,7 +487,7 @@ index d831397f..361febc4 100644
          loadExternalPlayerEnabled()?.let { put(externalPlayerEnabledKey, encodeSyncBoolean(it)) }
          loadExternalPlayerForwardSubtitles()?.let { put(externalPlayerForwardSubtitlesKey, encodeSyncBoolean(it)) }
          loadExternalPlayerId()?.let { put(externalPlayerIdKey, encodeSyncString(it)) }
-@@ -1103,6 +1119,8 @@ actual object PlayerSettingsStorage {
+@@ -1169,6 +1185,8 @@ actual object PlayerSettingsStorage {
          payload.decodeSyncBoolean(holdToSpeedEnabledKey)?.let(::saveHoldToSpeedEnabled)
          payload.decodeSyncFloat(holdToSpeedValueKey)?.let(::saveHoldToSpeedValue)
          payload.decodeSyncBoolean(touchGesturesEnabledKey)?.let(::saveTouchGesturesEnabled)

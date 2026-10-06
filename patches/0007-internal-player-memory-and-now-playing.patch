@@ -1,8 +1,8 @@
 diff --git a/iosApp/iosApp/Player/MPVPlayerBridge.swift b/iosApp/iosApp/Player/MPVPlayerBridge.swift
-index de389f09b..181e10b0e 100644
+index c66d27b5e..20f846e1d 100644
 --- a/iosApp/iosApp/Player/MPVPlayerBridge.swift
 +++ b/iosApp/iosApp/Player/MPVPlayerBridge.swift
-@@ -505,6 +505,11 @@ final class MPVPlayerViewController: UIViewController {
+@@ -506,6 +506,11 @@ final class MPVPlayerViewController: UIViewController {
          checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "yes"))
          checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
          checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "yes"))
@@ -14,7 +14,7 @@ index de389f09b..181e10b0e 100644
  
          checkError(mpv_initialize(mpv))
          applyAudioLanguagePreferences(preferredAudioLanguages)
-@@ -897,7 +902,9 @@ final class MPVPlayerViewController: UIViewController {
+@@ -898,7 +903,9 @@ final class MPVPlayerViewController: UIViewController {
      private func activateAudioSessionForPlayback() {
          do {
              let session = AVAudioSession.sharedInstance()
