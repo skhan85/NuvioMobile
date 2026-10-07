@@ -12,7 +12,7 @@ import hashlib, json, os, re, subprocess, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CACHE = os.environ.get("CACHE_DIR", "/cache")
-MINUTES = int(os.environ.get("AUDIO_MINUTES", "8"))
+MINUTES = int(os.environ.get("AUDIO_MINUTES", "20"))
 os.makedirs(CACHE, exist_ok=True)
 slots = threading.BoundedSemaphore(int(os.environ.get("MAX_JOBS", "2")))
 lock = threading.Lock()

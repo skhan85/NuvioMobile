@@ -25,7 +25,7 @@ index e66d56db5..55a062a64 100644
              }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleSyncRelay.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleSyncRelay.kt
 new file mode 100644
-index 000000000..303a0d67e
+index 000000000..d492b0051
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleSyncRelay.kt
 @@ -0,0 +1,42 @@
@@ -48,7 +48,7 @@ index 000000000..303a0d67e
 + * synced copy is used from the next time the episode is opened.
 + */
 +internal const val KUIPER_SUBS_RELAY = "https://kuiper.khanofmilton.ca/subs/"
-+internal const val SYNC_WARM_UP_SECONDS = 25
++internal const val SYNC_WARM_UP_SECONDS = 35
 +
 +@OptIn(ExperimentalEncodingApi::class)
 +internal fun relayUrlWithVideo(subtitleUrl: String, videoUrl: String): String {
