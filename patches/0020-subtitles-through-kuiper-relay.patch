@@ -1,0 +1,54 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index bfd37f890..79925b17a 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -784,6 +784,10 @@ internal fun MainAppContent(
+                 onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
+             )
+             StreamsRepository.setOverlayVisible(false)
++            // Fork: say so when forwarding found nothing, instead of Infuse silently opening without them.
++            if (shouldForwardSubtitles && enrichedRequest.subtitles.isNullOrEmpty()) {
++                NuvioToastController.show("No add-on subtitles found in your subtitle languages", durationMillis = 6_000L)
++            }
+             return when (
+                 val intentResult = ExternalPlayerPlatform.buildIntent(
+                     request = enrichedRequest,
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
+index dc2e47a63..0b509cc23 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
+@@ -1,12 +1,28 @@
+ package com.nuvio.app.features.player
+ 
++import kotlin.io.encoding.Base64
++import kotlin.io.encoding.ExperimentalEncodingApi
++
+ /**
+- * iOS implementation: returns subtitles unchanged (no caching needed).
+- * iOS players like Infuse accept remote subtitle URLs directly via their URL scheme,
+- * so we just pass through the original HTTP URLs without downloading.
++ * iOS: players like Infuse take remote subtitle URLs through their URL scheme, so nothing is
++ * downloaded here.
++ *
++ * Fork: add-on subtitle links (OpenSubtitles and the like) have no file ending, often redirect,
++ * and can be gzipped or WebVTT, and Infuse showed none of them. Each link is sent through
++ * Kuiper's `/subs/` relay instead, which serves it as a plain `.srt` file (and logs the request,
++ * so it is visible whether Infuse fetched it).
+  */
+ actual object SubtitleCacheProvider {
+-    actual suspend fun cacheForExternalPlayer(subtitles: List<SubtitleInput>): List<SubtitleInput>? {
+-        return subtitles.ifEmpty { null }
+-    }
++    actual suspend fun cacheForExternalPlayer(subtitles: List<SubtitleInput>): List<SubtitleInput>? =
++        subtitles.map { it.copy(url = relaySubtitleUrl(it.url, it.lang)) }.ifEmpty { null }
++}
++
++internal const val SUBTITLE_RELAY_BASE = "https://kuiper.khanofmilton.ca/subs/"
++
++@OptIn(ExperimentalEncodingApi::class)
++internal fun relaySubtitleUrl(url: String, lang: String): String {
++    if (url.startsWith(SUBTITLE_RELAY_BASE) || !(url.startsWith("https://") || url.startsWith("http://"))) return url
++    val encoded = Base64.UrlSafe.encode(url.encodeToByteArray()).trimEnd('=')
++    val name = lang.lowercase().filter { it.isLetterOrDigit() || it == '-' }.ifEmpty { "sub" }
++    return "$SUBTITLE_RELAY_BASE$encoded/$name.srt"
+ }
