@@ -40,7 +40,7 @@ index 2189c08dc..beddfd62c 100644
      val meta = MetaDetailsRepository.peek(parentMetaType, parentMetaId) ?: return null
      val episodeRuntimeMinutes = meta.videos
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 79925b17a..6cbce1318 100644
+index 79925b17a..834b72fbe 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -128,6 +128,8 @@ import com.nuvio.app.features.player.externalPlaybackSession
@@ -60,15 +60,18 @@ index 79925b17a..6cbce1318 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -782,6 +785,7 @@ internal fun MainAppContent(
+@@ -782,6 +785,10 @@ internal fun MainAppContent(
                  preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                  secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
                  onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
-+                resolveRedirects = playerSettingsUiState.externalPlayerId == "infuse",
++                // Fork: off. TorBox's one-time download links (Kuiper 307 -> TorBox API 307 -> CDN)
++                // break when resolved ahead of Infuse ("Server responded with status 400"), and
++                // Infuse follows these redirects fine on its own.
++                resolveRedirects = false,
              )
              StreamsRepository.setOverlayVisible(false)
              // Fork: say so when forwarding found nothing, instead of Infuse silently opening without them.
-@@ -2016,6 +2020,30 @@ internal fun MainAppContent(
+@@ -2016,6 +2023,30 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  
