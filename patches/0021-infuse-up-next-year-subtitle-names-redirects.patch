@@ -287,10 +287,10 @@ index 000000000..8f23117ec
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt
 new file mode 100644
-index 000000000..76d4b31f6
+index 000000000..1f46036f0
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,48 @@
 +package com.nuvio.app.features.player
 +
 +import io.ktor.client.HttpClient
@@ -313,20 +313,30 @@ index 000000000..76d4b31f6
 +
 +private const val MAX_REDIRECT_HOPS = 5
 +
-+/** HEAD requests only (no body is downloaded); at most five hops and five seconds. */
++/**
++ * HEAD requests only (no body is downloaded); at most five hops and five seconds. The resolved link
++ * is used only when the chain ends in a 2xx answer; anything else keeps the original link.
++ */
 +internal actual suspend fun resolveExternalStreamUrl(url: String): String {
 +    if (!url.startsWith("http://") && !url.startsWith("https://")) return url
 +    return withTimeoutOrNull(5_000L) {
 +        var current = url
 +        repeat(MAX_REDIRECT_HOPS) {
-+            val response = runCatching { redirectProbeClient.head(current) }.getOrNull() ?: return@withTimeoutOrNull current
-+            if (response.status.value !in 300..399) return@withTimeoutOrNull current
-+            val location = response.headers[HttpHeaders.Location]?.takeIf { it.isNotBlank() }
-+                ?: return@withTimeoutOrNull current
-+            current = runCatching { URLBuilder(current).takeFrom(location).buildString() }.getOrNull()
-+                ?: return@withTimeoutOrNull current
++            val response = runCatching { redirectProbeClient.head(current) }.getOrNull() ?: return@withTimeoutOrNull url
++            when (response.status.value) {
++                // Only a link that answered OK is handed over.
++                in 200..299 -> return@withTimeoutOrNull current
++                in 300..399 -> {
++                    val location = response.headers[HttpHeaders.Location]?.takeIf { it.isNotBlank() }
++                        ?: return@withTimeoutOrNull url
++                    current = runCatching { URLBuilder(current).takeFrom(location).buildString() }.getOrNull()
++                        ?: return@withTimeoutOrNull url
++                }
++                // A hop that refuses HEAD (TorBox answers 400) or fails: Infuse gets the original link.
++                else -> return@withTimeoutOrNull url
++            }
 +        }
-+        current
++        url
 +    } ?: url
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
