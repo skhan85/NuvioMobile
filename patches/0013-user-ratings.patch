@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-index 0142158c4..950088ce0 100644
+index 2ecdbeb5b..21539099b 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 @@ -27,6 +27,7 @@ import com.nuvio.app.features.library.LibraryDisplaySettingsStorage
@@ -10,7 +10,7 @@ index 0142158c4..950088ce0 100644
  import com.nuvio.app.features.home.HomeCatalogSettingsStorage
  import com.nuvio.app.features.mdblist.MdbListSettingsStorage
  import com.nuvio.app.features.notifications.EpisodeReleaseNotificationPlatform
-@@ -116,6 +117,7 @@ open class MainActivity : AppCompatActivity() {
+@@ -117,6 +118,7 @@ open class MainActivity : AppCompatActivity() {
          CardDepthStyleStorage.initialize(applicationContext)
          DebridSettingsStorage.initialize(applicationContext)
          TmdbSettingsStorage.initialize(applicationContext)
@@ -48,10 +48,10 @@ index 000000000..67697e527
 +    }
 +}
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 34d57ffc1..d8610c52a 100644
+index ca9e6058b..f25f397f8 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
-@@ -2473,4 +2473,21 @@
+@@ -2478,4 +2478,21 @@
      <string name="settings_playback_auto_show_subtitles_on_mute_description">When subtitles are off, automatically turn them on while muted or with the volume at zero, then hide them again once you unmute.</string>
      <string name="settings_playback_movie_recommendations">Movie Recommendations</string>
      <string name="settings_playback_movie_recommendations_description">Suggest titles from More Like This when a movie reaches its end credits.</string>
@@ -1030,7 +1030,7 @@ index e4dd9aaf5..f83101abd 100644
      showEpisodesPanel = false
      episodeStreamsPanelState = EpisodeStreamsPanelState()
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
-index e60d24275..a354deb88 100644
+index d4c77a4de..ec368cad4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeState.kt
 @@ -199,6 +199,7 @@ internal class PlayerScreenRuntime(
@@ -1039,13 +1039,13 @@ index e60d24275..a354deb88 100644
      var playbackEngineOverride by mutableStateOf<AndroidPlaybackEngine?>(null)
 +    var showUserRatingSheet by mutableStateOf(false)
      var audioTracks by mutableStateOf<List<AudioTrack>>(emptyList())
-     var subtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
-     var selectedAudioIndex by mutableStateOf(-1)
+     var serverAudioTracks by mutableStateOf<List<AudioTrack>>(emptyList())
+     var serverSubtitleTracks by mutableStateOf<List<SubtitleTrack>>(emptyList())
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 30ac6d387..04e0574df 100644
+index 6c081f9eb..df90b7677 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -28,6 +28,12 @@ import com.nuvio.app.features.player.skip.internalSkipAction
+@@ -29,6 +29,12 @@ import com.nuvio.app.features.servers.ServerStreams
  import com.nuvio.app.features.streams.streamAddonInstanceId
  import com.nuvio.app.isIos
  import kotlinx.coroutines.launch
@@ -1058,7 +1058,7 @@ index 30ac6d387..04e0574df 100644
  import nuvio.composeapp.generated.resources.*
  
  @Composable
-@@ -285,6 +291,9 @@ private fun PlayerScreenRuntime.currentInitialPositionRequestKey(): String? {
+@@ -286,6 +292,9 @@ private fun PlayerScreenRuntime.currentInitialPositionRequestKey(): String? {
  @Composable
  private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long, isEpisode: Boolean) {
      val isInPip = rememberIsInPictureInPicture()
@@ -1068,7 +1068,7 @@ index 30ac6d387..04e0574df 100644
      AnimatedVisibility(
          visible = (controlsVisible || showParentalGuide) && !playerControlsLocked && !isInPip,
          enter = fadeIn(),
-@@ -334,6 +343,10 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
+@@ -335,6 +344,10 @@ private fun PlayerScreenRuntime.RenderPlayerControls(displayedPositionMs: Long,
                  refreshTracks()
                  showAudioModal = true
              },
@@ -1079,7 +1079,7 @@ index 30ac6d387..04e0574df 100644
              onVideoSettingsClick = if (isIos) {
                  {
                      showVideoSettingsModal = true
-@@ -695,8 +708,36 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
+@@ -713,8 +726,36 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
          addonSubtitle = selectedAddonSubtitle.takeIf { useCustomSubtitles },
          onDismiss = { showStreamInfo = false },
      )

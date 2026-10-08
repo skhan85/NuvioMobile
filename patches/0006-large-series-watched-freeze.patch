@@ -58,10 +58,10 @@ index d3d463727..7c48e77ee 100644
          )
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index b88346f3b..a25205114 100644
+index 2b861b65c..dfd122983 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1122,8 +1122,9 @@ object WatchProgressRepository {
+@@ -1139,8 +1139,9 @@ object WatchProgressRepository {
          if (videoIds.isEmpty()) return
  
          activeProgressProvider()?.let { provider ->

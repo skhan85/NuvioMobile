@@ -128,6 +128,9 @@ jobs:
           set -uo pipefail
           shopt -s nullglob
           git config user.name "fork-ci"; git config user.email "fork-ci@users.noreply.github.com"
+          # Both upstream and the patches add strings at the end of strings.xml; keep both sides.
+          mkdir -p "$(git rev-parse --git-dir)/info"
+          echo '**/strings.xml merge=union' >> "$(git rev-parse --git-path info/attributes)"
           target="$(git rev-parse HEAD)"
           base="$(tr -d '[:space:]' < "../fork/patches/BASE" 2>/dev/null || true)"
           if [[ -z "${base}" ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then

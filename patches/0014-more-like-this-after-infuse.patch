@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index f47c59ff3..bfd37f890 100644
+index 4d4762159..ce05699df 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -126,6 +126,8 @@ import com.nuvio.app.features.p2p.P2pSettingsRepository
@@ -11,7 +11,7 @@ index f47c59ff3..bfd37f890 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -667,6 +669,7 @@ internal fun MainAppContent(
+@@ -675,6 +677,7 @@ internal fun MainAppContent(
              val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
@@ -19,7 +19,7 @@ index f47c59ff3..bfd37f890 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -2009,6 +2012,21 @@ internal fun MainAppContent(
+@@ -2013,6 +2016,21 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  

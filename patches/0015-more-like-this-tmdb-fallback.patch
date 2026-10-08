@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsRepository.kt
-index 39b8d8999..ee421e5d9 100644
+index 6eeca1658..390fba337 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsRepository.kt
-@@ -436,10 +436,14 @@ object MetaDetailsRepository {
+@@ -477,10 +477,14 @@ object MetaDetailsRepository {
                  log.w { "Failed to load Simkl related titles for ${meta.id}: ${error.message}" }
              }.getOrDefault(emptyList())
  
@@ -21,7 +21,7 @@ index 39b8d8999..ee421e5d9 100644
          }
  
          // Trakt source
-@@ -459,10 +463,14 @@ object MetaDetailsRepository {
+@@ -500,10 +504,14 @@ object MetaDetailsRepository {
                  log.w { "Failed to load Trakt related titles for ${meta.id}: ${error.message}" }
              }.getOrDefault(emptyList())
  

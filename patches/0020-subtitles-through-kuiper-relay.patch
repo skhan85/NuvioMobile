@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index bfd37f890..79925b17a 100644
+index ce05699df..095b6a4b9 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -784,6 +784,10 @@ internal fun MainAppContent(
+@@ -792,6 +792,10 @@ internal fun MainAppContent(
                  onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
              )
              StreamsRepository.setOverlayVisible(false)

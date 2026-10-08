@@ -24,7 +24,7 @@ index ef49a8b7b..8954cec84 100644
  
      actual fun loadStreamBackgroundMode(): String? = loadString(streamBackgroundModeKey)
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index 4c7298475..759c37679 100644
+index 3136ec62b..6c34620a9 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
 @@ -896,7 +896,12 @@

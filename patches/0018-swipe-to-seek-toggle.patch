@@ -51,7 +51,7 @@ index 326487baf..9d2c52bc7 100644
          payload.decodeSyncBoolean(autoShowSubtitlesOnRewindEnabledKey)?.let(::saveAutoShowSubtitlesOnRewindEnabled)
          payload.decodeSyncBoolean(autoShowSubtitlesOnMuteEnabledKey)?.let(::saveAutoShowSubtitlesOnMuteEnabled)
 diff --git a/composeApp/src/commonMain/composeResources/values/strings.xml b/composeApp/src/commonMain/composeResources/values/strings.xml
-index d8610c52a..4f63a0f07 100644
+index f25f397f8..0b985c1f9 100644
 --- a/composeApp/src/commonMain/composeResources/values/strings.xml
 +++ b/composeApp/src/commonMain/composeResources/values/strings.xml
 @@ -1098,6 +1098,8 @@
@@ -84,10 +84,10 @@ index f83101abd..d86acbe88 100644
          currentPositionMs = rememberUpdatedState(playbackSnapshot.positionMs.coerceAtLeast(0L)),
          currentDurationMs = rememberUpdatedState(playbackSnapshot.durationMs),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-index 04e0574df..5a97dd80a 100644
+index df90b7677..5754586fb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerScreenRuntimeUi.kt
-@@ -147,6 +147,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
+@@ -148,6 +148,7 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                  sideGestureSystemEdgeExclusionPx = sideGestureSystemEdgeExclusionPx,
                  playerControlsLockedState = gestureCallbacks.playerControlsLocked,
                  touchGesturesEnabledState = gestureCallbacks.touchGesturesEnabled,
@@ -230,10 +230,10 @@ index 748da4ccd..b4aa594b8 100644
                  SettingsSwitchRow(
                      title = stringResource(Res.string.settings_playback_hold_to_speed),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
-index 80884c0e3..bb8741921 100644
+index 254fea0a1..dac52922c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsSearch.kt
-@@ -588,6 +588,11 @@ internal fun settingsSearchEntries(
+@@ -596,6 +596,11 @@ internal fun settingsSearchEntries(
                  stringResource(Res.string.settings_playback_touch_gestures),
                  stringResource(Res.string.settings_playback_touch_gestures_description),
              ),

@@ -40,7 +40,7 @@ index 2189c08dc..beddfd62c 100644
      val meta = MetaDetailsRepository.peek(parentMetaType, parentMetaId) ?: return null
      val episodeRuntimeMinutes = meta.videos
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 79925b17a..834b72fbe 100644
+index 095b6a4b9..bb5afd1b8 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -128,6 +128,8 @@ import com.nuvio.app.features.player.externalPlaybackSession
@@ -52,7 +52,7 @@ index 79925b17a..834b72fbe 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -670,6 +672,7 @@ internal fun MainAppContent(
+@@ -678,6 +680,7 @@ internal fun MainAppContent(
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
                  ExternalMovieSuggestions.onExternalPlaybackReturned(result, fallbackSession)
@@ -60,7 +60,7 @@ index 79925b17a..834b72fbe 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -782,6 +785,10 @@ internal fun MainAppContent(
+@@ -790,6 +793,10 @@ internal fun MainAppContent(
                  preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                  secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
                  onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
@@ -71,7 +71,7 @@ index 79925b17a..834b72fbe 100644
              )
              StreamsRepository.setOverlayVisible(false)
              // Fork: say so when forwarding found nothing, instead of Infuse silently opening without them.
-@@ -2016,6 +2023,30 @@ internal fun MainAppContent(
+@@ -2020,6 +2027,30 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  
