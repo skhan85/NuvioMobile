@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: infuse-fork-release
@@ -69,7 +70,7 @@ jobs:
             | base64 -d | sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*([^[:space:]#]+).*$/\1/p' | head -n 1)"
           # Fingerprint of what this fork adds, so a patch or build change rebuilds but an
           # unrelated commit (like the keepalive) does not.
-          fork_hash="$(cat patches/*.patch .github/workflows/infuse-fork-release.yml | sha256sum | cut -c1-7)"
+          fork_hash="$(cat patches/*.patch patches/BASE .github/workflows/infuse-fork-release.yml | sha256sum | cut -c1-7)"
           tag="v${version}-infuse.${source_sha::7}.${fork_hash}"
           echo "upstream_tag=${upstream_tag}" >> "$GITHUB_OUTPUT"
           echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
@@ -113,22 +114,56 @@ jobs:
           repository: ${{ env.SOURCE_REPO }}
           ref: ${{ needs.prepare.outputs.source_sha }}
           path: src
+          fetch-depth: 0
 
+      # The patches were made against the commit in patches/BASE. Each one is committed on top of
+      # that commit (where it always applies), then the stack is rebased onto the commit being
+      # built, so git merges them with real three-way merges instead of failing on shifted lines.
+      # A patch upstream has since adopted drops out by itself. A real conflict cancels the run
+      # (no failure email); the scheduled patch-update task resolves it and pushes new patches.
       - name: Apply fork patches
+        id: apply
         working-directory: src
         run: |
+          set -uo pipefail
           shopt -s nullglob
+          git config user.name "fork-ci"; git config user.email "fork-ci@users.noreply.github.com"
+          target="$(git rev-parse HEAD)"
+          base="$(tr -d '[:space:]' < "../fork/patches/BASE" 2>/dev/null || true)"
+          if [[ -z "${base}" ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "::warning::patches/BASE is missing or unknown; applying the patches directly."
+            base="${target}"
+          fi
+          git checkout -q -B patched "${base}"
           for patch in ../fork/patches/*.patch; do
-            if git apply --check "${patch}" 2>/dev/null; then
-              git apply "${patch}"
-              echo "Applied $(basename "${patch}")"
-            elif git apply -R --check "${patch}" 2>/dev/null; then
-              echo "::notice::$(basename "${patch}") is already in upstream; skipping it. You can delete it."
-            else
-              echo "::error::$(basename "${patch}") no longer applies to upstream. It needs updating."
+            name="$(basename "${patch}")"
+            if ! git apply --index "${patch}"; then
+              echo "::error::${name} does not apply to its own base ${base::10}; patches/BASE is out of date."
               exit 1
             fi
+            git commit -q --allow-empty -m "${name}"
           done
+          if [[ "${base}" != "${target}" ]]; then
+            if git rebase -q --empty=drop --onto "${target}" "${base}" patched; then
+              echo "Rebased the patches from ${base::10} onto ${target::10}."
+              git log --format='  %s' "${target}..patched"
+            else
+              conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
+              files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+              git rebase --abort
+              echo "::warning::${conflict} conflicts with the new source (${files}). Waiting for the patch-update task; cancelling this run."
+              {
+                echo "### Patches need updating"
+                echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
+                echo "The scheduled patch-update task will rebase the patches and push them; the next run then builds."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
+              sleep 120
+              exit 1
+            fi
+          fi
+          # Build from the patched tree, as plain uncommitted changes on the target commit.
+          git reset -q --soft "${target}"
 
       - name: Write runtime config
         env:
