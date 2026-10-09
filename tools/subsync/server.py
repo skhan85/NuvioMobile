@@ -5,8 +5,8 @@ POST /sync?v=<video url>&wait=<seconds>   body: the subtitle as SRT text
   202                when it is still working (the caller serves the raw subtitle meanwhile)
   204                when the subtitle needs no change, or could not be synced (serve raw)
 
-v3: the offset is measured in three 6-minute windows (in parallel), then (in the background) a 4-minute
-window every ~5 minutes; cuts are applied as steps, drift as lines spread over the episode (ffmpeg seeks, so only
+v3: the offset is measured in three 6-minute windows (in parallel), then (in the background) overlapping
+6-minute windows every 4 minutes, median-smoothed; cuts are applied as steps, drift as lines spread over the episode (ffmpeg seeks, so only
 those parts of the file are read) and applied as one value, a straight-line drift, or point to point
 between the windows when the releases differ by a cut. Results are kept in CACHE_DIR.
 """
@@ -109,18 +109,20 @@ def measure(video, vkey, cues, start, tag, length=None):
 JUMP = 0.6  # seconds: a bigger change between neighbouring measurements is a cut, not drift
 
 
-def drop_spikes(points):
-    """A measurement far off both its neighbours in the same direction is a misread window (little
-    dialogue, music), not a cut that undoes itself a few minutes later: leave it out."""
+def smooth(points):
+    """Running median of three over the measurements in time order. A single misread window (little
+    dialogue, music, credits) is replaced by its neighbours' value, while a real cut, which shows up
+    in every window after it, survives."""
     points = sorted(points)
-    keep = [points[0]] if points else []
+    if len(points) < 3:
+        return points
+    out = [points[0]]
     for prev, cur, nxt in zip(points, points[1:], points[2:]):
-        a, b = cur[1] - prev[1], cur[1] - nxt[1]
-        if not (abs(a) > JUMP and abs(b) > JUMP and (a > 0) == (b > 0)):
-            keep.append(cur)
-    if len(points) > 1:
-        keep.append(points[-1])
-    return keep
+        out.append((cur[0], sorted((prev[1], cur[1], nxt[1]))[1]))
+    # The last point has no right neighbour: keep it only if it agrees with the one before.
+    last, before = points[-1], out[-1]
+    out.append(last if abs(last[1] - before[1]) <= JUMP else (last[0], before[1]))
+    return out
 
 
 def offset_curve(points):
@@ -149,7 +151,7 @@ def offset_curve(points):
 
 def publish(key, cues, points, started, final):
     out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
-    points = drop_spikes(points)
+    points = smooth(points) if final else sorted(points)
     curve, desc = offset_curve(points)
     useful = bool(cues) and max(abs(curve(a)) for a, _, _ in cues) >= 0.1
     if useful:
@@ -189,13 +191,14 @@ def sync(key, video, srt):
             # The three-window result goes out straight away (the iPhone waits ~35 s for it); a finer
             # pass below may then replace it for later fetches.
             publish(key, cues, points, started, final=False)
-            # Finer pass (in the background; the first result is already out): a 4-minute window every
-            # ~5 minutes over the whole episode, so every cut and drift is measured where it happens.
-            extra = [x for x in range(120, max(int(dur) - 300, 121), 300)
-                     if all(abs(x + 120 - t) > 150 for t, _ in points)] if dur >= 30 * 60 else []
+            # Finer pass (in the background; the first result is already out): overlapping 6-minute
+            # windows every 4 minutes over the whole episode, so every cut and drift is measured where
+            # it happens and one bad reading can be outvoted by its neighbours.
+            extra = [x for x in range(60, max(int(dur) - 420, 61), 240)
+                     if all(abs(x + WINDOW / 2 - t) > 90 for t, _ in points)] if dur >= 30 * 60 else []
             if extra:
                 with ThreadPoolExecutor(max_workers=4) as pool:
-                    found = pool.map(lambda a: (a[1] + 120, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}", 240)),
+                    found = pool.map(lambda a: (a[1] + WINDOW / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}")),
                                      list(enumerate(extra)))
                 points = sorted(points + [(t, o) for t, o in found if o is not None and abs(o) <= 20])
             publish(key, cues, points, started, final=True)
@@ -218,7 +221,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v5\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v6\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -241,5 +244,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v5 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v6 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
