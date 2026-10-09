@@ -109,6 +109,20 @@ def measure(video, vkey, cues, start, tag, length=None):
 JUMP = 0.6  # seconds: a bigger change between neighbouring measurements is a cut, not drift
 
 
+def drop_spikes(points):
+    """A measurement far off both its neighbours in the same direction is a misread window (little
+    dialogue, music), not a cut that undoes itself a few minutes later: leave it out."""
+    points = sorted(points)
+    keep = [points[0]] if points else []
+    for prev, cur, nxt in zip(points, points[1:], points[2:]):
+        a, b = cur[1] - prev[1], cur[1] - nxt[1]
+        if not (abs(a) > JUMP and abs(b) > JUMP and (a > 0) == (b > 0)):
+            keep.append(cur)
+    if len(points) > 1:
+        keep.append(points[-1])
+    return keep
+
+
 def offset_curve(points):
     """Offset as a function of time. Neighbouring measurements that agree are joined by a straight
     line (drift); where they jump, the change is a cut between the releases and is applied as a step
@@ -133,6 +147,26 @@ def offset_curve(points):
     return curve, kind + " " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points)
 
 
+def publish(key, cues, points, started, final):
+    out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
+    points = drop_spikes(points)
+    curve, desc = offset_curve(points)
+    useful = bool(cues) and max(abs(curve(a)) for a, _, _ in cues) >= 0.1
+    if useful:
+        fixed = [[a + curve(a), b + curve(a), body] for a, b, body in cues]
+        with open(out + ".part.srt", "w", encoding="utf-8") as f:
+            f.write(write_srt(fixed))
+        os.replace(out + ".part.srt", out)
+    if final:
+        with open(meta, "w") as f:
+            json.dump({"points": points, "fit": desc, "synced": useful}, f)
+    log(f"{key[:10]} {'final' if final else 'first'}: {desc} ({len(points)} windows) "
+        f"{'synced' if useful else 'kept as is'} in {time.time() - started:.0f}s")
+    with lock:
+        if key in running:
+            running[key].set()  # wakes requests waiting for the first result
+
+
 def sync(key, video, srt):
     out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
     try:
@@ -152,6 +186,9 @@ def sync(key, video, srt):
             points = sorted((t, o) for t, o in found if o is not None and abs(o) <= 20)
             if not points:
                 raise RuntimeError("no window could be measured")
+            # The three-window result goes out straight away (the iPhone waits ~35 s for it); a finer
+            # pass below may then replace it for later fetches.
+            publish(key, cues, points, started, final=False)
             # Where two measurements jump, sample the stretch between them more finely to place the cut.
             extra = []
             for (t0, o0), (t1, o1) in zip(points, points[1:]):
@@ -162,24 +199,13 @@ def sync(key, video, srt):
                     found = pool.map(lambda a: (a[1] + 120, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}", 240)),
                                      list(enumerate(extra)))
                 points = sorted(points + [(t, o) for t, o in found if o is not None and abs(o) <= 20])
-            curve, desc = offset_curve(points)
-            biggest = max(abs(curve(a)) for a, _, _ in cues) if cues else 0
-            useful = biggest >= 0.1
-            if useful:
-                fixed = [[a + curve(a), b + curve(a), body] for a, b, body in cues]
-                with open(out + ".part.srt", "w", encoding="utf-8") as f:
-                    f.write(write_srt(fixed))
-                os.replace(out + ".part.srt", out)
-            with open(meta, "w") as f:
-                json.dump({"points": points, "fit": desc, "synced": useful}, f)
-            log(f"{key[:10]} {desc} ({len(points)} windows) "
-                f"{'synced' if useful else 'kept as is'} in {time.time() - started:.0f}s")
+            publish(key, cues, points, started, final=True)
     except Exception as e:  # noqa: BLE001
         # Not cached: the next request for this subtitle tries again (the caller serves raw meanwhile).
         log(f"{key[:10]} failed: {str(e)[:200]}")
     finally:
         with lock:
-            running.pop(key).set()
+            running.pop(key, threading.Event()).set()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -193,7 +219,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v3\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v4\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -216,5 +242,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v3 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v4 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
