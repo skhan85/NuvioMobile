@@ -2,7 +2,7 @@ name: Infuse Fork Release
 
 # Builds an unsigned iOS IPA of each official NuvioMedia/NuvioMobile release with the patches in
 # /patches applied, and publishes it as a GitHub release (picked up by the Raspberry Pi release
-# watcher). Checks hourly, so a new official release is rebuilt within about an hour of it
+# watcher). Checks every 6 hours, so a new official release is rebuilt within about 6 hours of it
 # appearing. A change to /patches or this file also triggers a rebuild.
 
 on:
@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "23 * * * *" # hourly
+    - cron: "23 */6 * * *" # every 6 hours (hourly runs got Actions disabled on this fork)
   push:
     paths:
       - "patches/**"
