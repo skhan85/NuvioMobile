@@ -166,7 +166,7 @@ def offset_curve(points, cues=None):
     return curve, kind + " " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points) + where
 
 
-#  --- full-episode aligner (v9) -------------------------------------------------------------
+#  --- full-episode aligner (v8) -------------------------------------------------------------
 # The whole episode's audio is read once (one sequential ffmpeg pass, mono 16 kHz) and turned into
 # a speech/no-speech track in 10 ms frames. Every subtitle line then gets its own offset, chosen by
 # dynamic programming: a line scores the speech it overlaps, and changing the offset from one line
@@ -178,8 +178,6 @@ FRAME = 0.01                      # seconds per speech frame
 STEP = 5                          # candidate offsets every 5 frames (50 ms)
 MAX_SHIFT = 15.0                  # seconds either way
 PENALTY = 300                     # frames of overlap a change of offset has to win back
-JUMP_COST_PER_SECOND = 40         # ...plus this many frames per second the offset moves
-PEAK_RATIO = 1.25                 # a stretch's best offset must beat its typical offset by 25%
 FULL_TIMEOUT = int(os.environ.get("FULL_TIMEOUT", "900"))
 
 
@@ -236,77 +234,32 @@ def _matrix(cues, speech):
 
 
 def align_dp(cues, speech):
-    """Per-line offsets in seconds (to add to each line), or None.
-
-    v9: a change of offset costs more the bigger it is, and every stretch the path moves to has to
-    earn it on its own: it must land on clearly more speech than the offset before it, and its own
-    speech-versus-offset profile must have a real peak. Credits, songs and long music cues read as
-    speech everywhere, so any offset "fits" them; those stretches keep the offset before them
-    instead of jumping 10 seconds to a coincidental best."""
+    """Per-line offsets in seconds (to add to each line), or None."""
     import numpy as np
     if len(cues) < 20:
         return None
     shifts, score = _matrix(cues, speech)
     n, d = score.shape
-    step_cost = JUMP_COST_PER_SECOND * STEP * FRAME   # extra cost per candidate step moved
     best = score[0].astype(np.float64)
     back = np.zeros((n, d), dtype=np.int32)
     back[0] = np.arange(d)
-    idx = np.arange(d)
     for i in range(1, n):
-        # Best predecessor for every offset with a cost of PENALTY + |distance| * step_cost
-        # (a two-pass distance transform, so this stays linear in the number of offsets).
-        val = best.copy()
-        arg = idx.copy()
-        for k in range(1, d):
-            if val[k - 1] - step_cost > val[k]:
-                val[k], arg[k] = val[k - 1] - step_cost, arg[k - 1]
-        for k in range(d - 2, -1, -1):
-            if val[k + 1] - step_cost > val[k]:
-                val[k], arg[k] = val[k + 1] - step_cost, arg[k + 1]
-        jump = val - PENALTY
-        take_jump = (jump > best) & (arg != idx)
-        back[i] = np.where(take_jump, arg, idx)
-        best = np.where(take_jump, jump, best) + score[i]
+        j = int(np.argmax(best))
+        stay = best
+        jump = best[j] - PENALTY
+        take_jump = jump > stay
+        back[i] = np.where(take_jump, j, np.arange(d))
+        best = np.where(take_jump, jump, stay) + score[i]
     k = int(np.argmax(best))
     path = [0] * n
     for i in range(n - 1, -1, -1):
         path[i] = k
         k = int(back[i][k])
-    path = vet_runs(path, score)
     offs = shifts[np.array(path)] * FRAME
     # Remove single-line wobbles: running median over 7 lines.
     pad = np.pad(offs, 3, mode="edge")
     offs = np.array([np.median(pad[i:i + 7]) for i in range(n)])
     return [float(o) for o in offs]
-
-
-def vet_runs(path, score):
-    """Keeps a stretch's own offset only when it clearly beats the offset before it."""
-    import numpy as np
-    runs, start = [], 0
-    for i in range(1, len(path) + 1):
-        if i == len(path) or path[i] != path[start]:
-            runs.append((start, i, path[start]))
-            start = i
-    out = list(path)
-    prev = None
-    for a, b, k in runs:
-        profile = score[a:b].sum(axis=0).astype(np.float64)
-        peak = profile[k]
-        sharp = peak >= PEAK_RATIO * max(float(np.median(profile)), 1.0)
-        if prev is None:
-            if not sharp and len(runs) > 1:
-                # A flat opening stretch (a cold open under music) takes the next stretch's offset.
-                nxt = runs[1][2]
-                k = nxt
-        else:
-            gain = peak - profile[prev]
-            if k != prev and not (sharp and gain >= PENALTY + JUMP_COST_PER_SECOND * abs(k - prev) * STEP * FRAME):
-                k = prev
-        out[a:b] = [k] * (b - a)
-        prev = k
-    return out
 
 
 def overlap_score(cues, speech, offsets):
@@ -437,7 +390,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v9\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v8\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -460,5 +413,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v9 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v8 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
