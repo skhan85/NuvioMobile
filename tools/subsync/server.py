@@ -97,8 +97,11 @@ def measure(video, vkey, cues, start, tag, length=None):
     src, out = os.path.join(CACHE, f"{tag}.in.srt"), os.path.join(CACHE, f"{tag}.out.srt")
     with open(src, "w", encoding="utf-8") as f:
         f.write(write_srt(inside))
-    res = subprocess.run(["ffsubsync", wav, "-i", src, "-o", out, "--no-fix-framerate", "--max-offset-seconds", "20"],
-                         capture_output=True, text=True, timeout=180)
+    try:
+        res = subprocess.run(["ffsubsync", wav, "-i", src, "-o", out, "--no-fix-framerate", "--max-offset-seconds", "20"],
+                             capture_output=True, text=True, timeout=180)
+    except Exception:  # noqa: BLE001
+        return None
     for p in (src, out):
         if os.path.exists(p):
             os.remove(p)
@@ -163,6 +166,140 @@ def offset_curve(points, cues=None):
     return curve, kind + " " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points) + where
 
 
+#  --- full-episode aligner (v8) -------------------------------------------------------------
+# The whole episode's audio is read once (one sequential ffmpeg pass, mono 16 kHz) and turned into
+# a speech/no-speech track in 10 ms frames. Every subtitle line then gets its own offset, chosen by
+# dynamic programming: a line scores the speech it overlaps, and changing the offset from one line
+# to the next costs a penalty, so the offset only changes where the releases really differ (a cut)
+# and slowly drifts where they run at slightly different speeds. This is the method alass uses.
+import array
+
+FRAME = 0.01                      # seconds per speech frame
+STEP = 5                          # candidate offsets every 5 frames (50 ms)
+MAX_SHIFT = 15.0                  # seconds either way
+PENALTY = 300                     # frames of overlap a change of offset has to win back
+FULL_TIMEOUT = int(os.environ.get("FULL_TIMEOUT", "900"))
+
+
+def speech_track(video):
+    """1 byte per 10 ms frame: 1 where someone is speaking."""
+    proc = subprocess.Popen(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", video, "-map", "0:a:0", "-vn",
+                             "-ac", "1", "-ar", "16000", "-f", "s16le", "-"], stdout=subprocess.PIPE)
+    try:
+        import webrtcvad
+        vad = webrtcvad.Vad(2)
+        detect = lambda frame: vad.is_speech(frame, 16000)  # noqa: E731
+    except Exception:  # noqa: BLE001
+        vad = None
+    frames = bytearray()
+    energies = []
+    started = time.time()
+    while True:
+        chunk = proc.stdout.read(320 * 1000)
+        if not chunk:
+            break
+        if time.time() - started > FULL_TIMEOUT:
+            proc.kill()
+            raise RuntimeError("full audio read timed out")
+        for i in range(0, len(chunk) - 319, 320):
+            frame = chunk[i:i + 320]
+            if vad is not None:
+                frames.append(1 if detect(frame) else 0)
+        if vad is None:
+            import numpy as np
+            x = np.frombuffer(chunk[: len(chunk) // 320 * 320], dtype=np.int16).astype(np.float32).reshape(-1, 160)
+            energies.extend((x * x).mean(axis=1).tolist())
+    proc.wait()
+    if vad is None:
+        import numpy as np
+        e = np.asarray(energies)
+        thr = np.percentile(e, 60)
+        frames = bytearray((e > thr).astype("uint8").tobytes())
+    if len(frames) < 6000:
+        raise RuntimeError("audio too short or unreadable")
+    return frames
+
+
+def _matrix(cues, speech):
+    import numpy as np
+    sp = np.frombuffer(bytes(speech), dtype=np.uint8).astype(np.int32)
+    prefix = np.concatenate([[0], np.cumsum(sp)])
+    n = len(sp)
+    shifts = np.arange(-int(MAX_SHIFT / FRAME), int(MAX_SHIFT / FRAME) + 1, STEP)
+    starts = np.array([int(round(a / FRAME)) for a, _, _ in cues])
+    ends = np.array([max(int(round(b / FRAME)), int(round(a / FRAME)) + 1) for a, b, _ in cues])
+    s = np.clip(starts[:, None] + shifts[None, :], 0, n)
+    e = np.clip(ends[:, None] + shifts[None, :], 0, n)
+    return shifts, prefix[e] - prefix[s]
+
+
+def align_dp(cues, speech):
+    """Per-line offsets in seconds (to add to each line), or None."""
+    import numpy as np
+    if len(cues) < 20:
+        return None
+    shifts, score = _matrix(cues, speech)
+    n, d = score.shape
+    best = score[0].astype(np.float64)
+    back = np.zeros((n, d), dtype=np.int32)
+    back[0] = np.arange(d)
+    for i in range(1, n):
+        j = int(np.argmax(best))
+        stay = best
+        jump = best[j] - PENALTY
+        take_jump = jump > stay
+        back[i] = np.where(take_jump, j, np.arange(d))
+        best = np.where(take_jump, jump, stay) + score[i]
+    k = int(np.argmax(best))
+    path = [0] * n
+    for i in range(n - 1, -1, -1):
+        path[i] = k
+        k = int(back[i][k])
+    offs = shifts[np.array(path)] * FRAME
+    # Remove single-line wobbles: running median over 7 lines.
+    pad = np.pad(offs, 3, mode="edge")
+    offs = np.array([np.median(pad[i:i + 7]) for i in range(n)])
+    return [float(o) for o in offs]
+
+
+def overlap_score(cues, speech, offsets):
+    """Speech frames covered by the lines with the given per-line offsets (higher = better fit)."""
+    n = len(speech)
+    prefix = [0]
+    total = 0
+    for b in speech:
+        total += b
+        prefix.append(total)
+    score = 0
+    for (a, b, _), o in zip(cues, offsets):
+        s = min(max(int(round((a + o) / FRAME)), 0), n)
+        e = min(max(int(round((b + o) / FRAME)), 0), n)
+        score += prefix[e] - prefix[s]
+    return score
+
+
+def describe(cues, offs):
+    """'+1.40s, +2.60s from 13.4m, +4.50s from 27.0m' style summary of per-line offsets."""
+    parts, cur = [], None
+    for (a, _, _), o in zip(cues, offs):
+        if cur is None or abs(o - cur) > 0.3:
+            parts.append(f"{o:+.2f}s" + (f" from {a / 60:.1f}m" if cur is not None else ""))
+            cur = o
+    return ", ".join(parts[:12]) + (" ..." if len(parts) > 12 else "")
+
+
+def publish_offsets(key, cues, offs, desc, started):
+    out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
+    useful = any(abs(o) >= 0.1 for o in offs)
+    if useful:
+        with open(out + ".part.srt", "w", encoding="utf-8") as f:
+            f.write(write_srt([[a + o, b + o, body] for (a, b, body), o in zip(cues, offs)]))
+        os.replace(out + ".part.srt", out)
+    with open(meta, "w") as f:
+        json.dump({"fit": desc, "synced": useful}, f)
+    log(f"{key[:10]} final: {desc} {'synced' if useful else 'kept as is'} in {time.time() - started:.0f}s")
+
+
 def publish(key, cues, points, started, final):
     out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
     points = smooth(points) if final else sorted(points)
@@ -200,12 +337,30 @@ def sync(key, video, srt):
                 found = pool.map(lambda a: (a[1] + WINDOW / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-{a[0]}")),
                                  list(enumerate(starts)))
             points = sorted((t, o) for t, o in found if o is not None and abs(o) <= 20)
-            if not points:
-                raise RuntimeError("no window could be measured")
-            # The three-window result goes out straight away (the iPhone waits ~35 s for it); a finer
-            # pass below may then replace it for later fetches.
-            publish(key, cues, points, started, final=False)
-            # Finer pass (in the background; the first result is already out): overlapping 6-minute
+            # The three-window result goes out straight away (the iPhone waits ~35 s for it); the final
+            # pass below then replaces it for later fetches.
+            if points:
+                publish(key, cues, points, started, final=False)
+            # Final pass (in the background; the first result is already out): the whole episode,
+            # line by line. The best of the original, the quick result and the line-by-line result
+            # (by how much speech the lines land on) is kept, so this can never make it worse.
+            try:
+                speech = speech_track(video)
+                cands = {"original": [0.0] * len(cues)}
+                if points:
+                    quick, _ = offset_curve(sorted(points), cues)
+                    cands["quick"] = [quick(a) for a, _, _ in cues]
+                full = align_dp(cues, speech)
+                if full:
+                    cands["line-by-line"] = full
+                scores = {k: overlap_score(cues, speech, v) for k, v in cands.items()}
+                pick = max(scores, key=scores.get)
+                ranking = " ".join(f"{k}={v}" for k, v in sorted(scores.items(), key=lambda kv: -kv[1]))
+                publish_offsets(key, cues, cands[pick], f"{pick}: {describe(cues, cands[pick])} [{ranking}]", started)
+                return
+            except Exception as e:  # noqa: BLE001
+                log(f"{key[:10]} line-by-line pass failed ({str(e)[:120]}); measuring windows instead")
+            # Fallback: overlapping 6-minute
             # windows every 4 minutes over the whole episode, so every cut and drift is measured where
             # it happens and one bad reading can be outvoted by its neighbours.
             extra = [x for x in range(60, max(int(dur) - 420, 61), 240)
@@ -235,7 +390,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v7\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v8\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -258,5 +413,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v7 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v8 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
