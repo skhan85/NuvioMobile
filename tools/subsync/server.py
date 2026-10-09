@@ -5,11 +5,13 @@ POST /sync?v=<video url>&wait=<seconds>   body: the subtitle as SRT text
   202                when it is still working (the caller serves the raw subtitle meanwhile)
   204                when the subtitle needs no change, or could not be synced (serve raw)
 
-v2: the offset is measured in three 6-minute windows spread over the episode (ffmpeg seeks, so only
+v3: the offset is measured in three 6-minute windows (in parallel), plus four 4-minute windows
+between any two that disagree, to place a cut spread over the episode (ffmpeg seeks, so only
 those parts of the file are read) and applied as one value, a straight-line drift, or point to point
 between the windows when the releases differ by a cut. Results are kept in CACHE_DIR.
 """
 import hashlib, json, os, re, subprocess, threading, time, urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CACHE = os.environ.get("CACHE_DIR", "/cache")
@@ -73,19 +75,23 @@ def duration_of(video):
     return float(out) if out else 0.0
 
 
-def window_audio(video, start, path):
+def window_audio(video, start, length, path):
     if not os.path.exists(path):
         subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-ss", str(start), "-i", video,
-                        "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-t", str(WINDOW), path + ".part.wav"],
+                        "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000", "-t", str(length), path + ".part.wav"],
                        check=True, timeout=180)
         os.replace(path + ".part.wav", path)
 
 
-def measure(video, vkey, cues, start, tag):
-    """Offset (seconds to add to the subtitle) around [start, start+WINDOW), or None."""
-    wav = os.path.join(CACHE, f"{vkey}-{int(start)}.wav")
-    window_audio(video, start, wav)
-    inside = [[a - start, b - start, body] for a, b, body in cues if start - 30 <= a < start + WINDOW + 30]
+def measure(video, vkey, cues, start, tag, length=None):
+    """Offset (seconds to add to the subtitle) around [start, start+length), or None."""
+    length = length or WINDOW
+    wav = os.path.join(CACHE, f"{vkey}-{int(start)}-{length}.wav")
+    try:
+        window_audio(video, start, length, wav)
+    except Exception:  # noqa: BLE001
+        return None
+    inside = [[a - start, b - start, body] for a, b, body in cues if start - 30 <= a < start + length + 30]
     if len(inside) < 8:
         return None
     src, out = os.path.join(CACHE, f"{tag}.in.srt"), os.path.join(CACHE, f"{tag}.out.srt")
@@ -100,29 +106,31 @@ def measure(video, vkey, cues, start, tag):
     return float(m.group(1)) if res.returncode == 0 and m else None
 
 
+JUMP = 0.6  # seconds: a bigger change between neighbouring measurements is a cut, not drift
+
+
 def offset_curve(points):
-    """Offset as a function of time: one value, a straight line, or point to point, whichever fits."""
+    """Offset as a function of time. Neighbouring measurements that agree are joined by a straight
+    line (drift); where they jump, the change is a cut between the releases and is applied as a step
+    halfway between them."""
+    points = sorted(points)
     offs = [o for _, o in points]
     if max(offs) - min(offs) <= 0.25:
         c = sorted(offs)[len(offs) // 2]
         return (lambda t: c), f"constant {c:+.2f}s"
-    n = len(points)
-    mt = sum(t for t, _ in points) / n
-    mo = sum(offs) / n
-    var = sum((t - mt) ** 2 for t, _ in points)
-    slope = sum((t - mt) * (o - mo) for t, o in points) / var if var else 0.0
-    line = lambda t: mo + slope * (t - mt)  # noqa: E731
-    if max(abs(line(t) - o) for t, o in points) <= 0.25:
-        return line, f"drift {line(0):+.2f}s -> {line(points[-1][0]):+.2f}s"
 
-    def piecewise(t):
+    def curve(t):
         if t <= points[0][0]:
             return points[0][1]
         for (t0, o0), (t1, o1) in zip(points, points[1:]):
             if t <= t1:
+                if abs(o1 - o0) > JUMP:
+                    return o0 if t < (t0 + t1) / 2 else o1
                 return o0 + (o1 - o0) * (t - t0) / (t1 - t0)
         return points[-1][1]
-    return piecewise, "piecewise " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points)
+    jumps = sum(1 for (_, a), (_, b) in zip(points, points[1:]) if abs(b - a) > JUMP)
+    kind = f"{jumps} cut{'s' if jumps != 1 else ''}" if jumps else "drift"
+    return curve, kind + " " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points)
 
 
 def sync(key, video, srt):
@@ -137,13 +145,23 @@ def sync(key, video, srt):
             # Three windows spread over the episode (away from the very start and the credits), so a
             # drift or a cut between releases is measured where it happens, not guessed from the start.
             starts = [dur * f for f in (0.06, 0.42, 0.78)] if dur >= 30 * 60 else [0.0]
-            points = []
-            for i, s0 in enumerate(starts):
-                off = measure(video, vkey, cues, s0, f"{key[:16]}-{i}")
-                if off is not None and abs(off) <= 20:
-                    points.append((s0 + WINDOW / 2, off))
+            # All windows at once: each is a separate seek + ffsubsync run.
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                found = pool.map(lambda a: (a[1] + WINDOW / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-{a[0]}")),
+                                 list(enumerate(starts)))
+            points = sorted((t, o) for t, o in found if o is not None and abs(o) <= 20)
             if not points:
                 raise RuntimeError("no window could be measured")
+            # Where two measurements jump, sample the stretch between them more finely to place the cut.
+            extra = []
+            for (t0, o0), (t1, o1) in zip(points, points[1:]):
+                if abs(o1 - o0) > JUMP and t1 - t0 > 8 * 60:
+                    extra += [t0 + (t1 - t0) * k / 5 - 120 for k in range(1, 5)]
+            if extra:
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    found = pool.map(lambda a: (a[1] + 120, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}", 240)),
+                                     list(enumerate(extra)))
+                points = sorted(points + [(t, o) for t, o in found if o is not None and abs(o) <= 20])
             curve, desc = offset_curve(points)
             biggest = max(abs(curve(a)) for a, _, _ in cues) if cues else 0
             useful = biggest >= 0.1
@@ -154,7 +172,7 @@ def sync(key, video, srt):
                 os.replace(out + ".part.srt", out)
             with open(meta, "w") as f:
                 json.dump({"points": points, "fit": desc, "synced": useful}, f)
-            log(f"{key[:10]} {desc} ({len(points)}/{len(starts)} windows) "
+            log(f"{key[:10]} {desc} ({len(points)} windows) "
                 f"{'synced' if useful else 'kept as is'} in {time.time() - started:.0f}s")
     except Exception as e:  # noqa: BLE001
         # Not cached: the next request for this subtitle tries again (the caller serves raw meanwhile).
@@ -175,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v2\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v3\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -198,5 +216,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v2 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v3 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
