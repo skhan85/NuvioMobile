@@ -125,7 +125,7 @@ def smooth(points):
     return out
 
 
-def offset_curve(points):
+def offset_curve(points, cues=None):
     """Offset as a function of time. Neighbouring measurements that agree are joined by a straight
     line (drift); where they jump, the change is a cut between the releases and is applied as a step
     halfway between them."""
@@ -135,24 +135,38 @@ def offset_curve(points):
         c = sorted(offs)[len(offs) // 2]
         return (lambda t: c), f"constant {c:+.2f}s"
 
+    # A cut between releases sits at a scene change, which in the subtitle is the longest silence
+    # (gap between two lines) in the stretch between the two measurements. Put the step there.
+    steps = {}
+    for (t0, o0), (t1, o1) in zip(points, points[1:]):
+        if abs(o1 - o0) > JUMP:
+            at = (t0 + t1) / 2
+            if cues:
+                gaps = [(cues[i + 1][0] - cues[i][1], (cues[i][1] + cues[i + 1][0]) / 2)
+                        for i in range(len(cues) - 1) if t0 <= cues[i][1] and cues[i + 1][0] <= t1]
+                if gaps:
+                    at = max(gaps)[1]
+            steps[(t0, t1)] = at
+
     def curve(t):
         if t <= points[0][0]:
             return points[0][1]
         for (t0, o0), (t1, o1) in zip(points, points[1:]):
             if t <= t1:
                 if abs(o1 - o0) > JUMP:
-                    return o0 if t < (t0 + t1) / 2 else o1
+                    return o0 if t < steps[(t0, t1)] else o1
                 return o0 + (o1 - o0) * (t - t0) / (t1 - t0)
         return points[-1][1]
     jumps = sum(1 for (_, a), (_, b) in zip(points, points[1:]) if abs(b - a) > JUMP)
     kind = f"{jumps} cut{'s' if jumps != 1 else ''}" if jumps else "drift"
-    return curve, kind + " " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points)
+    where = "".join(f" cut@{v / 60:.1f}m" for v in steps.values())
+    return curve, kind + " " + " ".join(f"{t / 60:.0f}m:{o:+.2f}s" for t, o in points) + where
 
 
 def publish(key, cues, points, started, final):
     out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
     points = smooth(points) if final else sorted(points)
-    curve, desc = offset_curve(points)
+    curve, desc = offset_curve(points, cues)
     useful = bool(cues) and max(abs(curve(a)) for a, _, _ in cues) >= 0.1
     if useful:
         fixed = [[a + curve(a), b + curve(a), body] for a, b, body in cues]
@@ -221,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v6\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v7\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -244,5 +258,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v6 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v7 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
