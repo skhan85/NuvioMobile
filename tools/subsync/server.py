@@ -5,8 +5,8 @@ POST /sync?v=<video url>&wait=<seconds>   body: the subtitle as SRT text
   202                when it is still working (the caller serves the raw subtitle meanwhile)
   204                when the subtitle needs no change, or could not be synced (serve raw)
 
-v3: the offset is measured in three 6-minute windows (in parallel), plus four 4-minute windows
-between any two that disagree, to place a cut spread over the episode (ffmpeg seeks, so only
+v3: the offset is measured in three 6-minute windows (in parallel), then (in the background) a 4-minute
+window every ~5 minutes; cuts are applied as steps, drift as lines spread over the episode (ffmpeg seeks, so only
 those parts of the file are read) and applied as one value, a straight-line drift, or point to point
 between the windows when the releases differ by a cut. Results are kept in CACHE_DIR.
 """
@@ -189,11 +189,10 @@ def sync(key, video, srt):
             # The three-window result goes out straight away (the iPhone waits ~35 s for it); a finer
             # pass below may then replace it for later fetches.
             publish(key, cues, points, started, final=False)
-            # Where two measurements jump, sample the stretch between them more finely to place the cut.
-            extra = []
-            for (t0, o0), (t1, o1) in zip(points, points[1:]):
-                if abs(o1 - o0) > JUMP and t1 - t0 > 8 * 60:
-                    extra += [t0 + (t1 - t0) * k / 5 - 120 for k in range(1, 5)]
+            # Finer pass (in the background; the first result is already out): a 4-minute window every
+            # ~5 minutes over the whole episode, so every cut and drift is measured where it happens.
+            extra = [x for x in range(120, max(int(dur) - 300, 121), 300)
+                     if all(abs(x + 120 - t) > 150 for t, _ in points)] if dur >= 30 * 60 else []
             if extra:
                 with ThreadPoolExecutor(max_workers=4) as pool:
                     found = pool.map(lambda a: (a[1] + 120, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}", 240)),
@@ -219,7 +218,7 @@ class Handler(BaseHTTPRequestHandler):
         srt = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8", "replace")
         if not video.startswith("http") or "-->" not in srt:
             return self.reply(400)
-        key = hashlib.sha256(("v4\n" + video + "\n" + srt).encode()).hexdigest()
+        key = hashlib.sha256(("v5\n" + video + "\n" + srt).encode()).hexdigest()
         out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
         with lock:
             done = os.path.exists(meta)
@@ -242,5 +241,5 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v4 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v5 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
