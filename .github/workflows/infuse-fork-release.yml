@@ -199,6 +199,11 @@ jobs:
               echo "Set ${key}"
             else
               echo "Skipped ${key} (no secret)"
+              # The app has no TMDB key entry any more: without this secret, artwork, logos and
+              # cast from TMDB are off. Shown as a warning on the run, not just in the log.
+              if [[ "${key}" == TMDB_API_KEY ]]; then
+                echo "::warning title=TMDB key missing::Add a TMDB_API_KEY repository secret (themoviedb.org API key) or TMDB metadata is off in this build."
+              fi
             fi
           done
 
