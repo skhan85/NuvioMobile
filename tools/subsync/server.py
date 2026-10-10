@@ -330,7 +330,10 @@ def publish_offsets(key, cues, offs, desc, started):
 
 def publish(key, cues, points, started, final):
     out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
-    points = smooth(points) if final else sorted(points)
+    # The quick result is smoothed too: with three windows, one that disagrees with the other two
+    # (a loud, dialogue-light stretch) is outvoted instead of being applied as a cut. A real cut is
+    # picked up by the background pass, where neighbouring windows confirm it.
+    points = smooth(points)
     curve, desc = offset_curve(points, cues)
     useful = bool(cues) and max(abs(curve(a)) for a, _, _ in cues) >= 0.1
     if useful:
