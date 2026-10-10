@@ -1,0 +1,164 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
+new file mode 100644
+index 000000000..46669104b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
+@@ -0,0 +1,117 @@
++package com.nuvio.app.features.details
++
++import com.nuvio.app.features.player.PlayerSettingsRepository
++import com.nuvio.app.features.player.SubtitleCacheProvider
++import com.nuvio.app.features.player.SubtitleForwarder
++import com.nuvio.app.features.player.SubtitleLanguageOption
++import com.nuvio.app.features.player.relayUrlWithVideo
++import com.nuvio.app.features.player.warmUpSubtitleSync
++import com.nuvio.app.features.streams.StreamsRepository
++import kotlin.time.TimeMark
++import kotlin.time.TimeSource
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withTimeoutOrNull
++
++/**
++ * Fork: finds sources ahead of time on the detail page.
++ *
++ * A few seconds after a detail page settles on its Play/Resume item, this runs the same stream
++ * search the streams screen would (same request token, so [StreamsRepository.load] skips the repeat
++ * when Play is pressed and the result is there at once).
++ *
++ * When Infuse is the external player and subtitle forwarding is on, it also asks Kuiper to sync the
++ * subtitle Infuse will get with the stream auto-play will pick, without waiting for it. By the time
++ * Play is pressed the synced copy is usually ready, so the "Syncing subtitles…" wait ends at once.
++ *
++ * Each item is searched at most once every ten minutes.
++ */
++object DetailPreload {
++    data class Target(
++        val type: String,
++        val videoId: String,
++        val parentMetaId: String?,
++        val season: Int?,
++        val episode: Int?,
++    ) {
++        val key: String get() = "$type|$videoId|${season ?: ""}|${episode ?: ""}"
++    }
++
++    private const val DWELL_MS = 3_000L
++    private const val REPEAT_AFTER_MS = 10 * 60 * 1_000L
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
++    private var pending: Job? = null
++    private val recent = mutableMapOf<String, TimeMark>()
++
++    /** The page's Play/Resume item changed (or the page appeared). */
++    fun schedule(target: Target?) {
++        cancelPending()
++        target ?: return
++        recent[target.key]?.let { if (it.elapsedNow().inWholeMilliseconds < REPEAT_AFTER_MS) return }
++        pending = scope.launch {
++            delay(DWELL_MS)
++            pending = null
++            recent[target.key] = TimeSource.Monotonic.markNow()
++            run(target)
++        }
++    }
++
++    /** The page went away (Play pressed, back): drop a search that has not started yet. */
++    fun cancelPending() {
++        pending?.cancel()
++        pending = null
++    }
++
++    private suspend fun run(t: Target) {
++        // The detail page's Play opens the streams screen with manualSelection = false.
++        StreamsRepository.load(
++            type = t.type,
++            videoId = t.videoId,
++            parentMetaId = t.parentMetaId,
++            season = t.season,
++            episode = t.episode,
++            manualSelection = false,
++        )
++
++        PlayerSettingsRepository.ensureLoaded()
++        val settings = PlayerSettingsRepository.uiState.value
++        if (!settings.externalPlayerEnabled || settings.externalPlayerId != "infuse") return
++        if (!settings.externalPlayerForwardSubtitles ||
++            settings.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
++        ) return
++
++        val token = StreamsRepository.requestToken(
++            type = t.type,
++            videoId = t.videoId,
++            season = t.season,
++            episode = t.episode,
++            manualSelection = false,
++        )
++        val stream = withTimeoutOrNull(25_000L) {
++            StreamsRepository.uiState.first { it.requestToken == token && it.autoPlayStream != null }.autoPlayStream
++        } ?: return
++        val sourceUrl = stream.playableDirectUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
++            ?: return
++
++        val subtitles = SubtitleForwarder.fetchForExternalPlayer(
++            type = t.type,
++            videoId = t.videoId,
++            preferredLanguage = settings.preferredSubtitleLanguage,
++            secondaryLanguage = settings.secondaryPreferredSubtitleLanguage,
++        ) ?: return
++        // Same steps as prepareExternalPlayerLaunch, so the link warmed here is the link Infuse gets.
++        val first = (SubtitleCacheProvider.cacheForExternalPlayer(subtitles) ?: subtitles)
++            .take(1)
++            .map { relayUrlWithVideo(it.url, sourceUrl) }
++            .firstOrNull()
++            ?.takeIf { it.contains("/v/") }
++            ?: return
++        warmUpSubtitleSync(first)
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+index 2ab71324c..e9d4bdda2 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+@@ -54,6 +54,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.State
+ import androidx.compose.runtime.derivedStateOf
+@@ -888,6 +889,28 @@ fun MetaDetailsScreen(
+                         }
+                     }
+                 }
++                // Fork: find this page's Play/Resume sources ahead of time (DetailPreload).
++                val preloadTarget = when {
++                    shufflePoolEmpty || !isPrimaryPlayEnabled -> null
++                    (meta.type == "series" || hasEpisodes) && seriesAction != null -> DetailPreload.Target(
++                        type = meta.type,
++                        videoId = seriesStreamVideoId ?: seriesAction.videoId,
++                        parentMetaId = meta.id,
++                        season = seriesAction.seasonNumber,
++                        episode = seriesAction.episodeNumber,
++                    )
++                    else -> DetailPreload.Target(
++                        type = meta.type,
++                        videoId = meta.id,
++                        parentMetaId = meta.id,
++                        season = null,
++                        episode = null,
++                    )
++                }
++                DisposableEffect(preloadTarget) {
++                    DetailPreload.schedule(preloadTarget)
++                    onDispose { DetailPreload.cancelPending() }
++                }
+                 val manualPlayHandler = onPlayManually
+                 val showManualPlayOption = manualPlayHandler != null && StreamAutoPlayPolicy.isEffectivelyEnabled(playerSettingsUiState)
+                 val onPrimaryPlayLongClick: (() -> Unit)? = manualPlayHandler

@@ -1,0 +1,172 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
+index 74854dd23..c4c73a5ab 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
+@@ -760,7 +760,7 @@ private fun ContinueWatchingCard(
+                 contentScale = ContentScale.Crop,
+             )
+         }
+-        if (item.shufflePlayback) ShuffleBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
++        ContinueWatchingTopStartBadges(item, Modifier.align(Alignment.TopStart).padding(8.dp))
+         Column(
+             modifier = Modifier
+                 .align(Alignment.BottomStart)
+@@ -953,6 +953,7 @@ private fun ContinueWatchingWideCard(
+                         overflow = TextOverflow.Ellipsis,
+                     )
+                     if (item.shufflePlayback) ShuffleBadge()
++                    RemainingEpisodesBadge(item)
+                     if (item.progressFraction <= 0f && item.seasonNumber != null && item.episodeNumber != null) {
+                         val todayIsoDate = CurrentDateProvider.todayIsoDate()
+                         val badgeText = when {
+@@ -1070,7 +1071,7 @@ private fun ContinueWatchingPosterCard(
+                     contentScale = if (item.isCloudLibraryItem()) ContentScale.Fit else ContentScale.Crop,
+                 )
+             }
+-            if (item.shufflePlayback) ShuffleBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
++            ContinueWatchingTopStartBadges(item, Modifier.align(Alignment.TopStart).padding(8.dp))
+             if (item.progressFraction <= 0f && item.seasonNumber != null && item.episodeNumber != null) {
+                 Box(
+                     modifier = Modifier
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/RemainingEpisodes.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/RemainingEpisodes.kt
+new file mode 100644
+index 000000000..26dcc1682
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/RemainingEpisodes.kt
+@@ -0,0 +1,136 @@
++package com.nuvio.app.features.home.components
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.shuffle.ShuffleBadge
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watchprogress.ContinueWatchingItem
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++import com.nuvio.app.features.watchprogress.WatchProgressRepository
++import kotlin.coroutines.cancellation.CancellationException
++import kotlin.time.TimeMark
++import kotlin.time.TimeSource
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/**
++ * Fork: "N left" on Continue Watching cards — how many aired episodes come after the one on the
++ * card and are not watched yet. Worked out in the background from the series' episode list (the
++ * same metadata the detail page uses); a card shows nothing until its count is known, and nothing
++ * when the count is 0 or the item is a movie.
++ *
++ * Counts are cached per card (series + the episode on it) for half an hour. Watching an episode
++ * moves the card to the next one, which is a new key, so the count follows without a refresh.
++ */
++internal object RemainingEpisodes {
++    private const val MAX_AGE_MS = 30 * 60 * 1_000L
++
++    private val counts = mutableMapOf<String, Pair<Int, TimeMark>>()
++    // One series at a time, so a long row does not fire a burst of metadata requests.
++    private val lock = Mutex()
++
++    fun key(item: ContinueWatchingItem): String? {
++        val s = item.seasonNumber ?: return null
++        val e = item.episodeNumber ?: return null
++        return "${item.parentMetaId}|$s:$e"
++    }
++
++    fun cached(item: ContinueWatchingItem): Int? = key(item)?.let { counts[it]?.first }
++
++    suspend fun count(item: ContinueWatchingItem): Int? {
++        val key = key(item) ?: return null
++        val season = item.seasonNumber ?: return null
++        val episode = item.episodeNumber ?: return null
++        counts[key]?.let { (n, at) -> if (at.elapsedNow().inWholeMilliseconds < MAX_AGE_MS) return n }
++        return lock.withLock {
++            counts[key]?.let { (n, at) -> if (at.elapsedNow().inWholeMilliseconds < MAX_AGE_MS) return@withLock n }
++            val type = item.parentMetaType
++            val meta = MetaDetailsRepository.peek(type, item.parentMetaId)?.takeIf { it.videos.isNotEmpty() }
++                ?: try {
++                    MetaDetailsRepository.fetch(type, item.parentMetaId, cacheResult = true)
++                } catch (e: CancellationException) {
++                    throw e
++                } catch (e: Throwable) {
++                    null
++                }
++            val videos = meta?.videos.orEmpty()
++            if (videos.isEmpty()) return@withLock null
++
++            val today = CurrentDateProvider.todayIsoDate().take(10)
++            val n = videos.count { video ->
++                val s = video.season ?: return@count false
++                val e = video.episode ?: return@count false
++                // Specials only count when the card itself is in the specials season.
++                if (s == 0 && season != 0) return@count false
++                if (s < season || (s == season && e <= episode)) return@count false
++                val released = video.released?.trim()?.takeIf { it.length >= 10 }?.take(10)
++                    ?: return@count false
++                if (released > today) return@count false
++                val watched = WatchedRepository.isWatched(id = item.parentMetaId, type = type, season = s, episode = e) ||
++                    WatchProgressRepository.progressForVideo(
++                        videoId = "${item.parentMetaId}:$s:$e",
++                        parentMetaId = item.parentMetaId,
++                        seasonNumber = s,
++                        episodeNumber = e,
++                    )?.isEffectivelyCompleted == true
++                !watched
++            }
++            counts[key] = n to TimeSource.Monotonic.markNow()
++            n
++        }
++    }
++}
++
++/** The "N left" pill for a card, or nothing. */
++@Composable
++internal fun RemainingEpisodesBadge(item: ContinueWatchingItem, modifier: Modifier = Modifier) {
++    val key = RemainingEpisodes.key(item) ?: return
++    var count by remember(key) { mutableStateOf(RemainingEpisodes.cached(item)) }
++    LaunchedEffect(key) { count = RemainingEpisodes.count(item) }
++    val n = count ?: return
++    if (n <= 0) return
++    Box(
++        modifier = modifier
++            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
++            .padding(horizontal = 8.dp, vertical = 4.dp),
++    ) {
++        Text(
++            text = "$n left",
++            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
++            color = Color.White,
++            maxLines = 1,
++        )
++    }
++}
++
++/** The shuffle badge and the "N left" pill, side by side, for a card's top-left corner. */
++@Composable
++internal fun ContinueWatchingTopStartBadges(item: ContinueWatchingItem, modifier: Modifier = Modifier) {
++    Row(
++        modifier = modifier,
++        horizontalArrangement = Arrangement.spacedBy(6.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        if (item.shufflePlayback) ShuffleBadge()
++        RemainingEpisodesBadge(item)
++    }
++}
