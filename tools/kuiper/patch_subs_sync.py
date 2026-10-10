@@ -6,8 +6,8 @@ for a Strange New Worlds episode were 0.8-1.2 s early and drifted 0.1%). The Nuv
 the video link in the relay path:
     /subs/<base64url subtitle link>/v/<base64url video link>/<name>.srt
 and this patch hands such subtitles to the `subsync` container (ffsubsync against the video's
-audio). It waits up to 15 s (or ?wait=N, max 45, which Nuvio uses to warm it up before Infuse
-opens) and serves the synced file when ready, otherwise the original; the synced copy is cached,
+audio). It does not wait by default (?wait=N, max 45, is how Nuvio warms it up ahead of time). It
+serves the synced file when ready, otherwise the original; the synced copy is cached,
 so it is used from the next fetch on. Links without /v/ behave exactly as before.
 
 Needs patch_subs_proxy.py applied first. Idempotent; backs up index.js first.
@@ -33,7 +33,7 @@ new_log = r"""        // [subs-sync] Line it up with the video's audio when the 
         if (req.params[1]) {
             try {
                 const video = Buffer.from(req.params[1], 'base64url').toString('utf8');
-                const wait = Math.min(Math.max(parseInt(req.query.wait, 10) || 15, 0), 45);
+                const wait = Math.min(Math.max(parseInt(req.query.wait, 10) || 0, 0), 45);
                 const s = await axios.post(`${process.env.SUBSYNC_URL || 'http://subsync:8080'}/sync?v=${encodeURIComponent(video)}&wait=${wait}`,
                     text, { headers: { 'Content-Type': 'text/plain; charset=utf-8' }, timeout: (wait + 10) * 1000,
                         proxy: false, responseType: 'text', transformResponse: x => x, validateStatus: () => true });

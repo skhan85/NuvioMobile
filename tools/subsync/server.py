@@ -5,6 +5,12 @@ POST /sync?v=<video url>&wait=<seconds>   body: the subtitle as SRT text
   202                when it is still working (the caller serves the raw subtitle meanwhile)
   204                when the subtitle needs no change, or could not be synced (serve raw)
 
+v8.1: nothing waits for the sync any more (the apps open Infuse at once and start the sync ahead of
+time), so the first answer has to be quick on any file: the three first windows are sized by data,
+not minutes (a 90 Mbps remux gets 60 s windows, a web release the full 6 minutes); only the quick pass
+takes a job slot, so a long line-by-line pass can never hold up the next title; and files over
+FULL_MAX_GB skip the whole-file read and use spaced windows instead.
+
 v3: the offset is measured in three 6-minute windows (in parallel), then (in the background) overlapping
 6-minute windows every 4 minutes, median-smoothed; cuts are applied as steps, drift as lines spread over the episode (ffmpeg seeks, so only
 those parts of the file are read) and applied as one value, a straight-line drift, or point to point
@@ -16,7 +22,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CACHE = os.environ.get("CACHE_DIR", "/cache")
 os.makedirs(CACHE, exist_ok=True)
-slots = threading.BoundedSemaphore(int(os.environ.get("MAX_JOBS", "2")))
+slots = threading.BoundedSemaphore(int(os.environ.get("MAX_JOBS", "2")))      # quick passes
+full_slots = threading.BoundedSemaphore(int(os.environ.get("MAX_FULL_JOBS", "1")))  # background passes
 lock = threading.Lock()
 running = {}  # key -> threading.Event
 
@@ -40,6 +47,9 @@ def prune():
 
 SRT_TIME = re.compile(r"(\d+):(\d{2}):(\d{2})[,.](\d{3})")
 WINDOW = int(os.environ.get("WINDOW_SECONDS", "360"))
+MIN_WINDOW = int(os.environ.get("MIN_WINDOW_SECONDS", "60"))
+WINDOW_MB = float(os.environ.get("WINDOW_MB", "200"))       # data read per quick window
+FULL_MAX_GB = float(os.environ.get("FULL_MAX_GB", "25"))    # bigger files skip the whole-file read
 
 
 def parse_srt(text):
@@ -69,10 +79,28 @@ def write_srt(cues):
     return "\n\n".join(f"{i}\n{fmt(a)} --> {fmt(b)}\n{body}" for i, (a, b, body) in enumerate(cues, 1)) + "\n"
 
 
-def duration_of(video):
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video],
-                         capture_output=True, text=True, timeout=60).stdout.strip()
-    return float(out) if out else 0.0
+def probe(video):
+    """(duration s, size bytes, bit rate bits/s); 0 for anything the file does not report."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration,size,bit_rate",
+                          "-of", "json", video], capture_output=True, text=True, timeout=60).stdout
+    fmt = (json.loads(out or "{}").get("format") or {})
+
+    def num(k):
+        try:
+            return float(fmt.get(k))
+        except (TypeError, ValueError):  # missing or "N/A"
+            return 0.0
+    dur, size, rate = num("duration"), num("size"), num("bit_rate")
+    if not rate and dur and size:
+        rate = size * 8 / dur
+    return dur, size, rate
+
+
+def window_length(rate):
+    """Seconds per window so each reads about WINDOW_MB of the file (video included)."""
+    if not rate:
+        return WINDOW
+    return int(min(WINDOW, max(MIN_WINDOW, WINDOW_MB * 8e6 / rate)))
 
 
 def window_audio(video, start, length, path):
@@ -321,56 +349,69 @@ def publish(key, cues, points, started, final):
 
 
 def sync(key, video, srt):
-    out, meta = os.path.join(CACHE, f"{key}.srt"), os.path.join(CACHE, f"{key}.json")
     try:
-        with slots:
+        with slots:  # the quick pass only: the next title never waits behind a background pass
             prune()
             started = time.time()
             cues = parse_srt(srt)
             vkey = hashlib.sha256(video.encode()).hexdigest()[:24]
-            dur = duration_of(video)
+            dur, size, rate = probe(video)
+            win = window_length(rate)
             # Three windows spread over the episode (away from the very start and the credits), so a
             # drift or a cut between releases is measured where it happens, not guessed from the start.
             starts = [dur * f for f in (0.06, 0.42, 0.78)] if dur >= 30 * 60 else [0.0]
             # All windows at once: each is a separate seek + ffsubsync run.
             with ThreadPoolExecutor(max_workers=4) as pool:
-                found = pool.map(lambda a: (a[1] + WINDOW / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-{a[0]}")),
+                found = pool.map(lambda a: (a[1] + win / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-{a[0]}", win)),
                                  list(enumerate(starts)))
             points = sorted((t, o) for t, o in found if o is not None and abs(o) <= 20)
-            # The three-window result goes out straight away (the iPhone waits ~35 s for it); the final
-            # pass below then replaces it for later fetches.
+            log(f"{key[:10]} {size / 1e9:.1f} GB at {rate / 1e6:.0f} Mbps: {len(starts)} windows of {win}s")
+            # The three-window result goes out straight away; the final pass below then replaces it for
+            # later fetches.
             if points:
                 publish(key, cues, points, started, final=False)
+            else:
+                with lock:
+                    if key in running:
+                        running[key].set()
+        with full_slots:
             # Final pass (in the background; the first result is already out): the whole episode,
             # line by line. The best of the original, the quick result and the line-by-line result
             # (by how much speech the lines land on) is kept, so this can never make it worse.
-            try:
-                speech = speech_track(video)
-                cands = {"original": [0.0] * len(cues)}
-                if points:
-                    quick, _ = offset_curve(sorted(points), cues)
-                    cands["quick"] = [quick(a) for a, _, _ in cues]
-                full = align_dp(cues, speech)
-                if full:
-                    cands["line-by-line"] = full
-                scores = {k: overlap_score(cues, speech, v) for k, v in cands.items()}
-                pick = max(scores, key=scores.get)
-                ranking = " ".join(f"{k}={v}" for k, v in sorted(scores.items(), key=lambda kv: -kv[1]))
-                publish_offsets(key, cues, cands[pick], f"{pick}: {describe(cues, cands[pick])} [{ranking}]", started)
-                return
-            except Exception as e:  # noqa: BLE001
-                log(f"{key[:10]} line-by-line pass failed ({str(e)[:120]}); measuring windows instead")
-            # Fallback: overlapping 6-minute
-            # windows every 4 minutes over the whole episode, so every cut and drift is measured where
-            # it happens and one bad reading can be outvoted by its neighbours.
-            extra = [x for x in range(60, max(int(dur) - 420, 61), 240)
-                     if all(abs(x + WINDOW / 2 - t) > 90 for t, _ in points)] if dur >= 30 * 60 else []
+            # Files over FULL_MAX_GB (remuxes) are not read end to end; spaced windows instead.
+            if not size or size <= FULL_MAX_GB * 1e9:
+                try:
+                    speech = speech_track(video)
+                    cands = {"original": [0.0] * len(cues)}
+                    if points:
+                        quick, _ = offset_curve(sorted(points), cues)
+                        cands["quick"] = [quick(a) for a, _, _ in cues]
+                    full = align_dp(cues, speech)
+                    if full:
+                        cands["line-by-line"] = full
+                    scores = {k: overlap_score(cues, speech, v) for k, v in cands.items()}
+                    pick = max(scores, key=scores.get)
+                    ranking = " ".join(f"{k}={v}" for k, v in sorted(scores.items(), key=lambda kv: -kv[1]))
+                    publish_offsets(key, cues, cands[pick], f"{pick}: {describe(cues, cands[pick])} [{ranking}]", started)
+                    return
+                except Exception as e:  # noqa: BLE001
+                    log(f"{key[:10]} line-by-line pass failed ({str(e)[:120]}); measuring windows instead")
+            # Fallback: overlapping windows over the whole episode (every 4 minutes, or spaced out to at
+            # most ~20 on big files), so every cut and drift is measured where it happens and one bad
+            # reading can be outvoted by its neighbours.
+            spacing = max(240, int(dur / 20)) if size > FULL_MAX_GB * 1e9 else 240
+            extra = [x for x in range(60, max(int(dur) - win - 60, 61), spacing)
+                     if all(abs(x + win / 2 - t) > 90 for t, _ in points)] if dur >= 30 * 60 else []
             if extra:
                 with ThreadPoolExecutor(max_workers=4) as pool:
-                    found = pool.map(lambda a: (a[1] + WINDOW / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}")),
+                    found = pool.map(lambda a: (a[1] + win / 2, measure(video, vkey, cues, a[1], f"{key[:16]}-x{a[0]}", win)),
                                      list(enumerate(extra)))
                 points = sorted(points + [(t, o) for t, o in found if o is not None and abs(o) <= 20])
-            publish(key, cues, points, started, final=True)
+            if points:
+                publish(key, cues, points, started, final=True)
+            else:
+                # Not cached: the next request for this subtitle tries again.
+                log(f"{key[:10]} final: no window could be read")
     except Exception as e:  # noqa: BLE001
         # Not cached: the next request for this subtitle tries again (the caller serves raw meanwhile).
         log(f"{key[:10]} failed: {str(e)[:200]}")
@@ -413,5 +454,6 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-log(f"subsync v8 listening on :8080, cache {CACHE}, 3 windows of {WINDOW // 60} min per video")
+log(f"subsync v8.1 listening on :8080, cache {CACHE}, 3 windows of {MIN_WINDOW}-{WINDOW}s (~{WINDOW_MB:.0f} MB each), "
+    f"whole-file pass up to {FULL_MAX_GB:.0f} GB")
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

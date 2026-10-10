@@ -1,0 +1,32 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
+index 55a062a64..37c9974a6 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
+@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.async
+ import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withTimeoutOrNull
+ import kotlinx.serialization.json.addJsonObject
+ import kotlinx.serialization.json.buildJsonArray
+@@ -85,8 +86,10 @@ suspend fun prepareExternalPlayerLaunch(
+                     .map { it.copy(url = relayUrlWithVideo(it.url, request.sourceUrl)) }
+                 forwarded.firstOrNull()?.let { first ->
+                     if (first.url.contains("/v/")) {
+-                        onOverlayMessage("Syncing subtitles…")
+-                        warmUpSubtitleSync(first.url)
++                        // Fork: no wait — Infuse opens at once. The sync is usually already done
++                        // (started from the detail page or the Continue Watching row); this kicks it
++                        // in the background so the next play of this file gets the synced copy.
++                        subtitleSyncScope.launch { warmUpSubtitleSync(first.url) }
+                     }
+                 }
+                 forwarded
+@@ -174,3 +177,6 @@ internal fun List<SkipInterval>.toSkipSegmentsJson(): String =
+             }
+         }
+     }.toString()
++
++/** Fork: background subtitle-sync warm-ups that must outlive the launch that started them. */
++private val subtitleSyncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
