@@ -1,9 +1,16 @@
-"""Infuse -> Nuvio Sync bridge.
+"""Infuse -> Nuvio Sync bridge (and Scrob).
 
 Infuse talks to Trakt at api.trakt.tv / apiz.trakt.tv. Control D points those names at this
 server, which holds a certificate the user's devices trust. Every request is passed through
 unchanged to the real Trakt (so Infuse's Trakt keeps working), and scrobble start/stop reports
 are also turned into an exact playback position and saved to the user's Nuvio Sync profile.
+
+When SCROB_URL and SCROB_API_KEY are set, the same start/pause/stop reports also go to Scrob's
+Kodi webhook as they happen, so Scrob (and the Simkl/WeTrakr/MDBList accounts it feeds) sees the
+play at once instead of on its next 15-minute pull from Nuvio. Scrob's duplicate check (same
+title within a few minutes) keeps that later pull from counting the play twice. Only plays saved
+to SCROB_PROFILE_NAME (default: the bridge's default Nuvio profile) are sent, so a Kids profile
+stays out of Scrob.
 """
 
 import datetime
@@ -42,6 +49,10 @@ TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 WATCHED_AT_PERCENT = float(os.environ.get("WATCHED_AT_PERCENT", "90"))
 # Infuse sends exactly this progress on stop when you quit past it without finishing.
 INFUSE_CAP_PERCENT = 79.0
+# Scrob (optional). SCROB_URL is the public address, e.g. https://scrob.example.com.
+SCROB_URL = os.environ.get("SCROB_URL", "").rstrip("/")
+SCROB_API_KEY = os.environ.get("SCROB_API_KEY", "")
+SCROB_PROFILE_NAME = os.environ.get("SCROB_PROFILE_NAME", "")
 
 TRAKT_HOSTS = {"api.trakt.tv", "apiz.trakt.tv"}
 HOP_BY_HOP = {
@@ -432,6 +443,56 @@ def clock(ms):
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
+# ---------------------------------------------------------------------------
+# Scrob: the same report, in the shape of Scrob's Kodi webhook.
+# ---------------------------------------------------------------------------
+SCROB_EVENTS = {"start": "playback_started", "pause": "playback_paused", "stop": "playback_stopped"}
+_scrob_profile = None
+
+
+def scrob_profile():
+    """The Nuvio profile whose plays go to Scrob."""
+    global _scrob_profile
+    if _scrob_profile is None:
+        wanted = norm(SCROB_PROFILE_NAME)
+        match = [p for p in NUVIO.profiles() if norm(p.get("name")) == wanted] if wanted else []
+        if wanted and not match:
+            log(f"WARNING: no profile named '{SCROB_PROFILE_NAME}' for Scrob, using the default profile")
+        _scrob_profile = int(match[0].get("profile_index")) if match else NUVIO.profile()
+    return _scrob_profile
+
+
+def send_to_scrob(action, info, position_ms, duration_ms, label):
+    if not (SCROB_URL and SCROB_API_KEY):
+        return
+    item = {"type": "episode" if info["season"] is not None else "movie", "title": info["title"]}
+    if info["season"] is not None:
+        # Scrob finds the show from its IMDb id (or the name); a TMDB id on an episode would be
+        # read as the episode's own id, so it is left out.
+        item.update(showtitle=info["title"], season=info["season"], episode=info["episode"])
+        if info["imdb"]:
+            item["uniqueid"] = {"imdb": info["imdb"]}
+    else:
+        item["uniqueid"] = {k: str(v) for k, v in (("tmdb", info["tmdb"]), ("imdb", info["imdb"])) if v}
+    session = f"infuse-{info['tmdb']}-{info['season']}-{info['episode']}"
+    payload = {
+        "event": SCROB_EVENTS[action],
+        "item": item,
+        "position_seconds": position_ms // 1000,
+        "total_seconds": duration_ms // 1000,
+        "session_id": session,
+    }
+    try:
+        # The ?api_key= form is the one Scrob documents for its public /api/proxy/ address.
+        url = f"{SCROB_URL}/api/proxy/webhooks/kodi?{urllib.parse.urlencode({'api_key': SCROB_API_KEY})}"
+        result = http_json(url, method="POST", payload=payload, timeout=20)
+        HEALTH["scrob_error"] = None
+        log(f"  sent {label} ({action}) to Scrob: {(result or {}).get('status', '?')}")
+    except Exception as e:
+        HEALTH["scrob_error"] = str(e)[:200]
+        log(f"  Scrob update failed: {e}")
+
+
 def handle_scrobble(action, body):
     try:
         progress = float(body.get("progress", 0))
@@ -461,6 +522,8 @@ def handle_scrobble(action, body):
             if saved >= entry["position"]:
                 log(f"  {label}: Infuse capped its report at 79% - kept Nuvio's {clock(saved)}")
                 HEALTH["last_error"] = None
+                if profile == scrob_profile():
+                    send_to_scrob(action, info, saved, entry["duration"], label)
                 return
         NUVIO.push_progress(profile, entry)
         HEALTH["last_error"] = None
@@ -475,6 +538,8 @@ def handle_scrobble(action, body):
                 "watched_at": now_ms(),
             })
             log(f"  marked {label} watched")
+        if profile == scrob_profile():
+            send_to_scrob(action, info, entry["position"], entry["duration"], label)
     except Exception as e:
         HEALTH["last_error"] = str(e)[:200]
         log(f"  Nuvio update failed: {e}")
@@ -487,7 +552,7 @@ SCROBBLES = queue.Queue()
 
 # For the Uptime Kuma check (GET https://<pi>/bridge-health): the worker thread must be alive
 # and the last Nuvio write must not have failed.
-HEALTH = {"worker": None, "last_error": None}
+HEALTH = {"worker": None, "last_error": None, "scrob_error": None}
 
 
 def health_status():
@@ -496,6 +561,9 @@ def health_status():
         return 503, "scrobble worker stopped"
     if HEALTH["last_error"]:
         return 503, f"last Nuvio write failed: {HEALTH['last_error']}"
+    if HEALTH["scrob_error"]:
+        # Nuvio is what resume depends on; a Scrob failure is reported but does not fail the check.
+        return 200, f"ok, {SCROBBLES.qsize()} queued (last Scrob send failed: {HEALTH['scrob_error']})"
     return 200, f"ok, {SCROBBLES.qsize()} queued"
 
 
@@ -603,7 +671,8 @@ def main():
     HEALTH["worker"].start()
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(CERT_FILE, KEY_FILE)
-    log(f"Trakt bridge listening on :{LISTEN_PORT}")
+    log(f"Trakt bridge listening on :{LISTEN_PORT}"
+        + (f"; also sending plays to Scrob at {SCROB_URL}" if SCROB_URL and SCROB_API_KEY else ""))
     Server(("0.0.0.0", LISTEN_PORT), Handler, ctx).serve_forever()
 
 
