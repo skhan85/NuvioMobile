@@ -1,0 +1,56 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
+index 46669104b..2bb2de294 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
+@@ -50,12 +50,12 @@ object DetailPreload {
+     private val recent = mutableMapOf<String, TimeMark>()
+ 
+     /** The page's Play/Resume item changed (or the page appeared). */
+-    fun schedule(target: Target?) {
++    fun schedule(target: Target?, dwellMs: Long = DWELL_MS) {
+         cancelPending()
+         target ?: return
+         recent[target.key]?.let { if (it.elapsedNow().inWholeMilliseconds < REPEAT_AFTER_MS) return }
+         pending = scope.launch {
+-            delay(DWELL_MS)
++            delay(dwellMs)
+             pending = null
+             recent[target.key] = TimeSource.Monotonic.markNow()
+             run(target)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
+index c4c73a5ab..cebc33bd9 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
+@@ -27,6 +27,8 @@ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import com.nuvio.app.features.shuffle.ShuffleBadge
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import com.nuvio.app.features.details.DetailPreload
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.key
+ import androidx.compose.runtime.remember
+@@ -344,6 +346,23 @@ private fun HomeContinueWatchingSectionContent(
+         }
+         val displayEntries = disintegration.sync(dataSourceKey, items, disintegrationRequest)
+ 
++        // Fork: tapping a card opens the streams screen straight from Home (no detail page), so the
++        // first card (the likeliest tap) starts its source search and subtitle sync ahead of time.
++        val preloadItem = items.firstOrNull()?.takeIf { !it.isCloudLibraryItem() }
++        LaunchedEffect(preloadItem?.let(::continueWatchingItemKey)) {
++            val item = preloadItem ?: return@LaunchedEffect
++            DetailPreload.schedule(
++                DetailPreload.Target(
++                    type = item.parentMetaType,
++                    videoId = item.videoId,
++                    parentMetaId = item.parentMetaId,
++                    season = item.seasonNumber,
++                    episode = item.episodeNumber,
++                ),
++                dwellMs = 1_000L,
++            )
++        }
++
+         NuvioShelfSection(
+             title = title ?: stringResource(Res.string.compose_settings_page_continue_watching),
+             entries = displayEntries,
