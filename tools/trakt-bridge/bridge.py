@@ -485,7 +485,10 @@ def send_to_scrob(action, info, position_ms, duration_ms, label):
     try:
         # The ?api_key= form is the one Scrob documents for its public /api/proxy/ address.
         url = f"{SCROB_URL}/api/proxy/webhooks/kodi?{urllib.parse.urlencode({'api_key': SCROB_API_KEY})}"
-        result = http_json(url, method="POST", payload=payload, timeout=20)
+        # Cloudflare (in front of Scrob) answers 403 to Python's default "Python-urllib" agent.
+        result = http_json(url, method="POST", payload=payload, timeout=20,
+                           headers={"User-Agent": "trakt-bridge/1.0 (+Scrob Kodi webhook)",
+                                    "Accept": "application/json"})
         HEALTH["scrob_error"] = None
         log(f"  sent {label} ({action}) to Scrob: {(result or {}).get('status', '?')}")
     except Exception as e:
