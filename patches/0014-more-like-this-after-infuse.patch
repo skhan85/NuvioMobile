@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 4a8b3a9f2..590408df9 100644
+index e68d2a96..bc8e3f15 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -143,6 +143,8 @@ import com.nuvio.app.features.party.partyMediaKey
@@ -11,7 +11,7 @@ index 4a8b3a9f2..590408df9 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -808,6 +810,7 @@ internal fun MainAppContent(
+@@ -806,6 +808,7 @@ internal fun MainAppContent(
              val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
@@ -19,7 +19,7 @@ index 4a8b3a9f2..590408df9 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -2423,6 +2426,21 @@ internal fun MainAppContent(
+@@ -2422,6 +2425,21 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  
@@ -43,7 +43,7 @@ index 4a8b3a9f2..590408df9 100644
                      .align(Alignment.TopCenter)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt
 new file mode 100644
-index 000000000..98d1bae8a
+index 00000000..98d1bae8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt
 @@ -0,0 +1,116 @@

@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa16..57b79711f 100644
+index e8916fa1..57b79711 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -147,15 +147,35 @@ private fun CollectionFolderCard(
@@ -48,7 +48,7 @@ index e8916fa16..57b79711f 100644
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
-index 4a28dd1da..d44d85099 100644
+index 4a28dd1d..d44d8509 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
 @@ -26,22 +26,27 @@ internal actual fun NuvioAsyncImage(

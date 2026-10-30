@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index daf68d09e..98830b293 100644
+index daf68d09..98830b29 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 @@ -145,6 +145,8 @@ internal data class AppTabRequests(
@@ -30,10 +30,10 @@ index daf68d09e..98830b293 100644
              }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index f12f6956e..c89dc9668 100644
+index 8017a500..41bb4770 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -1659,6 +1659,18 @@ internal fun MainAppContent(
+@@ -1658,6 +1658,18 @@ internal fun MainAppContent(
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
                                  onPosterClick = navController::openPreview,
@@ -53,7 +53,7 @@ index f12f6956e..c89dc9668 100644
                                      openPosterActions(PosterActionTarget(preview = meta))
                                  },
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-index 78eaf6776..3ac89e905 100644
+index 78eaf677..3ac89e90 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
 @@ -47,6 +47,11 @@ object ForkHomeSettings {
@@ -87,7 +87,7 @@ index 78eaf6776..3ac89e905 100644
          ensureLoaded()
          _netflixHome.value = enabled
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-index b29182e73..b5f88374e 100644
+index b29182e7..b5f88374 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 @@ -187,3 +187,113 @@ internal fun ForkPlayCircle(size: Dp, modifier: Modifier = Modifier) {
@@ -205,7 +205,7 @@ index b29182e73..b5f88374e 100644
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 29f46048e..db9d8616d 100644
+index 29f46048..db9d8616 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,5 +1,6 @@
@@ -271,7 +271,7 @@ index 29f46048e..db9d8616d 100644
  }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-index 0f141e6ab..7aaefdeeb 100644
+index 0f141e6a..7aaefdee 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 @@ -340,6 +340,19 @@ internal fun LazyListScope.homescreenSettingsContent(
@@ -295,10 +295,10 @@ index 0f141e6ab..7aaefdeeb 100644
                          SettingsSwitchRow(
                              title = "Card Tags",
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 713021f56..1e847a92a 100644
+index 3077e3cb..f88c7e73 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-@@ -406,7 +406,9 @@ object TmdbMetadataService {
+@@ -417,7 +417,9 @@ object TmdbMetadataService {
          fallbackName: String? = null,
      ): TmdbEntityBrowseData? = withContext(Dispatchers.Default) {
          val settings = TmdbSettingsRepository.snapshot()
@@ -309,7 +309,7 @@ index 713021f56..1e847a92a 100644
          val language = normalizeTmdbLanguage(settings.language)
          val normalizedSourceType = normalizeEntitySourceType(sourceType)
          val cacheKey = "${entityKind.routeValue}:$entityId:$normalizedSourceType:$language"
-@@ -1305,6 +1307,12 @@ object TmdbMetadataService {
+@@ -1317,6 +1319,12 @@ object TmdbMetadataService {
       * beside it. Movies: "Recently Added" when the digital release was in the last 30 days.
       * Returns null when TMDB can't be reached, (null, null) when there's nothing to tag.
       */
@@ -322,7 +322,7 @@ index 713021f56..1e847a92a 100644
      suspend fun forkFreshness(id: String, type: String): Pair<String?, String?>? {
          val mediaType = if (type.equals("series", true) || type.equals("tv", true)) "tv" else "movie"
          val tmdbId = runCatching { TmdbService.ensureTmdbId(id, mediaType) }.getOrNull()
-@@ -2213,6 +2221,11 @@ private data class TmdbReleaseDate(
+@@ -2226,6 +2234,11 @@ private data class TmdbReleaseDate(
      val certification: String? = null,
  )
  

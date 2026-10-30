@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index f2d89969e..f12f6956e 100644
+index 50cabe1c..8017a500 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -105,6 +105,7 @@ import com.nuvio.app.features.cloud.playbackVideoId
@@ -10,7 +10,7 @@ index f2d89969e..f12f6956e 100644
  import com.nuvio.app.features.details.MetaDetailsRepository
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import com.nuvio.app.features.downloads.DownloadItem
-@@ -927,7 +928,12 @@ internal fun MainAppContent(
+@@ -925,7 +926,12 @@ internal fun MainAppContent(
              }
  
              val baseRequest = launch.toExternalPlayerPlaybackRequest()
@@ -23,7 +23,7 @@ index f2d89969e..f12f6956e 100644
                  !playerSettingsUiState.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
              val shouldSendSkipSegments = playerSettingsUiState.externalPlayerSendSkipSegments
              if (shouldForwardSubtitles) {
-@@ -940,7 +946,7 @@ internal fun MainAppContent(
+@@ -938,7 +944,7 @@ internal fun MainAppContent(
                  type = launch.contentType ?: launch.parentMetaType,
                  videoId = launch.videoId ?: launch.parentMetaId,
                  contentId = launch.parentMetaId,
@@ -33,7 +33,7 @@ index f2d89969e..f12f6956e 100644
                  preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                  secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
-index 2bb2de294..cfa7b21b3 100644
+index 2bb2de29..cfa7b21b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
 @@ -82,6 +82,9 @@ object DetailPreload {

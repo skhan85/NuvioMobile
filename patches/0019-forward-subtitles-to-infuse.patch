@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
-index 49555442f..9435176e9 100644
+index 49555442..9435176e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 @@ -128,7 +128,7 @@ internal fun buildInfusePlaybackUrl(request: ExternalPlayerPlaybackRequest, sess
@@ -26,31 +26,31 @@ index 49555442f..9435176e9 100644
 +        .groupBy { it.lang.lowercase() }
 +        .values
 +        .flatMap { it.take(INFUSE_MAX_SUBTITLES_PER_LANGUAGE) }
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-index b5264d166..0c411a5bf 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackSettingsPage.kt
-@@ -508,7 +508,8 @@ private fun PlaybackSettingsSection(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
+index dd9b385c..7899c90d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
+@@ -66,7 +66,8 @@ internal fun PlaybackPlayerSettings(
                          onClick = { showExternalPlayerAppDialog = true },
                      )
                  }
--                if (!isIos && autoPlayPlayerSettings.externalPlayerEnabled) {
+-                if (!isIos && settings.externalPlayerEnabled) {
 +                // Fork: Infuse and VLC take subtitle URLs too, so iOS gets the forwarding toggle.
-+                if (autoPlayPlayerSettings.externalPlayerEnabled) {
++                if (settings.externalPlayerEnabled) {
                      SettingsGroupDivider(isTablet = isTablet)
                      SettingsSwitchRow(
                          title = stringResource(Res.string.settings_playback_external_player_forward_subtitles),
-@@ -517,6 +518,8 @@ private fun PlaybackSettingsSection(
+@@ -75,6 +76,8 @@ internal fun PlaybackPlayerSettings(
                          isTablet = isTablet,
                          onCheckedChange = PlayerSettingsRepository::setExternalPlayerForwardSubtitles,
                      )
 +                }
-+                if (!isIos && autoPlayPlayerSettings.externalPlayerEnabled) {
++                if (!isIos && settings.externalPlayerEnabled) {
                      SettingsGroupDivider(isTablet = isTablet)
                      SettingsSwitchRow(
                          title = stringResource(Res.string.settings_playback_external_player_send_skip_segments),
 diff --git a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
-index af9b18042..56bded815 100644
+index af9b1804..56bded81 100644
 --- a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
 +++ b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
 @@ -41,6 +41,17 @@ class InfusePlaybackTest {

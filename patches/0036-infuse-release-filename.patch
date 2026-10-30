@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
-index bd5d1226f..bcea4a747 100644
+index bd5d1226..bcea4a74 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 @@ -113,6 +113,7 @@ internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlayb
@@ -11,7 +11,7 @@ index bd5d1226f..bcea4a747 100644
  }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt
-index 1129a5888..ecaf5017e 100644
+index 1129a588..ecaf5017 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt
 @@ -27,6 +27,8 @@ data class ExternalPlayerPlaybackRequest(
@@ -24,7 +24,7 @@ index 1129a5888..ecaf5017e 100644
      /**
       * Builds a display title for external players.
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
-index 9435176e9..a4d5bc8ba 100644
+index 9435176e..a4d5bc8b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
 @@ -127,7 +127,7 @@ internal fun buildInfusePlaybackUrl(request: ExternalPlayerPlaybackRequest, sess
@@ -61,7 +61,7 @@ index 9435176e9..a4d5bc8ba 100644
 +    return raw
 +}
 diff --git a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
-index 56bded815..6ea25eda8 100644
+index 56bded81..6ea25eda 100644
 --- a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
 +++ b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
 @@ -171,4 +171,26 @@ class InfusePlaybackTest {

@@ -1,6 +1,6 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.android.kt
 new file mode 100644
-index 000000000..f2ccd0c75
+index 00000000..f2ccd0c7
 --- /dev/null
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.android.kt
 @@ -0,0 +1,4 @@
@@ -9,7 +9,7 @@ index 000000000..f2ccd0c75
 +/** Android players follow redirects themselves. */
 +internal actual suspend fun resolveExternalStreamUrl(url: String): String = url
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
-index cd486bd98..bd5d1226f 100644
+index cd486bd9..bd5d1226 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 @@ -104,7 +104,7 @@ internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlayb
@@ -40,7 +40,7 @@ index cd486bd98..bd5d1226f 100644
      val meta = MetaDetailsRepository.peek(parentMetaType, parentMetaId) ?: return null
      val episodeRuntimeMinutes = meta.videos
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 093322e12..4d079076f 100644
+index 2a316dbe..7848eb57 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -145,6 +145,8 @@ import com.nuvio.app.features.player.externalPlaybackSession
@@ -52,7 +52,7 @@ index 093322e12..4d079076f 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -811,6 +813,7 @@ internal fun MainAppContent(
+@@ -809,6 +811,7 @@ internal fun MainAppContent(
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
                  ExternalMovieSuggestions.onExternalPlaybackReturned(result, fallbackSession)
@@ -60,7 +60,7 @@ index 093322e12..4d079076f 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -940,6 +943,10 @@ internal fun MainAppContent(
+@@ -938,6 +941,10 @@ internal fun MainAppContent(
                  preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
                  secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
                  onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
@@ -71,7 +71,7 @@ index 093322e12..4d079076f 100644
              )
              StreamsRepository.setOverlayVisible(false)
              // Fork: say so when forwarding found nothing, instead of Infuse silently opening without them.
-@@ -2430,6 +2437,30 @@ internal fun MainAppContent(
+@@ -2429,6 +2436,30 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  
@@ -103,7 +103,7 @@ index 093322e12..4d079076f 100644
                  onOpen = { preview ->
                      navController.navigate(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
-index d38ca4081..e66d56db5 100644
+index d38ca408..e66d56db 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
 @@ -40,9 +40,17 @@ suspend fun prepareExternalPlayerLaunch(
@@ -136,7 +136,7 @@ index d38ca4081..e66d56db5 100644
      }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.kt
 new file mode 100644
-index 000000000..2ba0a400f
+index 00000000..2ba0a400
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.kt
 @@ -0,0 +1,8 @@
@@ -150,7 +150,7 @@ index 000000000..2ba0a400f
 +internal expect suspend fun resolveExternalStreamUrl(url: String): String
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalUpNext.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalUpNext.kt
 new file mode 100644
-index 000000000..8f23117ec
+index 00000000..8f23117e
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalUpNext.kt
 @@ -0,0 +1,134 @@
@@ -290,7 +290,7 @@ index 000000000..8f23117ec
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt
 new file mode 100644
-index 000000000..1f46036f0
+index 00000000..1f46036f
 --- /dev/null
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt
 @@ -0,0 +1,48 @@
@@ -343,7 +343,7 @@ index 000000000..1f46036f0
 +    } ?: url
 +}
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
-index 0b509cc23..67c417d92 100644
+index 0b509cc2..67c417d9 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
 @@ -1,5 +1,6 @@
