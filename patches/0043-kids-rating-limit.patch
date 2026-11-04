@@ -274,17 +274,18 @@ index 430d345a..78c792cf 100644
                                  HomeCatalogRowSection(
                                      section = section,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
-index c1bd0e8d..95350ec6 100644
+index 8f575137..5089da8f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
-@@ -1,5 +1,6 @@
- package com.nuvio.app.features.search
+@@ -2,6 +2,7 @@ package com.nuvio.app.features.search
  
+ import androidx.compose.ui.graphics.Color
+ import com.nuvio.app.core.ui.background.appBackgroundCover
 +import com.nuvio.app.features.home.forkKids
  import androidx.compose.foundation.clickable
  import androidx.compose.foundation.background
  import androidx.compose.foundation.layout.Arrangement
-@@ -186,6 +187,7 @@ fun SearchScreen(
+@@ -188,6 +189,7 @@ fun SearchScreen(
              }
      }
  
@@ -292,7 +293,7 @@ index c1bd0e8d..95350ec6 100644
      ScreenActivityEffect(query, lastRequestedQuery, uiState.isLoading, uiState.sections) { screenActive ->
          if (!screenActive) return@ScreenActivityEffect
          val normalizedQuery = query.trim()
-@@ -394,7 +396,7 @@ fun SearchScreen(
+@@ -387,7 +389,7 @@ fun SearchScreen(
  
                          else -> {
                              items(

@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index e68d2a96..bc8e3f15 100644
+index 53eeb3de..564bc623 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -143,6 +143,8 @@ import com.nuvio.app.features.party.partyMediaKey
+@@ -145,6 +145,8 @@ import com.nuvio.app.features.party.partyMediaKey
  import com.nuvio.app.features.player.ExternalPlayerIntentResult
  import com.nuvio.app.features.player.externalPlaybackSession
  import com.nuvio.app.features.player.infusePlaybackCallbacks
@@ -11,7 +11,7 @@ index e68d2a96..bc8e3f15 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -806,6 +808,7 @@ internal fun MainAppContent(
+@@ -809,6 +811,7 @@ internal fun MainAppContent(
              val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
@@ -19,7 +19,7 @@ index e68d2a96..bc8e3f15 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -2422,6 +2425,21 @@ internal fun MainAppContent(
+@@ -2455,6 +2458,21 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  

@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 7848eb57..50cabe1c 100644
+index 3958e500..7f2bae31 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.CheckCircle
+@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.CheckCircle
  import androidx.compose.material.icons.filled.CheckCircleOutline
  import androidx.compose.material.icons.filled.DeleteOutline
  import androidx.compose.material.icons.filled.Info
@@ -11,7 +11,7 @@ index 7848eb57..50cabe1c 100644
  import androidx.compose.material.icons.filled.PlayArrow
  import androidx.compose.material.icons.filled.Replay
  import androidx.compose.material3.MaterialTheme
-@@ -2061,6 +2063,11 @@ internal fun MainAppContent(
+@@ -2082,6 +2084,11 @@ internal fun MainAppContent(
                          item = preview,
                          fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                      )
@@ -23,7 +23,7 @@ index 7848eb57..50cabe1c 100644
                      val removesFromLibrary = isSaved &&
                          (posterActionTarget.libraryItem != null || !isRemoteLibrarySource)
                      NuvioPosterZoomActionOverlay(
-@@ -2076,11 +2083,16 @@ internal fun MainAppContent(
+@@ -2097,11 +2104,16 @@ internal fun MainAppContent(
                          anchor = selectedPosterAnchor,
                          actions = listOf(
                              PosterZoomOverlayAction(

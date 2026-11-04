@@ -40,10 +40,10 @@ index cd486bd9..bd5d1226 100644
      val meta = MetaDetailsRepository.peek(parentMetaType, parentMetaId) ?: return null
      val episodeRuntimeMinutes = meta.videos
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 2a316dbe..7848eb57 100644
+index a736e257..3958e500 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -145,6 +145,8 @@ import com.nuvio.app.features.player.externalPlaybackSession
+@@ -147,6 +147,8 @@ import com.nuvio.app.features.player.externalPlaybackSession
  import com.nuvio.app.features.player.infusePlaybackCallbacks
  import com.nuvio.app.features.player.ExternalMovieSuggestions
  import com.nuvio.app.features.player.ExternalMovieSuggestionsOverlay
@@ -52,7 +52,7 @@ index 2a316dbe..7848eb57 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -809,6 +811,7 @@ internal fun MainAppContent(
+@@ -812,6 +814,7 @@ internal fun MainAppContent(
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
                  ExternalMovieSuggestions.onExternalPlaybackReturned(result, fallbackSession)
@@ -60,9 +60,9 @@ index 2a316dbe..7848eb57 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -938,6 +941,10 @@ internal fun MainAppContent(
-                 preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
+@@ -942,6 +945,10 @@ internal fun MainAppContent(
                  secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
+                 subtitleExtras = launch.subtitleExtras,
                  onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
 +                // Fork: off. TorBox's one-time download links (Kuiper 307 -> TorBox API 307 -> CDN)
 +                // break when resolved ahead of Infuse ("Server responded with status 400"), and
@@ -71,7 +71,7 @@ index 2a316dbe..7848eb57 100644
              )
              StreamsRepository.setOverlayVisible(false)
              // Fork: say so when forwarding found nothing, instead of Infuse silently opening without them.
-@@ -2429,6 +2436,30 @@ internal fun MainAppContent(
+@@ -2462,6 +2469,30 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  
@@ -103,12 +103,12 @@ index 2a316dbe..7848eb57 100644
                  onOpen = { preview ->
                      navController.navigate(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
-index d38ca408..e66d56db 100644
+index 94cabea1..fb80573a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
-@@ -40,9 +40,17 @@ suspend fun prepareExternalPlayerLaunch(
-     preferredLanguage: String,
+@@ -41,9 +41,17 @@ suspend fun prepareExternalPlayerLaunch(
      secondaryLanguage: String?,
+     subtitleExtras: SubtitleRequestExtras? = null,
      onOverlayMessage: (String?) -> Unit,
 +    resolveRedirects: Boolean = false,
  ): ExternalPlayerPlaybackRequest = coroutineScope {
@@ -124,7 +124,7 @@ index d38ca408..e66d56db 100644
      val subtitlesDeferred = if (forwardSubtitles && !preferredLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)) {
          async {
              onOverlayMessage(getString(Res.string.player_external_loading_subtitles))
-@@ -84,6 +92,9 @@ suspend fun prepareExternalPlayerLaunch(
+@@ -86,6 +94,9 @@ suspend fun prepareExternalPlayerLaunch(
          null
      }
  

@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
-index 37c9974a..382d1ca4 100644
+index 808b176f..fa1f1eb4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
-@@ -47,7 +47,7 @@ suspend fun prepareExternalPlayerLaunch(
+@@ -48,7 +48,7 @@ suspend fun prepareExternalPlayerLaunch(
  
      // Fork: Infuse gets the link a redirect chain ends at (sources needing headers are left alone).
      val resolvedUrlDeferred = if (resolveRedirects && request.sourceHeaders.isEmpty()) {
@@ -65,10 +65,10 @@ index 00000000..7c07b278
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index bb6f80be..70a164fc 100644
+index b16321ee..0a9c1be1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -821,6 +821,18 @@ internal fun StreamList(
+@@ -822,6 +822,18 @@ internal fun StreamList(
          splitPinnedSources(filteredGroups, pinnedSourceIds)
      }
  
@@ -87,7 +87,7 @@ index bb6f80be..70a164fc 100644
      CompositionLocalProvider(LocalStreamSizeLabelFormat provides formatStreamSize) {
      LazyColumn(
          modifier = modifier.fillMaxWidth(),
-@@ -937,7 +949,8 @@ private fun LazyListScope.streamSection(
+@@ -938,7 +950,8 @@ private fun LazyListScope.streamSection(
      resumePositionMs: Long?,
      resumeProgressFraction: Float?,
  ) {

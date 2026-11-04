@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-index 8000f3fb..a1b16304 100644
+index ce104ddf..3f599f3d 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-@@ -183,6 +183,7 @@ open class MainActivity : AppCompatActivity() {
+@@ -184,6 +184,7 @@ open class MainActivity : AppCompatActivity() {
          ProfileTitleFactsStorage.initialize(applicationContext)
          PluginStorage.initialize(applicationContext)
          CollectionMobileSettingsStorage.initialize(applicationContext)

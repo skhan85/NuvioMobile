@@ -1,8 +1,8 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 50cabe1c..8017a500 100644
+index 7f2bae31..492f3441 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-@@ -105,6 +105,7 @@ import com.nuvio.app.features.cloud.playbackVideoId
+@@ -107,6 +107,7 @@ import com.nuvio.app.features.cloud.playbackVideoId
  import com.nuvio.app.features.cloud.providerPosterUrl
  import com.nuvio.app.features.collection.CollectionRepository
  import com.nuvio.app.features.collection.CollectionSyncService
@@ -10,7 +10,7 @@ index 50cabe1c..8017a500 100644
  import com.nuvio.app.features.details.MetaDetailsRepository
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import com.nuvio.app.features.downloads.DownloadItem
-@@ -925,7 +926,12 @@ internal fun MainAppContent(
+@@ -928,7 +929,12 @@ internal fun MainAppContent(
              }
  
              val baseRequest = launch.toExternalPlayerPlaybackRequest()
@@ -23,7 +23,7 @@ index 50cabe1c..8017a500 100644
                  !playerSettingsUiState.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
              val shouldSendSkipSegments = playerSettingsUiState.externalPlayerSendSkipSegments
              if (shouldForwardSubtitles) {
-@@ -938,7 +944,7 @@ internal fun MainAppContent(
+@@ -941,7 +947,7 @@ internal fun MainAppContent(
                  type = launch.contentType ?: launch.parentMetaType,
                  videoId = launch.videoId ?: launch.parentMetaId,
                  contentId = launch.parentMetaId,
