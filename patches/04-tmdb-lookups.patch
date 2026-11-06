@@ -1,16 +1,17 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index be512527..22f64187 100644
+index be512527..2ea7b01a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-@@ -1,5 +1,7 @@
+@@ -1,5 +1,8 @@
  package com.nuvio.app.features.tmdb
  
++import kotlinx.datetime.plus
 +import kotlinx.datetime.daysUntil
 +import kotlinx.datetime.toLocalDateTime
  import co.touchlab.kermit.Logger
  import com.nuvio.app.features.addons.httpGetText
  import com.nuvio.app.features.details.MetaCompany
-@@ -415,7 +417,9 @@ object TmdbMetadataService {
+@@ -415,7 +418,9 @@ object TmdbMetadataService {
          fallbackName: String? = null,
      ): TmdbEntityBrowseData? = withContext(Dispatchers.Default) {
          val settings = TmdbSettingsRepository.snapshot()
@@ -21,7 +22,7 @@ index be512527..22f64187 100644
          val language = normalizeTmdbLanguage(settings.language)
          val normalizedSourceType = normalizeEntitySourceType(sourceType)
          val cacheKey = "${entityKind.routeValue}:$entityId:$normalizedSourceType:$language"
-@@ -1274,6 +1278,157 @@ object TmdbMetadataService {
+@@ -1274,6 +1279,245 @@ object TmdbMetadataService {
          )
      }
  
@@ -94,6 +95,12 @@ index be512527..22f64187 100644
 +            show.next?.let { next ->
 +                val airs = day(next.airDate) ?: return@let
 +                val daysAhead = today.daysUntil(airs)
++                // Fork: a show premiering (or a new season starting) later on: "Coming Soon" /
++                // "New Season" with the date.
++                if (primary == null && daysAhead in 7..60 && next.episode == 1) {
++                    val premiere = show.last == null || (next.season ?: 1) <= 1
++                    return (if (premiere) "Coming Soon" else "New Season") to forkShortDate(airs)
++                }
 +                if (daysAhead in 0..6) {
 +                    if (primary == null && next.episode == 1 && (next.season ?: 1) > 1) primary = "New Season"
 +                    if (primary != null) {
@@ -113,7 +120,89 @@ index be512527..22f64187 100644
 +            .mapNotNull { day(it.releaseDate) }
 +            .minOrNull()
 +        if (homeRelease != null && homeRelease.daysUntil(today) in 0..30) return "Recently Added" to null
++        // Fork: streaming soon — "Coming Soon" with the day (this week) or the date.
++        val upcoming = releases.results
++            .flatMap { it.releaseDates }
++            .filter { (it.type ?: 0) >= 4 }
++            .mapNotNull { day(it.releaseDate) }
++            .filter { today.daysUntil(it) > 0 }
++            .minOrNull()
++        if (upcoming != null && today.daysUntil(upcoming) <= 60) {
++            val label = if (today.daysUntil(upcoming) <= 6) {
++                upcoming.dayOfWeek.name.lowercase().replaceFirstChar(Char::uppercase)
++            } else {
++                forkShortDate(upcoming)
++            }
++            return "Coming Soon" to label
++        }
 +        return null to null
++    }
++
++    private fun forkShortDate(date: kotlinx.datetime.LocalDate): String {
++        val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
++        return "${months[date.month.ordinal]} ${date.day}"
++    }
++
++    /**
++     * Fork: Coming Soon — films whose streaming (digital or disc) release falls in the next
++     * 60 days, plus new series premiering then, soonest first. Each title's release date is that
++     * day, so it counts as unreleased (Remind Me) and keeps the date when saved to the Library.
++     */
++    suspend fun forkComingSoon(kids: Boolean, limit: Int = 20): List<MetaPreview> = coroutineScope {
++        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
++        val today = kotlin.time.Clock.System.now()
++            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
++        val tomorrow = today.plus(1, kotlinx.datetime.DateTimeUnit.DAY).toString()
++        val until = today.plus(60, kotlinx.datetime.DateTimeUnit.DAY).toString()
++        val base = mapOf("language" to language, "sort_by" to "popularity.desc", "include_adult" to "false")
++        val movieQuery = base + mapOf(
++            "region" to "US",
++            "with_release_type" to "4|5",
++            "release_date.gte" to tomorrow,
++            "release_date.lte" to until,
++        ) + (if (kids) mapOf("certification_country" to "US", "certification.lte" to "PG", "with_genres" to "10751|16") else emptyMap())
++        val showQuery = base + mapOf(
++            "first_air_date.gte" to tomorrow,
++            "first_air_date.lte" to until,
++        ) + (if (kids) mapOf("with_genres" to "10762|10751") else emptyMap())
++        val moviesDeferred = async { fetch<TmdbRecommendationResponse>(endpoint = "discover/movie", query = movieQuery)?.results.orEmpty() }
++        val showsDeferred = async { fetch<TmdbRecommendationResponse>(endpoint = "discover/tv", query = showQuery)?.results.orEmpty() }
++        val movies = moviesDeferred.await().filter { it.posterPath != null }.take(14)
++        val shows = showsDeferred.await().filter { it.posterPath != null }.take(8)
++        // The streaming date for each film (discover only filters by it; its release_date is the
++        // cinema date). US first, otherwise the earliest anywhere.
++        val movieDates = movies.map { movie ->
++            async {
++                val releases = fetch<ForkTmdbReleases>(endpoint = "movie/${movie.id}/release_dates")?.results.orEmpty()
++                fun homeDays(countries: List<ForkTmdbReleaseCountry>) = countries
++                    .flatMap { it.releaseDates }
++                    .filter { (it.type ?: 0) >= 4 }
++                    .mapNotNull { it.releaseDate?.take(10) }
++                    .filter { it >= tomorrow }
++                    .sorted()
++                movie to (homeDays(releases.filter { it.country == "US" }).firstOrNull() ?: homeDays(releases).firstOrNull())
++            }
++        }.awaitAll()
++        fun preview(item: TmdbRecommendationItem, type: String, date: String): MetaPreview? {
++            val title = listOf(item.title, item.name, item.originalTitle, item.originalName)
++                .firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotBlank) } ?: return null
++            return MetaPreview(
++                id = "tmdb:${item.id}",
++                type = type,
++                name = title,
++                poster = buildImageUrl(item.posterPath, "w500"),
++                banner = buildImageUrl(item.backdropPath, "w1280"),
++                posterShape = PosterShape.Poster,
++                description = item.overview?.trim()?.takeIf(String::isNotBlank),
++                releaseInfo = date,
++                rawReleaseDate = date,
++            )
++        }
++        val dated = movieDates.mapNotNull { (movie, date) -> date?.let { d -> preview(movie, "movie", d)?.let { d to it } } } +
++            shows.mapNotNull { show ->
++                show.firstAirDate?.take(10)?.takeIf { it >= tomorrow }?.let { d -> preview(show, "series", d)?.let { d to it } }
++            }
++        dated.sortedBy { it.first }.take(limit).map { it.second }
 +    }
 +
 +    /**
@@ -179,7 +268,7 @@ index be512527..22f64187 100644
      private suspend fun fetchMoreLikeThis(
          tmdbId: Int,
          mediaType: String,
-@@ -2097,6 +2252,40 @@ private data class TmdbReleaseDate(
+@@ -2097,6 +2341,41 @@ private data class TmdbReleaseDate(
      val certification: String? = null,
  )
  
@@ -208,6 +297,7 @@ index be512527..22f64187 100644
 +
 +@Serializable
 +private data class ForkTmdbReleaseCountry(
++    @SerialName("iso_3166_1") val country: String? = null,
 +    @SerialName("release_dates") val releaseDates: List<ForkTmdbReleaseDate> = emptyList(),
 +)
 +
@@ -220,7 +310,7 @@ index be512527..22f64187 100644
  @Serializable
  private data class TmdbTvContentRatingsResponse(
      val results: List<TmdbTvContentRating> = emptyList(),
-@@ -2344,3 +2533,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
+@@ -2344,3 +2623,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
          ?.filePath
          ?.trim()
  }

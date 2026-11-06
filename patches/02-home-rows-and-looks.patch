@@ -260,10 +260,10 @@ index 00000000..df31738d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
 new file mode 100644
-index 00000000..9235afd8
+index 00000000..9d8ec56b
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,189 @@
 +package com.nuvio.app.features.home
 +
 +import com.nuvio.app.features.catalog.CatalogTarget
@@ -324,7 +324,11 @@ index 00000000..9235afd8
 +        val topShows: HomeCatalogSection?,
 +        val topMovies: HomeCatalogSection?,
 +        val trendingNow: HomeCatalogSection?,
++        /** Fork: films streaming soon and new series premiering in the next 60 days. */
++        val comingSoon: HomeCatalogSection? = null,
 +    )
++
++    const val COMING_SOON_KEY = "fork.trending.coming_soon"
 +
 +    const val TRENDING_KEY_PREFIX = "fork.trending."
 +    private const val TRENDING_TTL_MS = 3 * 60 * 60 * 1000L
@@ -345,6 +349,7 @@ index 00000000..9235afd8
 +                trendingKids = kids
 +            }
 +        }
++        val comingSoon = runCatching { TmdbMetadataService.forkComingSoon(kids) }.getOrDefault(emptyList())
 +        val shows: List<MetaPreview>
 +        val movies: List<MetaPreview>
 +        val week: List<MetaPreview>
@@ -378,6 +383,7 @@ index 00000000..9235afd8
 +            topShows = row("top_shows", "Top 10 Shows Today", "series", shows, 5),
 +            topMovies = row("top_movies", "Top 10 Movies Today", "movie", movies, 5),
 +            trendingNow = row("now", "Trending Now", "movie", week, 6),
++            comingSoon = row("coming_soon", "Coming Soon", "movie", comingSoon, 4),
 +        )
 +        // Keep showing the old rows if this refresh came back empty (offline, TMDB down).
 +        val usable = rows.topShows != null || rows.topMovies != null || rows.trendingNow != null
@@ -449,10 +455,10 @@ index 00000000..9235afd8
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
 new file mode 100644
-index 00000000..3ac89e90
+index 00000000..e8b3c589
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,156 @@
 +package com.nuvio.app.features.home
 +
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -509,6 +515,7 @@ index 00000000..3ac89e90
 +            ?: emptySet()
 +        _netflixHome.value = ForkHomeSettingsStorage.loadForkString("fork_netflix_home")?.toBooleanStrictOrNull() ?: true
 +        _cardBadges.value = ForkHomeSettingsStorage.loadForkString("fork_card_badges")?.toBooleanStrictOrNull() ?: true
++        _comingSoon.value = ForkHomeSettingsStorage.loadForkString("fork_coming_soon")?.toBooleanStrictOrNull() ?: true
 +        _stillWatchingOffProfiles.value = ForkHomeSettingsStorage.loadStillWatchingOffProfiles()
 +            ?.split(',')
 +            ?.mapNotNull { it.trim().toIntOrNull() }
@@ -529,6 +536,16 @@ index 00000000..3ac89e90
 +    private val _netflixHome = MutableStateFlow(true)
 +    /** Fork: Netflix Home — Shows / Movies switch, genre line, "Continue Watching for <name>". */
 +    val netflixHome: StateFlow<Boolean> = _netflixHome.asStateFlow()
++    private val _comingSoon = MutableStateFlow(true)
++    /** Fork: the Coming Soon row on Home (with Trending rows on). */
++    val comingSoon: StateFlow<Boolean> = _comingSoon.asStateFlow()
++
++    fun setComingSoon(enabled: Boolean) {
++        ensureLoaded()
++        _comingSoon.value = enabled
++        ForkHomeSettingsStorage.saveForkString("fork_coming_soon", enabled.toString())
++    }
++
 +    private val _cardBadges = MutableStateFlow(true)
 +    /** Fork: TOP 10 and New Episode / New Season / Recently Added tags on posters. */
 +    val cardBadges: StateFlow<Boolean> = _cardBadges.asStateFlow()
@@ -723,10 +740,10 @@ index 00000000..59206924
 +    }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..b250a7dd
+index 00000000..d96c10ab
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,418 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -750,6 +767,7 @@ index 00000000..b250a7dd
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.LaunchedEffect
 +import androidx.compose.runtime.getValue
++import androidx.compose.runtime.setValue
 +import androidx.compose.runtime.remember
 +import androidx.compose.ui.Alignment
 +import androidx.compose.ui.Modifier
@@ -1083,6 +1101,67 @@ index 00000000..b250a7dd
 +        }
 +    }
 +}
++
++// MARK: Fork: "What's new in your fork"
++
++/**
++ * Fork: a short note, shown once after an update, listing what's new in this fork. Add an entry
++ * (with a higher id) whenever a fork feature ships; nothing shows until there's an unseen one.
++ */
++internal object ForkWhatsNew {
++    data class Entry(val id: Int, val date: String, val items: List<String>)
++
++    val entries = listOf(
++        Entry(
++            id = 1,
++            date = "Nov 5, 2026",
++            items = listOf(
++                "Coming Soon row on Home: films streaming in the next 60 days and new series, soonest first. Hold one for Remind Me to get a notification on the day it's out (with Nuvio notifications on).",
++                "Card tags (TOP 10, New Episode, Coming Soon) now show straight away: they're saved between launches and looked up for whole rows ahead.",
++                "Under the hood: the fork's changes are reorganised so Nuvio Enhanced updates break it less often.",
++            ),
++        ),
++    )
++
++    private const val SEEN_KEY = "fork_whats_new_seen"
++
++    fun unseen(): List<Entry> {
++        val seen = runCatching { ForkHomeSettingsStorage.loadForkString(SEEN_KEY)?.toIntOrNull() }.getOrNull() ?: 0
++        return entries.filter { it.id > seen }.sortedByDescending { it.id }.take(3)
++    }
++
++    fun markSeen() {
++        val latest = entries.maxOfOrNull { it.id } ?: return
++        runCatching { ForkHomeSettingsStorage.saveForkString(SEEN_KEY, latest.toString()) }
++    }
++}
++
++@Composable
++internal fun ForkWhatsNewDialog() {
++    var pending by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ForkWhatsNew.unseen()) }
++    if (pending.isEmpty()) return
++    val dismiss = {
++        ForkWhatsNew.markSeen()
++        pending = emptyList()
++    }
++    androidx.compose.material3.AlertDialog(
++        onDismissRequest = dismiss,
++        title = { Text("What's new in your Nuvio") },
++        text = {
++            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
++                pending.forEach { entry ->
++                    Text(entry.date, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
++                    entry.items.forEach { item ->
++                        Text("•  $item", style = MaterialTheme.typography.bodyMedium)
++                    }
++                }
++            }
++        },
++        confirmButton = {
++            androidx.compose.material3.TextButton(onClick = dismiss) { Text("Got it") }
++        },
++    )
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 index 32d51fc1..ee74b1b7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
@@ -1118,7 +1197,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index c5228c6d..06610ebb 100644
+index c5228c6d..76fdcffc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,5 +1,6 @@
@@ -1128,7 +1207,7 @@ index c5228c6d..06610ebb 100644
  import androidx.compose.animation.Crossfade
  import androidx.compose.animation.core.tween
  import androidx.compose.foundation.MutatePriority
-@@ -331,6 +332,42 @@ fun HomeScreen(
+@@ -331,6 +332,47 @@ fun HomeScreen(
      var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
      var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }
  
@@ -1151,8 +1230,13 @@ index c5228c6d..06610ebb 100644
 +    // TMDB trending, cached on the shared side for a few hours.
 +    var forkTrending by remember { mutableStateOf<ForkHomeRows.TrendingRows?>(null) }
 +    LaunchedEffect(forkTrending) {
-+        forkTrending?.let { rows -> ForkCardBadges.prefetch(listOfNotNull(rows.topShows, rows.topMovies)) }
++        forkTrending?.let { rows -> ForkCardBadges.prefetch(listOfNotNull(rows.topShows, rows.topMovies, rows.comingSoon)) }
 +    }
++    ForkWhatsNewDialog() // Fork: once after an update with new fork features
++    val forkComingSoonEnabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.comingSoon
++    }.collectAsStateWithLifecycle()
 +    val trendingRowsEnabled by remember {
 +        ForkHomeSettings.ensureLoaded()
 +        ForkHomeSettings.trendingRowsEnabled
@@ -1171,7 +1255,7 @@ index c5228c6d..06610ebb 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -559,6 +596,14 @@ fun HomeScreen(
+@@ -559,6 +601,14 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
@@ -1186,7 +1270,7 @@ index c5228c6d..06610ebb 100644
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -911,9 +956,12 @@ fun HomeScreen(
+@@ -911,9 +961,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -1201,7 +1285,7 @@ index c5228c6d..06610ebb 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,7 +1057,19 @@ fun HomeScreen(
+@@ -1009,7 +1062,19 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -1222,7 +1306,7 @@ index c5228c6d..06610ebb 100644
              NuvioScreen(
                  modifier = Modifier.fillMaxSize().then(heroStretchModifier),
                  horizontalPadding = 0.dp,
-@@ -1065,6 +1125,12 @@ fun HomeScreen(
+@@ -1065,6 +1130,12 @@ fun HomeScreen(
                      }
                  }
  
@@ -1235,7 +1319,7 @@ index c5228c6d..06610ebb 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1259,40 @@ fun HomeScreen(
+@@ -1193,6 +1264,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -1246,7 +1330,7 @@ index c5228c6d..06610ebb 100644
 +                            forkRows +
 +                            listOfNotNull(forkTrendingRows?.topMovies) // Fork: no Trending Now row (Trending / New covers it)
 +                        // Fork: "Hide unreleased content" covers the Top 10 / Because-you-watched rows too.
-+                        val forkVisibleRows = forkRowsInOrder.forkKids(forkKidsFilter).let { rows ->
++                        val forkFilteredRows = forkRowsInOrder.forkKids(forkKidsFilter).let { rows ->
 +                            if (!homeSettingsUiState.hideUnreleasedContent) rows
 +                            else {
 +                                // Read so the rows filter again when TMDB answers.
@@ -1257,6 +1341,13 @@ index c5228c6d..06610ebb 100644
 +                                    released.takeIf { it.items.isNotEmpty() }
 +                                }
 +                            }
++                        }
++                        // Fork: Coming Soon after the Top 10 rows (unreleased titles are its point,
++                        // so "Hide unreleased content" leaves it alone). Hold a title for Remind Me.
++                        val forkVisibleRows = forkFilteredRows + if (forkComingSoonEnabled) {
++                            listOfNotNull(forkTrendingRows?.comingSoon).forkKids(forkKidsFilter)
++                        } else {
++                            emptyList()
 +                        }
 +                        forkVisibleRows.forEach { section ->
 +                            item(key = section.key, contentType = "catalog") {
@@ -1276,7 +1367,7 @@ index c5228c6d..06610ebb 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1235,6 +1335,7 @@ fun HomeScreen(
+@@ -1235,6 +1347,7 @@ fun HomeScreen(
                  }
              }
          }
@@ -2000,7 +2091,7 @@ index 8f575137..5089da8f 100644
                              ) { keyedSection ->
                                  val section = keyedSection.value
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-index a2f4a7c3..7aaefdee 100644
+index a2f4a7c3..49318962 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 @@ -45,6 +45,8 @@ import com.nuvio.app.features.addons.AddonRepository
@@ -2020,7 +2111,7 @@ index a2f4a7c3..7aaefdee 100644
  import org.jetbrains.compose.resources.stringResource
  import sh.calvin.reorderable.ReorderableCollectionItemScope
  import sh.calvin.reorderable.ReorderableItem
-@@ -257,6 +258,115 @@ internal fun LazyListScope.homescreenSettingsContent(
+@@ -257,6 +258,127 @@ internal fun LazyListScope.homescreenSettingsContent(
                  val hapticFeedback = LocalHapticFeedback.current
                  val pinToMoveToast = stringResource(Res.string.settings_homescreen_pin_to_move_toast)
  
@@ -2053,6 +2144,18 @@ index a2f4a7c3..7aaefdee 100644
 +                    )
 +                    // Fork: kid-friendly Top 10 / Trending for this profile only.
 +                    if (trendingRowsEnabled) {
++                        val forkComingSoon by remember {
++                            ForkHomeSettings.ensureLoaded()
++                            ForkHomeSettings.comingSoon
++                        }.collectAsStateWithLifecycle()
++                        SettingsGroupDivider(isTablet = isTablet)
++                        SettingsSwitchRow(
++                            title = "Coming Soon",
++                            description = "A row of films streaming in the next 60 days and new series premiering, soonest first. Hold one for Remind Me",
++                            checked = forkComingSoon,
++                            isTablet = isTablet,
++                            onCheckedChange = ForkHomeSettings::setComingSoon,
++                        )
 +                        val forkProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
 +                            .collectAsStateWithLifecycle()
 +                        val forkProfileIndex = forkProfileState.activeProfile?.profileIndex ?: 1
