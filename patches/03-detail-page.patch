@@ -128,7 +128,7 @@ index 00000000..cfa7b21b
 +/** Fork: addon subtitles arrive out of sync in Infuse; it uses its own tracks instead. */
 +internal const val INFUSE_FORWARDS_ADDON_SUBTITLES = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index 95606355..e7c4aead 100644
+index b68011c8..fe6bb750 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -54,6 +54,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -139,7 +139,7 @@ index 95606355..e7c4aead 100644
  import androidx.compose.runtime.CompositionLocalProvider
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.State
-@@ -873,6 +874,29 @@ fun MetaDetailsScreen(
+@@ -875,6 +876,29 @@ fun MetaDetailsScreen(
                          }
                      }
                  }
@@ -169,7 +169,7 @@ index 95606355..e7c4aead 100644
                  fun runPlayAction(
                      handler: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)?,
                      resumePositionMs: Long?,
-@@ -2614,7 +2638,7 @@ private fun ConfiguredMetaSections(
+@@ -2613,7 +2637,7 @@ private fun ConfiguredMetaSections(
                      }
                      DetailPosterRailSection(
                          title = stringResource(Res.string.details_more_like_this),
@@ -217,10 +217,10 @@ index 43f9610b..0dfcdf5e 100644
              } else {
                  MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-index 15c2cfae..17fe70c9 100644
+index 944a2843..5f63630c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-@@ -256,6 +256,9 @@ fun DetailHero(
+@@ -274,6 +274,9 @@ fun DetailHero(
                          )
                      }
  

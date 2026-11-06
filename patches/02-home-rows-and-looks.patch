@@ -82,7 +82,7 @@ index 00000000..e3b665eb
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
-index bc41ae06..9231b2ea 100644
+index ebc28a5a..78c6b7d2 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
 @@ -136,6 +136,8 @@ fun NuvioPosterCard(
@@ -94,7 +94,7 @@ index bc41ae06..9231b2ea 100644
  ) {
      val posterCardStyle = rememberPosterCardStyleUiState()
      val tokens = MaterialTheme.nuvio
-@@ -247,6 +249,7 @@ fun NuvioPosterCard(
+@@ -242,6 +244,7 @@ fun NuvioPosterCard(
              }
  
              NuvioPosterWatchedOverlay(isWatched = isWatched)
@@ -455,10 +455,10 @@ index 00000000..9d8ec56b
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
 new file mode 100644
-index 00000000..e8b3c589
+index 00000000..59cbf7cc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,167 @@
 +package com.nuvio.app.features.home
 +
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -516,6 +516,7 @@ index 00000000..e8b3c589
 +        _netflixHome.value = ForkHomeSettingsStorage.loadForkString("fork_netflix_home")?.toBooleanStrictOrNull() ?: true
 +        _cardBadges.value = ForkHomeSettingsStorage.loadForkString("fork_card_badges")?.toBooleanStrictOrNull() ?: true
 +        _comingSoon.value = ForkHomeSettingsStorage.loadForkString("fork_coming_soon")?.toBooleanStrictOrNull() ?: true
++        _playSomething.value = ForkHomeSettingsStorage.loadForkString("fork_play_something")?.toBooleanStrictOrNull() ?: true
 +        _stillWatchingOffProfiles.value = ForkHomeSettingsStorage.loadStillWatchingOffProfiles()
 +            ?.split(',')
 +            ?.mapNotNull { it.trim().toIntOrNull() }
@@ -544,6 +545,16 @@ index 00000000..e8b3c589
 +        ensureLoaded()
 +        _comingSoon.value = enabled
 +        ForkHomeSettingsStorage.saveForkString("fork_coming_soon", enabled.toString())
++    }
++
++    private val _playSomething = MutableStateFlow(true)
++    /** Fork: the Play Something (shuffle) button at the top of Home. */
++    val playSomething: StateFlow<Boolean> = _playSomething.asStateFlow()
++
++    fun setPlaySomething(enabled: Boolean) {
++        ensureLoaded()
++        _playSomething.value = enabled
++        ForkHomeSettingsStorage.saveForkString("fork_play_something", enabled.toString())
 +    }
 +
 +    private val _cardBadges = MutableStateFlow(true)
@@ -738,12 +749,157 @@ index 00000000..59206924
 +        else if (items.isEmpty()) null
 +        else section.copy(items = items, availableItemCount = items.size)
 +    }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
+new file mode 100644
+index 00000000..1804a83d
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
+@@ -0,0 +1,139 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.nuvio.app.features.streams.StreamItem
++
++/**
++ * Fork: audio languages a source says it has, read from its name, text and file name ("Hindi",
++ * "Dual Audio", "🇮🇳 Hindi | English", "MULTi"), shown as small tags on the source card. When the
++ * profile's audio language isn't English, sources in that language are listed first, so Infuse
++ * (which can't be told which audio track to pick) gets the right file. Also the HINDI tag on
++ * Indian titles' cards (from TMDB's original language).
++ */
++internal object ForkLanguages {
++    data class Tags(val languages: List<String> = emptyList(), val multiAudio: Boolean = false) {
++        val isEmpty get() = languages.isEmpty() && !multiAudio
++    }
++
++    val TagColor = Color(0xFFFFB545)
++
++    /** Name, ISO code and the words or flags that mean it. Order is the order tags are shown in. */
++    private val table: List<Triple<String, String, Regex>> = listOf(
++        Triple("Hindi", "hi", """\bhindi\b|\bhin\b|🇮🇳"""),
++        Triple("Tamil", "ta", """\btamil\b"""),
++        Triple("Telugu", "te", """\btelugu\b"""),
++        Triple("Malayalam", "ml", """\bmalayalam\b"""),
++        Triple("Kannada", "kn", """\bkannada\b"""),
++        Triple("Punjabi", "pa", """\bpunjabi\b"""),
++        Triple("Bengali", "bn", """\bbengali\b"""),
++        Triple("Marathi", "mr", """\bmarathi\b"""),
++        Triple("Urdu", "ur", """\burdu\b"""),
++        Triple("Spanish", "es", """\bspanish\b|\blatino\b|\bcastellano\b|🇪🇸|🇲🇽"""),
++        Triple("French", "fr", """\bfrench\b|\btruefrench\b|\bvff\b|🇫🇷"""),
++        Triple("German", "de", """\bgerman\b|🇩🇪"""),
++        Triple("Italian", "it", """\bitalian\b|🇮🇹"""),
++        Triple("Portuguese", "pt", """\bportuguese\b|🇵🇹|🇧🇷"""),
++        Triple("Russian", "ru", """\brussian\b|🇷🇺"""),
++        Triple("Arabic", "ar", """\barabic\b|🇸🇦"""),
++        Triple("Turkish", "tr", """\bturkish\b|🇹🇷"""),
++        Triple("Japanese", "ja", """\bjapanese\b|🇯🇵"""),
++        Triple("Korean", "ko", """\bkorean\b|🇰🇷"""),
++        Triple("Chinese", "zh", """\bchinese\b|\bmandarin\b|\bcantonese\b|🇨🇳"""),
++    ).map { (name, code, pattern) -> Triple(name, code, Regex(pattern, RegexOption.IGNORE_CASE)) }
++
++    private val english = Regex("""\benglish\b|\beng\b|🇬🇧|🇺🇸""", RegexOption.IGNORE_CASE)
++
++    /** "Multi Audio", "Dual-Audio", "multi lang", or a bare "MULTi" (not "multi sub"). */
++    private val multi = Regex(
++        """\b(multi|dual)[ ._-]?(audio|lang|language)s?\b|\bmulti\b(?![ ._-]?subs?\b)""",
++        RegexOption.IGNORE_CASE,
++    )
++
++    private val indian = setOf("hi", "ta", "te", "ml", "kn", "pa", "bn", "mr", "ur")
++
++    fun tags(stream: StreamItem): Tags = tags(
++        listOfNotNull(stream.name, stream.title, stream.description, stream.behaviorHints.filename)
++            .joinToString("\n"),
++    )
++
++    fun tags(text: String): Tags {
++        if (text.isBlank()) return Tags()
++        val languages = table.filter { it.third.containsMatchIn(text) }.map { it.first }
++        val hasEnglish = english.containsMatchIn(text)
++        val multiAudio = multi.containsMatchIn(text) || languages.size + (if (hasEnglish) 1 else 0) >= 2
++        return Tags(languages, multiAudio)
++    }
++
++    /** "Hindi" for TMDB's "hi"; null for languages that don't get a card tag. */
++    fun originalLabel(code: String?): String? {
++        val normalized = code?.lowercase()?.takeIf { it in indian } ?: return null
++        return table.firstOrNull { it.second == normalized }?.first
++    }
++
++    /** The language to list first for a profile audio setting ("hi"), or null (English, device, original…). */
++    fun boostLanguage(audioCode: String?): String? {
++        val code = audioCode?.lowercase()?.substringBefore('-')?.takeIf { it.isNotBlank() && it != "en" } ?: return null
++        return table.firstOrNull { it.second == code }?.first
++    }
++
++    /** Sources that list `language` first, keeping everything else in its order. */
++    fun boosted(streams: List<StreamItem>, language: String?): List<StreamItem> {
++        if (language == null || streams.size < 2) return streams
++        val (first, rest) = streams.partition { language in tags(it).languages }
++        return if (first.isEmpty()) streams else first + rest
++    }
++}
++
++/** "HINDI" on an Indian title's card. */
++@Composable
++internal fun ForkLanguageTag(language: String, modifier: Modifier = Modifier) {
++    Text(
++        text = language.uppercase(),
++        color = Color.Black,
++        fontSize = 7.sp,
++        lineHeight = 9.sp,
++        fontWeight = FontWeight.Black,
++        letterSpacing = 0.4.sp,
++        modifier = modifier
++            .clip(RoundedCornerShape(2.dp))
++            .background(ForkLanguages.TagColor)
++            .padding(horizontal = 4.dp, vertical = 2.dp),
++    )
++}
++
++/** "Hindi" / "Tamil" / "Multi-audio" beside a source's name. */
++@Composable
++internal fun ForkStreamLanguageChips(tags: ForkLanguages.Tags, modifier: Modifier = Modifier) {
++    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
++        tags.languages.take(2).forEach { language -> ForkStreamLanguageChip(language, highlighted = true) }
++        if (tags.multiAudio) ForkStreamLanguageChip("Multi-audio", highlighted = false)
++    }
++}
++
++@Composable
++private fun ForkStreamLanguageChip(text: String, highlighted: Boolean) {
++    Text(
++        text = text,
++        color = if (highlighted) Color.Black else Color.White,
++        fontSize = 10.sp,
++        lineHeight = 12.sp,
++        fontWeight = FontWeight.Bold,
++        maxLines = 1,
++        modifier = Modifier
++            .clip(RoundedCornerShape(50))
++            .background(if (highlighted) ForkLanguages.TagColor else Color.White.copy(alpha = 0.18f))
++            .padding(horizontal = 6.dp, vertical = 1.dp),
++    )
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..d96c10ab
+index 00000000..4684be82
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,418 @@
+@@ -0,0 +1,437 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -815,11 +971,12 @@ index 00000000..d96c10ab
 + * Fork: per-title freshness tags from TMDB, looked up a few at a time and kept for 12 hours.
 + */
 +internal object ForkCardBadges {
-+    data class Entry(val primary: String?, val secondary: String?, val atMs: Long)
++    /** `language`: original language when it gets a tag ("Hindi"), see [ForkLanguages.originalLabel]. */
++    data class Entry(val primary: String?, val secondary: String?, val atMs: Long, val language: String? = null)
 +
 +    private const val TTL_MS = 12 * 60 * 60 * 1000L
 +    private const val KEEP_MS = 4 * TTL_MS
-+    private const val STORE_KEY = "fork_card_badges_cache_v1"
++    private const val STORE_KEY = "fork_card_badges_cache_v2"
 +    private val entriesState = MutableStateFlow<Map<String, Entry>>(emptyMap())
 +    val entries: StateFlow<Map<String, Entry>>
 +        get() {
@@ -844,10 +1001,10 @@ index 00000000..d96c10ab
 +        val now = Clock.System.now().toEpochMilliseconds()
 +        val restored = raw.lineSequence().mapNotNull { line ->
 +            val parts = line.split('\t')
-+            if (parts.size != 4) return@mapNotNull null
++            if (parts.size != 5) return@mapNotNull null
 +            val at = parts[3].toLongOrNull() ?: return@mapNotNull null
 +            if (now - at > KEEP_MS) return@mapNotNull null
-+            parts[0] to Entry(parts[1].ifEmpty { null }, parts[2].ifEmpty { null }, at)
++            parts[0] to Entry(parts[1].ifEmpty { null }, parts[2].ifEmpty { null }, at, parts[4].ifEmpty { null })
 +        }.toMap()
 +        if (restored.isNotEmpty()) entriesState.update { restored + it }
 +    }
@@ -864,7 +1021,7 @@ index 00000000..d96c10ab
 +                .sortedByDescending { it.value.atMs }
 +                .take(2_500)
 +                .joinToString("\n") { (k, e) ->
-+                    listOf(k, e.primary.orEmpty(), e.secondary.orEmpty(), e.atMs.toString()).joinToString("\t")
++                    listOf(k, e.primary.orEmpty(), e.secondary.orEmpty(), e.atMs.toString(), e.language.orEmpty()).joinToString("\t")
 +                }
 +            runCatching { ForkHomeSettingsStorage.saveForkString(STORE_KEY, text) }
 +        }
@@ -884,7 +1041,9 @@ index 00000000..d96c10ab
 +            // Keep the saved tag when TMDB can't be reached rather than wiping it.
 +            if (result != null || cached == null) {
 +                val at = Clock.System.now().toEpochMilliseconds()
-+                entriesState.update { it + (key(item) to Entry(result?.first, result?.second, at)) }
++                entriesState.update {
++                    it + (key(item) to Entry(result?.first, result?.second, at, ForkLanguages.originalLabel(result?.third)))
++                }
 +                scheduleSave()
 +            }
 +            inFlightMutex.withLock { inFlight.remove(key(item)) }
@@ -918,6 +1077,12 @@ index 00000000..d96c10ab
 +
 +    if (isTop10) {
 +        ForkTop10Tag(Modifier.align(Alignment.TopEnd).padding(5.dp))
++    }
++    entry?.language?.let { language ->
++        ForkLanguageTag(
++            language,
++            Modifier.align(if (landscape) Alignment.BottomStart else Alignment.TopStart).padding(5.dp),
++        )
 +    }
 +    entry?.primary?.let { primary ->
 +        ForkFreshPill(
@@ -1113,6 +1278,16 @@ index 00000000..d96c10ab
 +
 +    val entries = listOf(
 +        Entry(
++            id = 2,
++            date = "Nov 6, 2026",
++            items = listOf(
++                "Play Something: a shuffle button at the top of Home that resumes something you're watching or plays an unwatched film from your Library or the Top 10.",
++                "Language tags: sources show Hindi, Tamil, Multi-audio and so on, and Indian titles get a HINDI (or Tamil, Telugu…) tag on Home.",
++                "Set a profile's preferred audio language to Hindi (Settings > Playback) and Hindi sources are listed first, so Infuse gets the Hindi file.",
++                "A Remind Me made on the Apple TV now schedules its notification here as soon as it syncs.",
++            ),
++        ),
++        Entry(
 +            id = 1,
 +            date = "Nov 5, 2026",
 +            items = listOf(
@@ -1162,6 +1337,116 @@ index 00000000..d96c10ab
 +        },
 +    )
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
+new file mode 100644
+index 00000000..cb51617b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
+@@ -0,0 +1,104 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.Shuffle
++import androidx.compose.material3.Icon
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.staticCompositionLocalOf
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.nuvio.app.features.library.LibraryRepository
++import com.nuvio.app.features.library.toMetaPreview
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watchprogress.ContinueWatchingItem
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++
++/**
++ * Fork: Play Something (Netflix) — a button at the top of Home that starts something without
++ * browsing: half the time a title you're in the middle of (resumed where you left off), otherwise
++ * an unwatched film from your Library or today's Top 10. Never the same title twice in a row.
++ */
++internal object ForkPlaySomething {
++    sealed interface Pick {
++        data class Resume(val item: ContinueWatchingItem) : Pick
++        data class Movie(val meta: MetaPreview) : Pick
++    }
++
++    private var lastPickedId: String? = null
++
++    fun pick(continueWatching: List<ContinueWatchingItem>, top10: List<MetaPreview>): Pick? {
++        val today = CurrentDateProvider.todayIsoDate()
++        val resumable = continueWatching.filter { it.parentMetaId != lastPickedId }
++        val inProgress = continueWatching.mapTo(mutableSetOf()) { it.parentMetaId }
++        val library = runCatching { LibraryRepository.uiState.value.items.map { it.toMetaPreview() } }
++            .getOrDefault(emptyList())
++        // Films only: they play straight away (a series would need its episode list first).
++        val fresh = (library + top10)
++            .filter { meta ->
++                meta.type.equals("movie", ignoreCase = true) &&
++                    meta.id.startsWith("tt") &&
++                    meta.id != lastPickedId &&
++                    meta.id !in inProgress &&
++                    !meta.isUnreleased(today) &&
++                    !runCatching { WatchedRepository.isWatched(id = meta.id, type = meta.type) }.getOrDefault(false)
++            }
++            .distinctBy { it.id }
++
++        val pick: Pick? = when {
++            resumable.isNotEmpty() && (fresh.isEmpty() || kotlin.random.Random.nextBoolean()) ->
++                Pick.Resume(resumable.random())
++            fresh.isNotEmpty() -> Pick.Movie(fresh.random())
++            else -> null
++        }
++        lastPickedId = when (pick) {
++            is Pick.Resume -> pick.item.parentMetaId
++            is Pick.Movie -> pick.meta.id
++            null -> lastPickedId
++        }
++        return pick
++    }
++}
++
++/** Starts a film from Home (set by the app shell for the Home tab). */
++internal val LocalForkPlayMovie = staticCompositionLocalOf<((MetaPreview) -> Unit)?> { null }
++
++@Composable
++internal fun ForkPlaySomethingButton(horizontalPadding: Dp, onClick: () -> Unit) {
++    Row(
++        modifier = Modifier
++            .padding(horizontal = horizontalPadding, vertical = 6.dp)
++            .clip(RoundedCornerShape(50))
++            .background(Color.White.copy(alpha = 0.16f))
++            .clickable(onClick = onClick)
++            .padding(horizontal = 16.dp, vertical = 9.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.spacedBy(8.dp),
++    ) {
++        Icon(
++            imageVector = Icons.Rounded.Shuffle,
++            contentDescription = null,
++            tint = Color.White,
++            modifier = Modifier.size(18.dp),
++        )
++        Text(
++            text = "Play Something",
++            color = Color.White,
++            fontSize = 14.sp,
++            fontWeight = FontWeight.SemiBold,
++        )
++    }
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 index 32d51fc1..ee74b1b7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
@@ -1197,7 +1482,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index c5228c6d..76fdcffc 100644
+index 7b1e4c28..4d9e8cfa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,5 +1,6 @@
@@ -1255,7 +1540,7 @@ index c5228c6d..76fdcffc 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -559,6 +601,14 @@ fun HomeScreen(
+@@ -559,6 +601,19 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
@@ -1265,12 +1550,17 @@ index c5228c6d..76fdcffc 100644
 +        ForkHomeSettings.disneyProfiles
 +    }.collectAsStateWithLifecycle()
 +    val forkDisneyStyle = activeProfileId in forkDisneyProfiles
++    val forkPlaySomethingEnabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.playSomething
++    }.collectAsStateWithLifecycle()
++    val forkPlayMovie = LocalForkPlayMovie.current
 +    // Fork: Netflix Home — ⓘ on Continue Watching opens the details page.
 +    androidx.compose.runtime.SideEffect { ForkNetflixHome.onCwInfo = onPosterClick }
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -911,9 +961,12 @@ fun HomeScreen(
+@@ -911,9 +966,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -1285,7 +1575,7 @@ index c5228c6d..76fdcffc 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,7 +1062,19 @@ fun HomeScreen(
+@@ -1009,7 +1067,19 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -1306,10 +1596,26 @@ index c5228c6d..76fdcffc 100644
              NuvioScreen(
                  modifier = Modifier.fillMaxSize().then(heroStretchModifier),
                  horizontalPadding = 0.dp,
-@@ -1065,6 +1130,12 @@ fun HomeScreen(
+@@ -1065,6 +1135,28 @@ fun HomeScreen(
                      }
                  }
  
++                // Fork: Play Something (shuffle).
++                if (forkPlaySomethingEnabled && !isInitialHomeContentLoading) {
++                    item(key = "fork_play_something") {
++                        ForkPlaySomethingButton(horizontalPadding = homeSectionPadding) {
++                            val top10 = listOfNotNull(forkTrending?.topMovies)
++                                .forkKids(forkKidsFilter)
++                                .flatMap { it.items }
++                            when (val pick = ForkPlaySomething.pick(continueWatchingItems, top10)) {
++                                is ForkPlaySomething.Pick.Resume -> onContinueWatchingClick?.invoke(pick.item)
++                                is ForkPlaySomething.Pick.Movie -> forkPlayMovie?.invoke(pick.meta)
++                                null -> Unit
++                            }
++                        }
++                    }
++                }
++
 +                if (forkDisneyStyle) {
 +                    item(key = "fork_kids_brands") {
 +                        ForkKidsBrandRow(horizontalPadding = homeSectionPadding)
@@ -1319,7 +1625,7 @@ index c5228c6d..76fdcffc 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1264,47 @@ fun HomeScreen(
+@@ -1193,6 +1285,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -1367,7 +1673,7 @@ index c5228c6d..76fdcffc 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1235,6 +1347,7 @@ fun HomeScreen(
+@@ -1235,6 +1368,7 @@ fun HomeScreen(
                  }
              }
          }
@@ -1389,24 +1695,21 @@ index a6269454..333325a1 100644
 +    item.isUnreleased(todayIsoDate, nowEpochMs) || CinemaOnlyReleases.isCinemaOnly(item, todayIsoDate)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
-index f4c907bb..c55239a0 100644
+index e8e2d83b..87003c97 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
-@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
- import androidx.compose.foundation.layout.PaddingValues
- import androidx.compose.foundation.layout.fillMaxWidth
- import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.remember
+@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.remember
  import androidx.compose.ui.Modifier
  import androidx.compose.ui.unit.Dp
 +import androidx.compose.ui.unit.dp
  import com.nuvio.app.core.ui.NuvioShelfSection
  import com.nuvio.app.core.ui.NuvioViewAllPillSize
- import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
-@@ -68,6 +70,14 @@ private fun HomeCatalogRowSectionContent(
-     onPosterLongClick: ((MetaPreview) -> Unit)?,
- ) {
-     val posterCardStyle = rememberPosterCardStyleUiState()
+ import com.nuvio.app.core.ui.PosterRowImagePrefetchEffect
+@@ -79,6 +80,14 @@ private fun HomeCatalogRowSectionContent(
+         }
+     }
+     PosterRowImagePrefetchEffect(state = rowState, targets = prefetchTargets)
 +    val top10Ranks = remember(section.title, entries) {
 +        Top10Rank.ranks(section.title, entries.map { it.stableKey() })
 +    }
@@ -1418,15 +1721,15 @@ index f4c907bb..c55239a0 100644
  
      NuvioShelfSection(
          title = section.title,
-@@ -79,6 +89,7 @@ private fun HomeCatalogRowSectionContent(
-         viewAllPillSize = NuvioViewAllPillSize.Compact,
+@@ -91,6 +100,7 @@ private fun HomeCatalogRowSectionContent(
          key = { item -> item.stableKey() },
+         state = rowState,
      ) { item ->
 +        Top10RankedCard(rank = top10Ranks[item.stableKey()], artworkHeight = artworkHeight) {
          HomePosterCard(
              item = item,
              useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
-@@ -90,5 +101,6 @@ private fun HomeCatalogRowSectionContent(
+@@ -102,5 +112,6 @@ private fun HomeCatalogRowSectionContent(
              onClick = onPosterClick?.let { { it(item) } },
              onLongClick = onPosterLongClick?.let { { it(item) } },
          )
@@ -1748,10 +2051,10 @@ index abb8ca38..7b8bb138 100644
  private fun ArtworkPanel(
      imageUrl: String?,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-index 14ef1d4a..3957f7ac 100644
+index ea52ed4e..8746303b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-@@ -876,6 +876,25 @@ private fun HeroContentBlock(
+@@ -882,6 +882,25 @@ private fun HeroContentBlock(
              showMdbListRatings = showMdbListRatings,
          )
  
@@ -1778,18 +2081,18 @@ index 14ef1d4a..3957f7ac 100644
              Spacer(modifier = Modifier.height(10.dp))
              Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
-index 71e9511b..46ff9fc1 100644
+index df86bf7b..0403cc35 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
-@@ -6,6 +6,7 @@ import com.nuvio.app.core.format.formatReleaseDateForDisplay
- import com.nuvio.app.core.ui.NuvioPosterCard
- import com.nuvio.app.core.ui.NuvioPosterShape
+@@ -8,6 +8,7 @@ import com.nuvio.app.core.ui.NuvioPosterShape
+ import com.nuvio.app.core.ui.PosterCardStyleUiState
+ import com.nuvio.app.core.ui.PosterPrefetchTarget
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 +import com.nuvio.app.features.home.ForkCardBadgeOverlay
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.home.PosterShape
  
-@@ -45,6 +46,7 @@ fun HomePosterCard(
+@@ -39,6 +40,7 @@ fun HomePosterCard(
          isWatched = isWatched,
          onClick = onClick,
          onLongClick = onLongClick,
@@ -2008,10 +2311,44 @@ index 00000000..03843544
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt
-index ce9a9f8a..c6f2bbf1 100644
+index ce9a9f8a..51c05ce0 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt
-@@ -344,6 +344,26 @@ object EpisodeReleaseNotificationsRepository {
+@@ -58,6 +58,9 @@ object EpisodeReleaseNotificationsRepository {
+ 
+     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
+ 
++    @Volatile
++    private var forkMovieReminderSignature: String? = null
++
+     init {
+         scope.launch {
+             for (ignored in refreshRequests) {
+@@ -72,11 +75,20 @@ object EpisodeReleaseNotificationsRepository {
+                 if (!hasLoaded) return@collectLatest
+ 
+                 val changed = reconcileTrackedShows(state)
++                // Fork: a movie Remind Me (made here or synced from the Apple TV) changes only
++                // movies, so watch those too or it waits for the next launch.
++                val movieSignature = if (state.isLoaded) {
++                    movieReminderRequests(state.items).joinToString("|") { it.requestId + "@" + it.releaseDateIso }
++                } else {
++                    forkMovieReminderSignature
++                }
++                val moviesChanged = movieSignature != forkMovieReminderSignature
++                forkMovieReminderSignature = movieSignature
+                 if (changed) {
+                     persist()
+-                    if (_uiState.value.isEnabled) {
+-                        requestRefresh()
+-                    }
++                }
++                if ((changed || moviesChanged) && _uiState.value.isEnabled) {
++                    requestRefresh()
+                 }
+             }
+         }
+@@ -344,6 +356,26 @@ object EpisodeReleaseNotificationsRepository {
          return changed
      }
  
@@ -2038,7 +2375,7 @@ index ce9a9f8a..c6f2bbf1 100644
      private fun inferFollowedOnIsoDate(item: LibraryItem): String {
          if (item.savedAtEpochMs >= MinReasonableSavedAtEpochMs) {
              return EpisodeReleaseNotificationsClock.isoDateFromEpochMs(item.savedAtEpochMs)
-@@ -392,7 +412,11 @@ object EpisodeReleaseNotificationsRepository {
+@@ -392,7 +424,11 @@ object EpisodeReleaseNotificationsRepository {
                  errorMessage = null,
              )
  
@@ -2051,7 +2388,7 @@ index ce9a9f8a..c6f2bbf1 100644
                  runCatching { EpisodeReleaseNotificationPlatform.clearScheduledEpisodeReleaseNotifications() }
                  _uiState.value = _uiState.value.copy(
                      isLoading = false,
-@@ -424,8 +448,7 @@ object EpisodeReleaseNotificationsRepository {
+@@ -424,8 +460,7 @@ object EpisodeReleaseNotificationsRepository {
              cachedRequestsByShowKey = requestsByShowKey
              persist()
  
@@ -2091,7 +2428,7 @@ index 8f575137..5089da8f 100644
                              ) { keyedSection ->
                                  val section = keyedSection.value
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-index a2f4a7c3..49318962 100644
+index a2f4a7c3..2ca6cc18 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 @@ -45,6 +45,8 @@ import com.nuvio.app.features.addons.AddonRepository
@@ -2111,7 +2448,7 @@ index a2f4a7c3..49318962 100644
  import org.jetbrains.compose.resources.stringResource
  import sh.calvin.reorderable.ReorderableCollectionItemScope
  import sh.calvin.reorderable.ReorderableItem
-@@ -257,6 +258,127 @@ internal fun LazyListScope.homescreenSettingsContent(
+@@ -257,6 +258,136 @@ internal fun LazyListScope.homescreenSettingsContent(
                  val hapticFeedback = LocalHapticFeedback.current
                  val pinToMoveToast = stringResource(Res.string.settings_homescreen_pin_to_move_toast)
  
@@ -2225,10 +2562,19 @@ index a2f4a7c3..49318962 100644
 +                        SettingsGroupDivider(isTablet = isTablet)
 +                        SettingsSwitchRow(
 +                            title = "Card Tags",
-+                            description = "Netflix TOP 10 tags and New Episode / New Season / Recently Added tags on posters (from TMDB)",
++                            description = "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and a HINDI (or Tamil, Telugu…) tag on Indian titles, from TMDB",
 +                            checked = forkCardBadges,
 +                            isTablet = isTablet,
 +                            onCheckedChange = ForkHomeSettings::setCardBadges,
++                        )
++                        val forkPlaySomething by ForkHomeSettings.playSomething.collectAsStateWithLifecycle()
++                        SettingsGroupDivider(isTablet = isTablet)
++                        SettingsSwitchRow(
++                            title = "Play Something",
++                            description = "A shuffle button at the top of Home: resumes something you're watching or plays an unwatched film from your Library or today's Top 10",
++                            checked = forkPlaySomething,
++                            isTablet = isTablet,
++                            onCheckedChange = ForkHomeSettings::setPlaySomething,
 +                        )
 +                    }
 +                }

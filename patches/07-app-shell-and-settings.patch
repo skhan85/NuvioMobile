@@ -1,27 +1,30 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-index cfa65be9..4dcb79a8 100644
+index 9720bed5..7ad810ec 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
-@@ -147,6 +147,8 @@ internal data class AppTabRequests(
+@@ -148,6 +148,10 @@ internal data class AppTabRequests(
  internal data class AppTabActions(
      val onCatalogClick: ((HomeCatalogSection) -> Unit)? = null,
      val onPosterClick: ((MetaPreview) -> Unit)? = null,
 +    /** Fork: Kids studio tiles — (kind "company"/"network", TMDB id, name). */
 +    val onKidsBrandClick: ((String, Int, String) -> Unit)? = null,
++    /** Fork: Play Something starts a film straight away. */
++    val onForkPlayMovie: ((MetaPreview) -> Unit)? = null,
      val onPosterLongClick: ((MetaPreview) -> Unit)? = null,
      val onLibraryPosterClick: ((LibraryItem) -> Unit)? = null,
      val onLibraryCalendarEpisodeClick: ((LibraryItem, Int?, Int?) -> Unit)? = null,
-@@ -196,6 +198,9 @@ internal fun AppTabHost(
+@@ -198,6 +202,10 @@ internal fun AppTabHost(
          when (tab) {
              AppScreenTab.Home -> {
                  key(state.homeContentGeneration) {
 +                    androidx.compose.runtime.CompositionLocalProvider(
 +                        com.nuvio.app.features.home.LocalForkOpenBrand provides actions.onKidsBrandClick,
++                        com.nuvio.app.features.home.LocalForkPlayMovie provides actions.onForkPlayMovie,
 +                    ) {
                      val homeDynamicBackground by ThemeSettingsRepository.dynamicArtworkBackgroundEnabled.collectAsStateWithLifecycle()
                      OpaqueAppSurfaces(enabled = homeDynamicBackground) {
                          HomeScreen(
-@@ -212,6 +217,7 @@ internal fun AppTabHost(
+@@ -214,6 +222,7 @@ internal fun AppTabHost(
                              onFirstCatalogRendered = actions.onInitialHomeContentRendered,
                          )
                      }
@@ -30,7 +33,7 @@ index cfa65be9..4dcb79a8 100644
              }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index 53eeb3de..6e1c864d 100644
+index b376b9f0..65ac27ff 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.CheckCircle
@@ -50,7 +53,7 @@ index 53eeb3de..6e1c864d 100644
  import com.nuvio.app.features.details.MetaDetailsRepository
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import com.nuvio.app.features.downloads.DownloadItem
-@@ -145,6 +148,10 @@ import com.nuvio.app.features.party.partyMediaKey
+@@ -146,6 +149,10 @@ import com.nuvio.app.features.party.partyMediaKey
  import com.nuvio.app.features.player.ExternalPlayerIntentResult
  import com.nuvio.app.features.player.externalPlaybackSession
  import com.nuvio.app.features.player.infusePlaybackCallbacks
@@ -61,7 +64,7 @@ index 53eeb3de..6e1c864d 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -809,6 +816,8 @@ internal fun MainAppContent(
+@@ -810,6 +817,8 @@ internal fun MainAppContent(
              val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
@@ -70,7 +73,7 @@ index 53eeb3de..6e1c864d 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -920,7 +929,12 @@ internal fun MainAppContent(
+@@ -921,7 +930,12 @@ internal fun MainAppContent(
              }
  
              val baseRequest = launch.toExternalPlayerPlaybackRequest()
@@ -83,7 +86,7 @@ index 53eeb3de..6e1c864d 100644
                  !playerSettingsUiState.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
              val shouldSendSkipSegments = playerSettingsUiState.externalPlayerSendSkipSegments
              if (shouldForwardSubtitles) {
-@@ -933,14 +947,22 @@ internal fun MainAppContent(
+@@ -934,14 +948,22 @@ internal fun MainAppContent(
                  type = launch.contentType ?: launch.parentMetaType,
                  videoId = launch.videoId ?: launch.parentMetaId,
                  contentId = launch.parentMetaId,
@@ -107,12 +110,34 @@ index 53eeb3de..6e1c864d 100644
              return when (
                  val intentResult = ExternalPlayerPlatform.buildIntent(
                      request = enrichedRequest,
-@@ -1645,6 +1667,18 @@ internal fun MainAppContent(
+@@ -1672,6 +1694,40 @@ internal fun MainAppContent(
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
                                  onPosterClick = navController::openPreview,
 +                                // Fork: a Kids studio tile (Disney+ look) opens that studio's titles
 +                                // on this tab's own stack, so Back returns to Home.
++                                // Fork: Play Something picked a film — play it like the details page's Play.
++                                onForkPlayMovie = { meta ->
++                                    launchPlaybackWithDownloadPreference(
++                                        type = meta.type,
++                                        videoId = meta.id,
++                                        parentMetaId = meta.id,
++                                        parentMetaType = meta.type,
++                                        title = meta.name,
++                                        logo = meta.logo,
++                                        poster = meta.poster,
++                                        background = meta.banner,
++                                        seasonNumber = null,
++                                        episodeNumber = null,
++                                        episodeTitle = null,
++                                        episodeThumbnail = null,
++                                        pauseDescription = meta.description,
++                                        resumePositionMs = null,
++                                        resumeProgressFraction = null,
++                                        manualSelection = false,
++                                        startFromBeginning = false,
++                                    )
++                                },
 +                                onKidsBrandClick = { kind, tmdbId, name ->
 +                                    navController.navigate(
 +                                        EntityBrowseRoute(
@@ -126,7 +151,7 @@ index 53eeb3de..6e1c864d 100644
                                  onPosterLongClick = { meta ->
                                      openPosterActions(PosterActionTarget(preview = meta))
                                  },
-@@ -2068,6 +2102,11 @@ internal fun MainAppContent(
+@@ -2096,6 +2152,11 @@ internal fun MainAppContent(
                          item = preview,
                          fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                      )
@@ -138,7 +163,7 @@ index 53eeb3de..6e1c864d 100644
                      val removesFromLibrary = isSaved &&
                          (posterActionTarget.libraryItem != null || !isRemoteLibrarySource)
                      NuvioPosterZoomActionOverlay(
-@@ -2083,11 +2122,16 @@ internal fun MainAppContent(
+@@ -2111,11 +2172,16 @@ internal fun MainAppContent(
                          anchor = selectedPosterAnchor,
                          actions = listOf(
                              PosterZoomOverlayAction(
@@ -160,7 +185,7 @@ index 53eeb3de..6e1c864d 100644
                                  },
                                  isDestructive = removesFromLibrary,
                                  exitAnimation = if (removesFromLibrary && !isRemoteLibrarySource) {
-@@ -2455,6 +2499,45 @@ internal fun MainAppContent(
+@@ -2483,6 +2549,45 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  
