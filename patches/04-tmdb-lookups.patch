@@ -1,0 +1,254 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
+index be512527..22f64187 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
+@@ -1,5 +1,7 @@
+ package com.nuvio.app.features.tmdb
+ 
++import kotlinx.datetime.daysUntil
++import kotlinx.datetime.toLocalDateTime
+ import co.touchlab.kermit.Logger
+ import com.nuvio.app.features.addons.httpGetText
+ import com.nuvio.app.features.details.MetaCompany
+@@ -415,7 +417,9 @@ object TmdbMetadataService {
+         fallbackName: String? = null,
+     ): TmdbEntityBrowseData? = withContext(Dispatchers.Default) {
+         val settings = TmdbSettingsRepository.snapshot()
+-        if (!settings.enabled) return@withContext null
++        // Fork: studio pages work whenever a TMDB key is available (the built-in one included),
++        // even with TMDB enrichment switched off.
++        if (!settings.enabled && TmdbSettingsRepository.effectiveApiKey().isBlank()) return@withContext null
+         val language = normalizeTmdbLanguage(settings.language)
+         val normalizedSourceType = normalizeEntitySourceType(sourceType)
+         val cacheKey = "${entityKind.routeValue}:$entityId:$normalizedSourceType:$language"
+@@ -1274,6 +1278,157 @@ object TmdbMetadataService {
+         )
+     }
+ 
++    /**
++     * Fork: "Because you watched X" — TMDB recommendations for any Nuvio id (tmdb:/tt…).
++     * Empty when the title can't be matched to TMDB or no key is configured.
++     */
++    suspend fun recommendationsFor(id: String, type: String): List<MetaPreview> {
++        val mediaType = if (type.equals("series", true) || type.equals("tv", true)) "tv" else "movie"
++        val tmdbId = runCatching { TmdbService.ensureTmdbId(id, mediaType) }.getOrNull()
++            ?.toIntOrNull() ?: return emptyList()
++        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
++        return fetchMoreLikeThis(tmdbId = tmdbId, mediaType = mediaType, language = language).items
++    }
++
++    /**
++     * Fork: Netflix-style "Top 10 … Today" / "Trending Now" rows — TMDB's trending list for
++     * [mediaType] ("movie", "tv" or "all") over [window] ("day" or "week"), in TMDB's order.
++     * Empty when no key is configured or the request fails.
++     */
++    suspend fun trending(mediaType: String, window: String): List<MetaPreview> {
++        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
++        val response = fetch<TmdbRecommendationResponse>(
++            endpoint = "trending/$mediaType/$window",
++            query = mapOf("language" to language),
++        ) ?: return emptyList()
++        return forkMapTrending(response.results, mediaType)
++    }
++
++    /**
++     * Fork: kid-friendly stand-in for [trending] on kids profiles — today's most popular titles
++     * that TMDB files as Family / Animation films rated PG or lower in the US, or Kids / Family
++     * shows. [mediaType] is "movie" or "tv".
++     */
++    /**
++     * Fork: kids rating limit — a title's age rating (US first) for any Nuvio id (tt… / tmdb:…),
++     * or null when TMDB has none or the title can't be matched.
++     */
++    /**
++     * Fork: Netflix card tag. Series: "New Episode" / "New Season" when an episode aired in the
++     * last 10 days (or a new season starts within the week), with "Watch Now" or the next air day
++     * beside it. Movies: "Recently Added" when the digital release was in the last 30 days.
++     * Returns null when TMDB can't be reached, (null, null) when there's nothing to tag.
++     */
++    /** Fork: a studio's or TV network's logo URL on TMDB (for the Kids brand tiles). */
++    suspend fun forkBrandLogo(tmdbId: Int, isNetwork: Boolean): String? {
++        val brand = fetch<ForkTmdbBrand>(endpoint = if (isNetwork) "network/$tmdbId" else "company/$tmdbId") ?: return null
++        return brand.logoPath?.takeIf { it.isNotBlank() }?.let { "https://image.tmdb.org/t/p/w500$it" }
++    }
++
++    suspend fun forkFreshness(id: String, type: String): Pair<String?, String?>? {
++        val mediaType = if (type.equals("series", true) || type.equals("tv", true)) "tv" else "movie"
++        val tmdbId = runCatching { TmdbService.ensureTmdbId(id, mediaType) }.getOrNull()
++            ?.toIntOrNull() ?: return null
++        val today = kotlin.time.Clock.System.now()
++            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()).date
++        fun day(raw: String?): kotlinx.datetime.LocalDate? =
++            raw?.takeIf { it.length >= 10 }?.let { runCatching { kotlinx.datetime.LocalDate.parse(it.substring(0, 10)) }.getOrNull() }
++        if (mediaType == "tv") {
++            val show = fetch<ForkTmdbShowAiring>(endpoint = "tv/$tmdbId") ?: return null
++            var primary: String? = null
++            var secondary: String? = null
++            show.last?.let { last ->
++                val aired = day(last.airDate) ?: return@let
++                val daysAgo = aired.daysUntil(today)
++                if (daysAgo in 0..10) {
++                    primary = if (last.episode == 1 && (last.season ?: 1) > 1) "New Season" else "New Episode"
++                }
++            }
++            show.next?.let { next ->
++                val airs = day(next.airDate) ?: return@let
++                val daysAhead = today.daysUntil(airs)
++                if (daysAhead in 0..6) {
++                    if (primary == null && next.episode == 1 && (next.season ?: 1) > 1) primary = "New Season"
++                    if (primary != null) {
++                        secondary = if (daysAhead == 0) "Today"
++                        else airs.dayOfWeek.name.lowercase().replaceFirstChar(Char::uppercase)
++                    }
++                }
++            }
++            if (primary != null && secondary == null) secondary = "Watch Now"
++            return primary to secondary
++        }
++        val releases = fetch<ForkTmdbReleases>(endpoint = "movie/$tmdbId/release_dates") ?: return null
++        // Digital (4) or physical (5): when it became watchable at home.
++        val homeRelease = releases.results
++            .flatMap { it.releaseDates }
++            .filter { (it.type ?: 0) >= 4 }
++            .mapNotNull { day(it.releaseDate) }
++            .minOrNull()
++        if (homeRelease != null && homeRelease.daysUntil(today) in 0..30) return "Recently Added" to null
++        return null to null
++    }
++
++    /**
++     * Fork: every TMDB release of a film as (type, yyyy-MM-dd…) pairs, all countries — 1 premiere,
++     * 2 limited theatrical, 3 theatrical, 4 digital, 5 physical, 6 TV. Null when the film can't be
++     * matched on TMDB or TMDB can't be reached (see CinemaOnlyReleases).
++     */
++    suspend fun forkMovieReleaseDates(id: String): List<Pair<Int, String>>? {
++        val tmdbId = runCatching { TmdbService.ensureTmdbId(id, "movie") }.getOrNull()
++            ?.toIntOrNull() ?: return null
++        val releases = fetch<ForkTmdbReleases>(endpoint = "movie/$tmdbId/release_dates") ?: return null
++        return releases.results
++            .flatMap { it.releaseDates }
++            .mapNotNull { release ->
++                val type = release.type ?: return@mapNotNull null
++                val date = release.releaseDate?.takeIf { it.length >= 10 } ?: return@mapNotNull null
++                type to date
++            }
++    }
++
++    suspend fun forkAgeRating(id: String, type: String): String? {
++        val mediaType = if (type.equals("series", true) || type.equals("tv", true)) "tv" else "movie"
++        val tmdbId = runCatching { TmdbService.ensureTmdbId(id, mediaType) }.getOrNull()
++            ?.toIntOrNull() ?: return null
++        return when (mediaType) {
++            "tv" -> fetch<TmdbTvContentRatingsResponse>(endpoint = "tv/$tmdbId/content_ratings")
++                ?.results.orEmpty().selectTvAgeRating("en-US")
++            else -> fetch<TmdbMovieReleaseDatesResponse>(endpoint = "movie/$tmdbId/release_dates")
++                ?.results.orEmpty().selectMovieAgeRating("en-US")
++        }
++    }
++
++    suspend fun kidsPopular(mediaType: String): List<MetaPreview> {
++        val language = normalizeTmdbLanguage(TmdbSettingsRepository.snapshot().language)
++        val query = if (mediaType == "movie") {
++            mapOf(
++                "language" to language,
++                "sort_by" to "popularity.desc",
++                "include_adult" to "false",
++                "certification_country" to "US",
++                "certification.lte" to "PG",
++                "with_genres" to "10751|16",
++                "vote_count.gte" to "50",
++            )
++        } else {
++            mapOf(
++                "language" to language,
++                "sort_by" to "popularity.desc",
++                "include_adult" to "false",
++                "with_genres" to "10762|10751",
++                "without_genres" to "80|18|10768",
++                "vote_count.gte" to "20",
++            )
++        }
++        val response = fetch<TmdbRecommendationResponse>(
++            endpoint = "discover/$mediaType",
++            query = query,
++        ) ?: return emptyList()
++        return forkMapTrending(response.results, mediaType)
++    }
++
++
+     private suspend fun fetchMoreLikeThis(
+         tmdbId: Int,
+         mediaType: String,
+@@ -2097,6 +2252,40 @@ private data class TmdbReleaseDate(
+     val certification: String? = null,
+ )
+ 
++@Serializable
++private data class ForkTmdbBrand(
++    @SerialName("logo_path") val logoPath: String? = null,
++)
++
++@Serializable
++private data class ForkTmdbShowAiring(
++    @SerialName("last_episode_to_air") val last: ForkTmdbAiringEpisode? = null,
++    @SerialName("next_episode_to_air") val next: ForkTmdbAiringEpisode? = null,
++)
++
++@Serializable
++private data class ForkTmdbAiringEpisode(
++    @SerialName("air_date") val airDate: String? = null,
++    @SerialName("episode_number") val episode: Int? = null,
++    @SerialName("season_number") val season: Int? = null,
++)
++
++@Serializable
++private data class ForkTmdbReleases(
++    val results: List<ForkTmdbReleaseCountry> = emptyList(),
++)
++
++@Serializable
++private data class ForkTmdbReleaseCountry(
++    @SerialName("release_dates") val releaseDates: List<ForkTmdbReleaseDate> = emptyList(),
++)
++
++@Serializable
++private data class ForkTmdbReleaseDate(
++    val type: Int? = null,
++    @SerialName("release_date") val releaseDate: String? = null,
++)
++
+ @Serializable
+ private data class TmdbTvContentRatingsResponse(
+     val results: List<TmdbTvContentRating> = emptyList(),
+@@ -2344,3 +2533,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
+         ?.filePath
+         ?.trim()
+ }
++
++/** Fork: TMDB list items → previews for the Top 10 / Trending rows (people dropped). */
++private fun forkMapTrending(results: List<TmdbRecommendationItem>, mediaType: String): List<MetaPreview> =
++    results
++        .filter { it.id > 0 }
++        .mapNotNull { item ->
++            val type = when (item.mediaType?.lowercase() ?: mediaType) {
++                "tv" -> "series"
++                "movie" -> "movie"
++                else -> return@mapNotNull null // people in the "all" list
++            }
++            val title = listOf(item.title, item.name, item.originalTitle, item.originalName)
++                .firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotBlank) }
++                ?: return@mapNotNull null
++            MetaPreview(
++                id = "tmdb:${item.id}",
++                type = type,
++                name = title,
++                poster = buildImageUrl(item.posterPath, "w500")
++                    ?: buildImageUrl(item.backdropPath, "w780"),
++                banner = buildImageUrl(item.backdropPath, "w1280"),
++                posterShape = PosterShape.Poster,
++                description = item.overview?.trim()?.takeIf(String::isNotBlank),
++                releaseInfo = (item.releaseDate ?: item.firstAirDate)?.take(4),
++                rawReleaseDate = item.releaseDate ?: item.firstAirDate,
++                imdbRating = item.voteAverage?.formatRating(),
++            )
++        }

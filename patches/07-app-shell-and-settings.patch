@@ -1,0 +1,237 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
+index cfa65be9..4dcb79a8 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
+@@ -147,6 +147,8 @@ internal data class AppTabRequests(
+ internal data class AppTabActions(
+     val onCatalogClick: ((HomeCatalogSection) -> Unit)? = null,
+     val onPosterClick: ((MetaPreview) -> Unit)? = null,
++    /** Fork: Kids studio tiles — (kind "company"/"network", TMDB id, name). */
++    val onKidsBrandClick: ((String, Int, String) -> Unit)? = null,
+     val onPosterLongClick: ((MetaPreview) -> Unit)? = null,
+     val onLibraryPosterClick: ((LibraryItem) -> Unit)? = null,
+     val onLibraryCalendarEpisodeClick: ((LibraryItem, Int?, Int?) -> Unit)? = null,
+@@ -196,6 +198,9 @@ internal fun AppTabHost(
+         when (tab) {
+             AppScreenTab.Home -> {
+                 key(state.homeContentGeneration) {
++                    androidx.compose.runtime.CompositionLocalProvider(
++                        com.nuvio.app.features.home.LocalForkOpenBrand provides actions.onKidsBrandClick,
++                    ) {
+                     val homeDynamicBackground by ThemeSettingsRepository.dynamicArtworkBackgroundEnabled.collectAsStateWithLifecycle()
+                     OpaqueAppSurfaces(enabled = homeDynamicBackground) {
+                         HomeScreen(
+@@ -212,6 +217,7 @@ internal fun AppTabHost(
+                             onFirstCatalogRendered = actions.onInitialHomeContentRendered,
+                         )
+                     }
++                    }
+                 }
+             }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+index 53eeb3de..6e1c864d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
+@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.CheckCircle
+ import androidx.compose.material.icons.filled.CheckCircleOutline
+ import androidx.compose.material.icons.filled.DeleteOutline
+ import androidx.compose.material.icons.filled.Info
++import androidx.compose.material.icons.filled.Notifications
++import androidx.compose.material.icons.filled.NotificationsOff
+ import androidx.compose.material.icons.filled.PlayArrow
+ import androidx.compose.material.icons.filled.Replay
+ import androidx.compose.material3.MaterialTheme
+@@ -105,6 +107,7 @@ import com.nuvio.app.features.cloud.playbackVideoId
+ import com.nuvio.app.features.cloud.providerPosterUrl
+ import com.nuvio.app.features.collection.CollectionRepository
+ import com.nuvio.app.features.collection.CollectionSyncService
++import com.nuvio.app.features.details.INFUSE_FORWARDS_ADDON_SUBTITLES
+ import com.nuvio.app.features.details.MetaDetailsRepository
+ import com.nuvio.app.features.details.MetaScreenSettingsRepository
+ import com.nuvio.app.features.downloads.DownloadItem
+@@ -145,6 +148,10 @@ import com.nuvio.app.features.party.partyMediaKey
+ import com.nuvio.app.features.player.ExternalPlayerIntentResult
+ import com.nuvio.app.features.player.externalPlaybackSession
+ import com.nuvio.app.features.player.infusePlaybackCallbacks
++import com.nuvio.app.features.player.ExternalMovieSuggestions
++import com.nuvio.app.features.player.ExternalMovieSuggestionsOverlay
++import com.nuvio.app.features.player.ExternalUpNext
++import com.nuvio.app.features.player.ExternalUpNextOverlay
+ import com.nuvio.app.features.player.recordExternalPlaybackProgress
+ import com.nuvio.app.features.player.ExternalPlayerPlatform
+ import com.nuvio.app.features.player.PlayerLaunch
+@@ -809,6 +816,8 @@ internal fun MainAppContent(
+             val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
+             coroutineScope.launch {
+                 recordExternalPlaybackProgress(result, fallbackSession)
++                ExternalMovieSuggestions.onExternalPlaybackReturned(result, fallbackSession)
++                ExternalUpNext.onExternalPlaybackReturned(result, fallbackSession)
+                 result.callbackId?.let(infusePlaybackCallbacks::consume)
+             }
+         }
+@@ -920,7 +929,12 @@ internal fun MainAppContent(
+             }
+ 
+             val baseRequest = launch.toExternalPlayerPlaybackRequest()
++            // Fork: never hand addon subtitles to Infuse. They are timed for other releases
++            // and arrive out of sync; Infuse's own embedded tracks and subtitle search are in
++            // sync, and Infuse only keeps the last `sub=` anyway. Other players keep the toggle.
+             val shouldForwardSubtitles = playerSettingsUiState.externalPlayerForwardSubtitles &&
++                (INFUSE_FORWARDS_ADDON_SUBTITLES ||
++                    !playerSettingsUiState.externalPlayerId.equals("infuse", ignoreCase = true)) &&
+                 !playerSettingsUiState.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
+             val shouldSendSkipSegments = playerSettingsUiState.externalPlayerSendSkipSegments
+             if (shouldForwardSubtitles) {
+@@ -933,14 +947,22 @@ internal fun MainAppContent(
+                 type = launch.contentType ?: launch.parentMetaType,
+                 videoId = launch.videoId ?: launch.parentMetaId,
+                 contentId = launch.parentMetaId,
+-                forwardSubtitles = playerSettingsUiState.externalPlayerForwardSubtitles,
++                forwardSubtitles = shouldForwardSubtitles,
+                 sendSkipSegments = shouldSendSkipSegments,
+                 preferredLanguage = playerSettingsUiState.preferredSubtitleLanguage,
+                 secondaryLanguage = playerSettingsUiState.secondaryPreferredSubtitleLanguage,
+                 subtitleExtras = launch.subtitleExtras,
+                 onOverlayMessage = { message -> StreamsRepository.setOverlayVisible(true, message) },
++                // Fork: off. TorBox's one-time download links (Kuiper 307 -> TorBox API 307 -> CDN)
++                // break when resolved ahead of Infuse ("Server responded with status 400"), and
++                // Infuse follows these redirects fine on its own.
++                resolveRedirects = false,
+             )
+             StreamsRepository.setOverlayVisible(false)
++            // Fork: say so when forwarding found nothing, instead of Infuse silently opening without them.
++            if (shouldForwardSubtitles && enrichedRequest.subtitles.isNullOrEmpty()) {
++                NuvioToastController.show("No add-on subtitles found in your subtitle languages", durationMillis = 6_000L)
++            }
+             return when (
+                 val intentResult = ExternalPlayerPlatform.buildIntent(
+                     request = enrichedRequest,
+@@ -1645,6 +1667,18 @@ internal fun MainAppContent(
+                             AppTabActions(
+                                 onCatalogClick = onCatalogClick,
+                                 onPosterClick = navController::openPreview,
++                                // Fork: a Kids studio tile (Disney+ look) opens that studio's titles
++                                // on this tab's own stack, so Back returns to Home.
++                                onKidsBrandClick = { kind, tmdbId, name ->
++                                    navController.navigate(
++                                        EntityBrowseRoute(
++                                            entityKind = kind,
++                                            entityId = tmdbId,
++                                            entityName = name,
++                                            sourceType = if (kind == "network") "tv" else "movie",
++                                        ),
++                                    )
++                                },
+                                 onPosterLongClick = { meta ->
+                                     openPosterActions(PosterActionTarget(preview = meta))
+                                 },
+@@ -2068,6 +2102,11 @@ internal fun MainAppContent(
+                         item = preview,
+                         fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                     )
++                    // Fork: Coming Soon titles offer "Remind Me" (Library save + release-day notification).
++                    val isUnreleased = com.nuvio.app.features.home.ForkHomeRows.isUnreleased(
++                        preview.rawReleaseDate ?: preview.releaseInfo,
++                        com.nuvio.app.features.watchprogress.WatchProgressClock.nowEpochMs(),
++                    )
+                     val removesFromLibrary = isSaved &&
+                         (posterActionTarget.libraryItem != null || !isRemoteLibrarySource)
+                     NuvioPosterZoomActionOverlay(
+@@ -2083,11 +2122,16 @@ internal fun MainAppContent(
+                         anchor = selectedPosterAnchor,
+                         actions = listOf(
+                             PosterZoomOverlayAction(
+-                                icon = if (isSaved) Icons.Default.DeleteOutline else Icons.Default.Add,
+-                                label = if (isSaved) {
+-                                    stringResource(Res.string.hero_remove_from_library)
+-                                } else {
+-                                    stringResource(Res.string.hero_add_to_library)
++                                icon = when {
++                                    isUnreleased -> if (isSaved) Icons.Default.NotificationsOff else Icons.Default.Notifications
++                                    isSaved -> Icons.Default.DeleteOutline
++                                    else -> Icons.Default.Add
++                                },
++                                label = when {
++                                    isUnreleased && isSaved -> "Cancel Reminder"
++                                    isUnreleased -> "Remind Me"
++                                    isSaved -> stringResource(Res.string.hero_remove_from_library)
++                                    else -> stringResource(Res.string.hero_add_to_library)
+                                 },
+                                 isDestructive = removesFromLibrary,
+                                 exitAnimation = if (removesFromLibrary && !isRemoteLibrarySource) {
+@@ -2455,6 +2499,45 @@ internal fun MainAppContent(
+                     .zIndex(15f),
+             )
+ 
++            ExternalUpNextOverlay(
++                onPlayNext = { session, next ->
++                    onPlay(
++                        session.contentType,
++                        next.videoId,
++                        session.parentMetaId,
++                        session.parentMetaType,
++                        session.title,
++                        session.logo,
++                        session.poster,
++                        session.background,
++                        next.season,
++                        next.episode,
++                        next.title,
++                        next.thumbnail,
++                        next.overview,
++                        null,
++                    )
++                },
++                modifier = Modifier
++                    .align(Alignment.BottomEnd)
++                    .zIndex(16f),
++            )
++
++            ExternalMovieSuggestionsOverlay(
++                onOpen = { preview ->
++                    navController.navigate(
++                        DetailRoute(
++                            type = preview.type,
++                            id = preview.id,
++                            title = preview.name,
++                        ),
++                    )
++                },
++                modifier = Modifier
++                    .align(Alignment.BottomEnd)
++                    .zIndex(16f),
++            )
++
+             NuvioToastHost(
+                 modifier = Modifier
+                     .align(Alignment.TopCenter)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+index a6ccd5fd..6ed0a0c8 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/AdvancedSettingsPage.kt
+@@ -209,6 +209,24 @@ internal fun LazyListScope.advancedSettingsContent(
+                         }
+                     },
+                 )
++                // Fork: Clear Image Cache (from ysosrs123's NuvioTV fork).
++                val platformContext = coil3.compose.LocalPlatformContext.current
++                var imagesCleared by rememberSaveable { mutableStateOf(false) }
++                SettingsNavigationRow(
++                    title = "Clear Image Cache",
++                    description = if (imagesCleared) {
++                        "Cleared. Artwork reloads as you browse."
++                    } else {
++                        "Posters, backdrops and logos. Continue Watching, library and add-ons are kept."
++                    },
++                    isTablet = isTablet,
++                    onClick = {
++                        val loader = coil3.SingletonImageLoader.get(platformContext)
++                        loader.memoryCache?.clear()
++                        loader.diskCache?.clear()
++                        imagesCleared = true
++                    },
++                )
+             }
+         }
+     }

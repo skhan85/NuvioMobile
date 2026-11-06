@@ -1,27 +1,183 @@
-diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt
-index c26d1ebe..c92fa8fb 100644
---- a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt
-+++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt
-@@ -7,6 +7,7 @@ internal actual object ForkHomeSettingsStorage {
-     private const val preferencesName = "nuvio_fork_home_settings"
-     private const val becauseKey = "fork_because_rows"
-     private const val trendingKey = "fork_trending_rows"
-+    private const val whitePlayKey = "fork_white_play_button"
- 
-     private var preferences: SharedPreferences? = null
- 
-@@ -27,4 +28,11 @@ internal actual object ForkHomeSettingsStorage {
-     actual fun saveTrendingRowsEnabled(enabled: Boolean) {
-         preferences?.edit()?.putBoolean(trendingKey, enabled)?.apply()
-     }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
+new file mode 100644
+index 00000000..cfa7b21b
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/DetailPreload.kt
+@@ -0,0 +1,123 @@
++package com.nuvio.app.features.details
 +
-+    actual fun loadWhitePlayButton(): Boolean? =
-+        preferences?.takeIf { it.contains(whitePlayKey) }?.getBoolean(whitePlayKey, false)
++import com.nuvio.app.features.player.PlayerSettingsRepository
++import com.nuvio.app.features.player.SubtitleCacheProvider
++import com.nuvio.app.features.player.SubtitleForwarder
++import com.nuvio.app.features.player.SubtitleLanguageOption
++import com.nuvio.app.features.player.relayUrlWithVideo
++import com.nuvio.app.features.player.warmUpSubtitleSync
++import com.nuvio.app.features.streams.StreamsRepository
++import kotlin.time.TimeMark
++import kotlin.time.TimeSource
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withTimeoutOrNull
 +
-+    actual fun saveWhitePlayButton(enabled: Boolean) {
-+        preferences?.edit()?.putBoolean(whitePlayKey, enabled)?.apply()
++/**
++ * Fork: finds sources ahead of time on the detail page.
++ *
++ * A few seconds after a detail page settles on its Play/Resume item, this runs the same stream
++ * search the streams screen would (same request token, so [StreamsRepository.load] skips the repeat
++ * when Play is pressed and the result is there at once).
++ *
++ * When Infuse is the external player and subtitle forwarding is on, it also asks Kuiper to sync the
++ * subtitle Infuse will get with the stream auto-play will pick, without waiting for it. By the time
++ * Play is pressed the synced copy is usually ready, so the "Syncing subtitles…" wait ends at once.
++ *
++ * Each item is searched at most once every ten minutes.
++ */
++object DetailPreload {
++    data class Target(
++        val type: String,
++        val videoId: String,
++        val parentMetaId: String?,
++        val season: Int?,
++        val episode: Int?,
++    ) {
++        val key: String get() = "$type|$videoId|${season ?: ""}|${episode ?: ""}"
 +    }
- }
++
++    private const val DWELL_MS = 3_000L
++    private const val REPEAT_AFTER_MS = 10 * 60 * 1_000L
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
++    private var pending: Job? = null
++    private val recent = mutableMapOf<String, TimeMark>()
++
++    /** The page's Play/Resume item changed (or the page appeared). */
++    fun schedule(target: Target?, dwellMs: Long = DWELL_MS) {
++        cancelPending()
++        target ?: return
++        recent[target.key]?.let { if (it.elapsedNow().inWholeMilliseconds < REPEAT_AFTER_MS) return }
++        pending = scope.launch {
++            delay(dwellMs)
++            pending = null
++            recent[target.key] = TimeSource.Monotonic.markNow()
++            run(target)
++        }
++    }
++
++    /** The page went away (Play pressed, back): drop a search that has not started yet. */
++    fun cancelPending() {
++        pending?.cancel()
++        pending = null
++    }
++
++    private suspend fun run(t: Target) {
++        // The detail page's Play opens the streams screen with manualSelection = false.
++        StreamsRepository.load(
++            type = t.type,
++            videoId = t.videoId,
++            parentMetaId = t.parentMetaId,
++            season = t.season,
++            episode = t.episode,
++            manualSelection = false,
++        )
++
++        PlayerSettingsRepository.ensureLoaded()
++        val settings = PlayerSettingsRepository.uiState.value
++        if (!settings.externalPlayerEnabled || settings.externalPlayerId != "infuse") return
++        // Fork: subtitles are no longer forwarded to Infuse (see MainAppContent), so the
++        // subtitle prefetch below is kept but never runs for it.
++        if (INFUSE_FORWARDS_ADDON_SUBTITLES.not()) return
++        if (!settings.externalPlayerForwardSubtitles ||
++            settings.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
++        ) return
++
++        val token = StreamsRepository.requestToken(
++            type = t.type,
++            videoId = t.videoId,
++            season = t.season,
++            episode = t.episode,
++            manualSelection = false,
++        )
++        val stream = withTimeoutOrNull(25_000L) {
++            StreamsRepository.uiState.first { it.requestToken == token && it.autoPlayStream != null }.autoPlayStream
++        } ?: return
++        val sourceUrl = stream.playableDirectUrl?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
++            ?: return
++
++        val subtitles = SubtitleForwarder.fetchForExternalPlayer(
++            type = t.type,
++            videoId = t.videoId,
++            preferredLanguage = settings.preferredSubtitleLanguage,
++            secondaryLanguage = settings.secondaryPreferredSubtitleLanguage,
++        ) ?: return
++        // Same steps as prepareExternalPlayerLaunch, so the link warmed here is the link Infuse gets.
++        val first = (SubtitleCacheProvider.cacheForExternalPlayer(subtitles) ?: subtitles)
++            .take(1)
++            .map { relayUrlWithVideo(it.url, sourceUrl) }
++            .firstOrNull()
++            ?.takeIf { it.contains("/v/") }
++            ?: return
++        warmUpSubtitleSync(first)
++    }
++}
++
++/** Fork: addon subtitles arrive out of sync in Infuse; it uses its own tracks instead. */
++internal const val INFUSE_FORWARDS_ADDON_SUBTITLES = false
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+index 95606355..e7c4aead 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
+@@ -54,6 +54,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.CompositionLocalProvider
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.State
+@@ -873,6 +874,29 @@ fun MetaDetailsScreen(
+                         }
+                     }
+                 }
++                // Fork: find this page's Play/Resume sources ahead of time (DetailPreload).
++                val preloadTarget = when {
++                    shufflePoolEmpty || !isPrimaryPlayEnabled -> null
++                    (meta.type == "series" || hasEpisodes) && seriesAction != null -> DetailPreload.Target(
++                        type = meta.type,
++                        videoId = seriesStreamVideoId ?: seriesAction.videoId,
++                        parentMetaId = meta.id,
++                        season = seriesAction.seasonNumber,
++                        episode = seriesAction.episodeNumber,
++                    )
++                    else -> DetailPreload.Target(
++                        type = meta.type,
++                        videoId = meta.id,
++                        parentMetaId = meta.id,
++                        season = null,
++                        episode = null,
++                    )
++                }
++                DisposableEffect(preloadTarget) {
++                    DetailPreload.schedule(preloadTarget)
++                    onDispose { DetailPreload.cancelPending() }
++                }
++
+                 fun runPlayAction(
+                     handler: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)?,
+                     resumePositionMs: Long?,
+@@ -2614,7 +2638,7 @@ private fun ConfiguredMetaSections(
+                     }
+                     DetailPosterRailSection(
+                         title = stringResource(Res.string.details_more_like_this),
+-                        items = meta.moreLikeThis,
++                        items = com.nuvio.app.features.home.rememberForkKidsFilter()(meta.moreLikeThis), // Fork: kids rating limit
+                         watchedKeys = watchedKeys,
+                         fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
+                         showHeader = showHeader,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
 index 43f9610b..0dfcdf5e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
@@ -157,74 +313,6 @@ index 00000000..6d70081f
 +    }.collectAsStateWithLifecycle()
 +    return white
 +}
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
-index 0f02d5cb..7e3b4dfb 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
-@@ -91,6 +91,26 @@ object ForkHomeRows {
-         }
-     }
- 
-+    /**
-+     * Fork: "#3 in TV Shows Today" for the details page — this title's place in the Top 10 rows
-+     * Home last loaded (no network here). Matches TMDB ids directly, else name + year.
-+     */
-+    fun top10Rank(id: String, name: String, type: String, year: String?): Pair<Int, String>? {
-+        val rows = trendingRows ?: return null
-+        val isSeries = type.equals("series", true) || type.equals("tv", true)
-+        val row = (if (isSeries) rows.topShows else rows.topMovies) ?: return null
-+        val wantedName = name.trim().lowercase()
-+        val wantedYear = year?.take(4)?.takeIf { it.length == 4 }
-+        val index = row.items.indexOfFirst { item ->
-+            item.id == id || (
-+                item.name.trim().lowercase() == wantedName &&
-+                    (wantedYear == null || item.releaseInfo == null || item.releaseInfo.take(4) == wantedYear)
-+                )
-+        }
-+        if (index !in 0..9) return null
-+        return (index + 1) to (if (isSeries) "TV Shows" else "Movies")
-+    }
-+
-     @Throws(Throwable::class)
-     suspend fun becauseYouWatchedChecked(maxRows: Int): List<HomeCatalogSection> = becauseYouWatched(maxRows)
- 
-diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-index 4f5dbe2a..a081b9e6 100644
---- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-+++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-@@ -9,6 +9,8 @@ internal expect object ForkHomeSettingsStorage {
-     fun saveBecauseRowsEnabled(enabled: Boolean)
-     fun loadTrendingRowsEnabled(): Boolean?
-     fun saveTrendingRowsEnabled(enabled: Boolean)
-+    fun loadWhitePlayButton(): Boolean?
-+    fun saveWhitePlayButton(enabled: Boolean)
- }
- 
- /** Fork: on/off switches for the fork's own Home rows. Device-local, not synced. */
-@@ -17,6 +19,9 @@ object ForkHomeSettings {
-     val becauseRowsEnabled: StateFlow<Boolean> = _becauseRowsEnabled.asStateFlow()
-     private val _trendingRowsEnabled = MutableStateFlow(true)
-     val trendingRowsEnabled: StateFlow<Boolean> = _trendingRowsEnabled.asStateFlow()
-+    private val _whitePlayButton = MutableStateFlow(false)
-+    /** Fork: Netflix-style white Play button on the details page instead of the theme accent. */
-+    val whitePlayButton: StateFlow<Boolean> = _whitePlayButton.asStateFlow()
-     private var loaded = false
- 
-     fun ensureLoaded() {
-@@ -24,6 +29,13 @@ object ForkHomeSettings {
-         loaded = true
-         _becauseRowsEnabled.value = ForkHomeSettingsStorage.loadBecauseRowsEnabled() ?: true
-         _trendingRowsEnabled.value = ForkHomeSettingsStorage.loadTrendingRowsEnabled() ?: true
-+        _whitePlayButton.value = ForkHomeSettingsStorage.loadWhitePlayButton() ?: false
-+    }
-+
-+    fun setWhitePlayButton(enabled: Boolean) {
-+        ensureLoaded()
-+        _whitePlayButton.value = enabled
-+        ForkHomeSettingsStorage.saveWhitePlayButton(enabled)
-     }
- 
-     fun setTrendingRowsEnabled(enabled: Boolean) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkNetflixDetailsSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/ForkNetflixDetailsSettings.kt
 new file mode 100644
 index 00000000..545f9061
@@ -308,29 +396,3 @@ index 8033d602..246befe7 100644
                  SettingsChipRow(
                      title = stringResource(Res.string.settings_meta_background_mode),
                      description = stringResource(Res.string.settings_meta_background_mode_description),
-diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt
-index ca31fd26..b1b41fdb 100644
---- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt
-+++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt
-@@ -5,6 +5,7 @@ import platform.Foundation.NSUserDefaults
- internal actual object ForkHomeSettingsStorage {
-     private const val becauseKey = "fork_because_rows"
-     private const val trendingKey = "fork_trending_rows"
-+    private const val whitePlayKey = "fork_white_play_button"
- 
-     actual fun loadBecauseRowsEnabled(): Boolean? {
-         val defaults = NSUserDefaults.standardUserDefaults
-@@ -23,4 +24,13 @@ internal actual object ForkHomeSettingsStorage {
-     actual fun saveTrendingRowsEnabled(enabled: Boolean) {
-         NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = trendingKey)
-     }
-+
-+    actual fun loadWhitePlayButton(): Boolean? {
-+        val defaults = NSUserDefaults.standardUserDefaults
-+        return if (defaults.objectForKey(whitePlayKey) == null) null else defaults.boolForKey(whitePlayKey)
-+    }
-+
-+    actual fun saveWhitePlayButton(enabled: Boolean) {
-+        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = whitePlayKey)
-+    }
- }

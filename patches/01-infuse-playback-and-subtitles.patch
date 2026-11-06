@@ -1,0 +1,998 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.android.kt
+new file mode 100644
+index 00000000..f2ccd0c7
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.android.kt
+@@ -0,0 +1,4 @@
++package com.nuvio.app.features.player
++
++/** Android players follow redirects themselves. */
++internal actual suspend fun resolveExternalStreamUrl(url: String): String = url
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
+index ba2ee16e..bcea4a74 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
+@@ -7,6 +7,8 @@ import com.nuvio.app.features.collection.CollectionEditorPage
+ import com.nuvio.app.features.collection.CollectionEditorRepository
+ import com.nuvio.app.features.collection.FolderDetailRepository
+ import com.nuvio.app.features.collection.disposeCollectionEditorPage
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.details.parseRuntimeMinutes
+ import com.nuvio.app.features.home.MetaPreview
+ import com.nuvio.app.features.library.LibraryItem
+ import com.nuvio.app.features.player.ExternalPlayerPlaybackRequest
+@@ -88,21 +90,61 @@ internal data class PosterActionTarget(
+     val libraryListKey: String? = null,
+ )
+ 
+-internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlaybackRequest =
+-    ExternalPlayerPlaybackRequest(
++internal fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlaybackRequest {
++    // Duration from a previous in-app playback is exact, so prefer it. On a first play in an
++    // external player (e.g. Infuse) nothing is stored yet, so fall back to the metadata runtime.
++    // Without a duration, completion (90%) is never detected and tracker scrobbles are skipped
++    // (NuvioMedia/NuvioMobile#2072).
++    val storedDurationMs = WatchProgressRepository.progressForVideo(
++        videoId = videoId ?: parentMetaId,
++        parentMetaId = parentMetaId,
++        seasonNumber = seasonNumber,
++        episodeNumber = episodeNumber,
++    )?.durationMs?.takeIf { it > 0L }
++
++    return ExternalPlayerPlaybackRequest(
+         sourceUrl = sourceUrl,
+-        title = title,
++        title = titleWithMovieYear(),
+         streamTitle = streamTitle,
+         sourceHeaders = sourceHeaders,
+         resumePositionMs = initialPositionMs,
+-        durationMs = WatchProgressRepository.progressForVideo(
+-            videoId = videoId ?: parentMetaId,
+-            parentMetaId = parentMetaId,
+-            seasonNumber = seasonNumber,
+-            episodeNumber = episodeNumber,
+-        )?.durationMs?.takeIf { it > 0L },
++        durationMs = storedDurationMs ?: metadataRuntimeMs(),
+         playbackSession = externalPlaybackSession(),
+         season = seasonNumber,
+         episode = episodeNumber,
+         episodeTitle = episodeTitle,
++        sourceFilename = sourceFilename ?: torrentFilename,
+     )
++}
++
++/**
++ * Runtime from already-loaded metadata (no network call). Uses the episode's own runtime when
++ * the addon provides one, otherwise the title-level runtime (movie length, or a series'
++ * typical episode length).
++ */
++/**
++ * Fork: a movie goes to the external player as "Dune (2021)" so Infuse matches the right film
++ * (remakes and same-name titles) and fetches its artwork and details. Episodes are unchanged.
++ */
++private fun PlayerLaunch.titleWithMovieYear(): String {
++    if (seasonNumber != null || episodeNumber != null) return title
++    val year = MetaDetailsRepository.peek(parentMetaType, parentMetaId)?.releaseInfo
++        ?.let { Regex("""(19|20)\d{2}""").find(it)?.value } ?: return title
++    return if (title.contains("($year)")) title else "$title ($year)"
++}
++
++private fun PlayerLaunch.metadataRuntimeMs(): Long? {
++    val meta = MetaDetailsRepository.peek(parentMetaType, parentMetaId) ?: return null
++    val episodeRuntimeMinutes = meta.videos
++        .firstOrNull { video ->
++            (videoId != null && video.id == videoId) ||
++                (seasonNumber != null && episodeNumber != null &&
++                    video.season == seasonNumber && video.episode == episodeNumber)
++        }
++        ?.runtime
++        ?.takeIf { it > 0 }
++    val runtimeMinutes = episodeRuntimeMinutes
++        ?: parseRuntimeMinutes(meta.runtime)?.takeIf { it > 0 }
++        ?: return null
++    return runtimeMinutes * 60_000L
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt
+new file mode 100644
+index 00000000..98d1bae8
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalMovieSuggestions.kt
+@@ -0,0 +1,116 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.safeDrawing
++import androidx.compose.foundation.layout.windowInsetsPadding
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.home.MetaPreview
++import com.nuvio.app.features.player.skip.MovieRecommendationCard
++import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watching.application.WatchingState
++import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * Fork: the More Like This card for movies played in an external player (Infuse).
++ *
++ * Nuvio's own player shows the card during the last two minutes of a movie. Infuse plays the movie
++ * itself, so instead the card appears when Infuse hands back to Nuvio near the end: inside that
++ * window, or past 90% (where people tend to stop once the credits roll, and where Nuvio counts the
++ * movie as watched). Uses the same Movie Recommendations setting.
++ */
++internal object ExternalMovieSuggestions {
++    private val pendingMovie = MutableStateFlow<WatchProgressPlaybackSession?>(null)
++    val pending = pendingMovie.asStateFlow()
++
++    fun onExternalPlaybackReturned(result: ExternalPlaybackResult, fallbackSession: WatchProgressPlaybackSession?) {
++        val session = result.playbackSession ?: fallbackSession ?: return
++        if (session.parentMetaType != "movie" && session.contentType != "movie") return
++        PlayerSettingsRepository.ensureLoaded()
++        if (!PlayerSettingsRepository.uiState.value.movieRecommendationsEnabled) return
++        val durationMs = result.durationMs?.takeIf { it > 0L }
++        val reachedEnd = !result.endedByUser ||
++            (durationMs != null && result.positionMs >= durationMs * 9 / 10) ||
++            (durationMs != null &&
++                PlayerNextEpisodeRules.movieRecommendationStage(
++                    positionMs = result.positionMs,
++                    durationMs = durationMs,
++                    isEnded = false,
++                ) > 0)
++        if (reachedEnd) pendingMovie.value = session
++    }
++
++    fun dismiss() {
++        pendingMovie.value = null
++    }
++}
++
++private const val EXTERNAL_SUGGESTION_LIMIT = 10
++
++/** Shows the card over the whole app; place it inside the root Box. */
++@Composable
++internal fun ExternalMovieSuggestionsOverlay(
++    onOpen: (MetaPreview) -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    val movie by ExternalMovieSuggestions.pending.collectAsStateWithLifecycle()
++    val watchedUiState by remember {
++        WatchedRepository.ensureLoaded()
++        WatchedRepository.uiState
++    }.collectAsStateWithLifecycle()
++    var suggestions by remember { mutableStateOf<List<MetaPreview>>(emptyList()) }
++
++    LaunchedEffect(movie?.parentMetaId) {
++        val current = movie ?: run {
++            suggestions = emptyList()
++            return@LaunchedEffect
++        }
++        val meta = MetaDetailsRepository.peek(current.parentMetaType, current.parentMetaId)
++            ?.takeIf { it.moreLikeThis.isNotEmpty() }
++            ?: runCatching { MetaDetailsRepository.fetch(current.parentMetaType, current.parentMetaId) }.getOrNull()
++        suggestions = meta?.moreLikeThis.orEmpty()
++        if (suggestions.isEmpty()) ExternalMovieSuggestions.dismiss()
++    }
++
++    val current = movie
++    val visibleSuggestions = remember(suggestions, watchedUiState.watchedKeys, current?.parentMetaId) {
++        suggestions.asSequence()
++            .filterNot { it.id == current?.parentMetaId }
++            .filterNot { WatchingState.isPosterWatched(watchedKeys = watchedUiState.watchedKeys, item = it) }
++            .take(EXTERNAL_SUGGESTION_LIMIT)
++            .toList()
++    }
++
++    MovieRecommendationCard(
++        recommendations = visibleSuggestions,
++        // Fork: back from Infuse at the end of a movie counts as "ended": the card stays up
++        // until dismissed (Enhanced's card takes a stage instead of a visible flag).
++        stage = if (current != null && visibleSuggestions.isNotEmpty()) {
++            PlayerNextEpisodeRules.MOVIE_RECOMMENDATION_STAGE_ENDED
++        } else {
++            0
++        },
++        dismissed = false,
++        controlsVisible = false,
++        onOpen = { preview ->
++            ExternalMovieSuggestions.dismiss()
++            onOpen(preview)
++        },
++        onDismiss = ExternalMovieSuggestions::dismiss,
++        modifier = modifier
++            .windowInsetsPadding(WindowInsets.safeDrawing)
++            .padding(end = 16.dp, bottom = 88.dp),
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
+index 94cabea1..fa1f1eb4 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerLaunchCoordinator.kt
+@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.SupervisorJob
+ import kotlinx.coroutines.async
+ import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.launch
+ import kotlinx.coroutines.withTimeoutOrNull
+ import kotlinx.serialization.json.addJsonObject
+ import kotlinx.serialization.json.buildJsonArray
+@@ -41,9 +42,17 @@ suspend fun prepareExternalPlayerLaunch(
+     secondaryLanguage: String?,
+     subtitleExtras: SubtitleRequestExtras? = null,
+     onOverlayMessage: (String?) -> Unit,
++    resolveRedirects: Boolean = false,
+ ): ExternalPlayerPlaybackRequest = coroutineScope {
+     var result = request.copy(skipSegmentsJson = null)
+ 
++    // Fork: Infuse gets the link a redirect chain ends at (sources needing headers are left alone).
++    val resolvedUrlDeferred = if (resolveRedirects && request.sourceHeaders.isEmpty()) {
++        async { StreamWarmup.resolve(request.sourceUrl) }
++    } else {
++        null
++    }
++
+     val subtitlesDeferred = if (forwardSubtitles && !preferredLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)) {
+         async {
+             onOverlayMessage(getString(Res.string.player_external_loading_subtitles))
+@@ -71,7 +80,21 @@ suspend fun prepareExternalPlayerLaunch(
+                 onOverlayMessage(getString(Res.string.player_external_downloading_subtitles))
+                 val cachedSubtitles = SubtitleCacheProvider.cacheForExternalPlayer(subtitles)
+                 // Fallback: use original URLs if caching fails
+-                cachedSubtitles ?: subtitles
++                val forwarded = (cachedSubtitles ?: subtitles)
++                    // Fork: one subtitle, the add-on's best match for the preferred language. Infuse
++                    // only uses one of the subtitles it is given (it took the last of three, the
++                    // add-on's lowest-ranked), and each one is synced to the video below.
++                    .take(1)
++                    .map { it.copy(url = relayUrlWithVideo(it.url, request.sourceUrl)) }
++                forwarded.firstOrNull()?.let { first ->
++                    if (first.url.contains("/v/")) {
++                        // Fork: no wait — Infuse opens at once. The sync is usually already done
++                        // (started from the detail page or the Continue Watching row); this kicks it
++                        // in the background so the next play of this file gets the synced copy.
++                        subtitleSyncScope.launch { warmUpSubtitleSync(first.url) }
++                    }
++                }
++                forwarded
+             } else {
+                 null
+             }
+@@ -86,6 +109,9 @@ suspend fun prepareExternalPlayerLaunch(
+         null
+     }
+ 
++    resolvedUrlDeferred?.await()?.let { resolved ->
++        result = result.copy(sourceUrl = resolved)
++    }
+     subtitlesDeferred?.await()?.let { subtitles ->
+         result = result.copy(subtitles = subtitles)
+     }
+@@ -153,3 +179,6 @@ internal fun List<SkipInterval>.toSkipSegmentsJson(): String =
+             }
+         }
+     }.toString()
++
++/** Fork: background subtitle-sync warm-ups that must outlive the launch that started them. */
++private val subtitleSyncScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt
+index 1129a588..ecaf5017 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.kt
+@@ -27,6 +27,8 @@ data class ExternalPlayerPlaybackRequest(
+     val skipSegmentsJson: String? = null,
+     val durationMs: Long? = null,
+     val playbackSession: WatchProgressPlaybackSession? = null,
++    /** Fork: the release's real file name (addon behaviorHints.filename), when known. */
++    val sourceFilename: String? = null,
+ ) {
+     /**
+      * Builds a display title for external players.
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.kt
+new file mode 100644
+index 00000000..2ba0a400
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.kt
+@@ -0,0 +1,8 @@
++package com.nuvio.app.features.player
++
++/**
++ * Fork: follows a stream link's HTTP redirects (debrid / Kuiper `/resolve/` 302s) and returns where
++ * it ends up, or [url] unchanged when it does not redirect or anything goes wrong. Infuse handed a
++ * redirecting link can stall or fail with "Server didn't report the size of the file".
++ */
++internal expect suspend fun resolveExternalStreamUrl(url: String): String
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalUpNext.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalUpNext.kt
+new file mode 100644
+index 00000000..5ef45fd1
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/ExternalUpNext.kt
+@@ -0,0 +1,204 @@
++package com.nuvio.app.features.player
++
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.safeDrawing
++import androidx.compose.foundation.layout.windowInsetsPadding
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberUpdatedState
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.player.skip.NextEpisodeCard
++import com.nuvio.app.features.player.skip.NextEpisodeInfo
++import com.nuvio.app.features.player.skip.PlayerNextEpisodeRules
++import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++/**
++ * Fork: Up Next for episodes played in an external player (Infuse).
++ *
++ * Infuse plays one file and hands back to Nuvio when it stops. When that happens near the end of an
++ * episode (finished, past 90%, or inside the last two minutes / the Next Episode threshold), Nuvio
++ * shows its Next Episode card with a 10-second countdown; it then plays the next episode the same
++ * way the Play button would, so auto-play and Reuse Last Link pick the source and it opens in Infuse.
++ */
++internal object ExternalUpNext {
++    data class Pending(
++        val session: WatchProgressPlaybackSession,
++        val next: NextEpisodeInfo,
++    )
++
++    private val pendingState = MutableStateFlow<Pending?>(null)
++    val pending = pendingState.asStateFlow()
++
++    // Fork: "Are you still watching?" — episodes the countdown started that then ran to the end
++    // in Infuse without being stopped. Reset by any stop, tap or hand-started episode.
++    private var autoChain = 0
++    private var autoStartedVideoId: String? = null
++    const val STILL_WATCHING_LIMIT = 3
++
++    /** True when the next countdown should ask first instead of playing on. */
++    fun shouldAskStillWatching(profileIndex: Int): Boolean {
++        com.nuvio.app.features.home.ForkHomeSettings.ensureLoaded()
++        val off = profileIndex in com.nuvio.app.features.home.ForkHomeSettings.stillWatchingOffProfiles.value
++        return !off && autoChain >= STILL_WATCHING_LIMIT
++    }
++
++    /** The countdown is about to start this episode on its own. */
++    fun noteAutoStart(next: NextEpisodeInfo) {
++        autoChain += 1
++        autoStartedVideoId = next.videoId
++    }
++
++    /** Someone chose to keep going (tap, or "Continue Watching"). */
++    fun resetStillWatching() {
++        autoChain = 0
++        autoStartedVideoId = null
++    }
++
++    suspend fun onExternalPlaybackReturned(result: ExternalPlaybackResult, fallbackSession: WatchProgressPlaybackSession?) {
++        val session = result.playbackSession ?: fallbackSession ?: return
++        // Fork: stopping in Infuse, or an episode the countdown didn't start, breaks the chain.
++        if (result.endedByUser || session.videoId != autoStartedVideoId) resetStillWatching()
++        val season = session.seasonNumber ?: return
++        val episode = session.episodeNumber ?: return
++        if (session.parentMetaType == "movie") return
++        if (!reachedEnd(result)) return
++        val meta = MetaDetailsRepository.peek(session.parentMetaType, session.parentMetaId)
++            ?.takeIf { it.videos.isNotEmpty() }
++            ?: runCatching { MetaDetailsRepository.fetch(session.parentMetaType, session.parentMetaId) }.getOrNull()
++            ?: return
++        val video = PlayerNextEpisodeRules.resolveNextEpisode(meta.videos, season, episode) ?: return
++        val aired = PlayerNextEpisodeRules.hasEpisodeAired(video.released)
++        pendingState.value = Pending(
++            session = session,
++            next = NextEpisodeInfo(
++                videoId = video.id,
++                season = video.season ?: return,
++                episode = video.episode ?: return,
++                title = video.title,
++                thumbnail = video.thumbnail,
++                overview = video.overview,
++                released = video.released,
++                hasAired = aired,
++                isWatched = false,
++                unairedMessage = if (aired) null else "Airs ${video.released ?: "TBA"}",
++            ),
++        )
++    }
++
++    internal fun reachedEnd(result: ExternalPlaybackResult): Boolean {
++        if (!result.endedByUser) return true
++        val durationMs = result.durationMs?.takeIf { it > 0L } ?: return false
++        PlayerSettingsRepository.ensureLoaded()
++        val minutes = PlayerSettingsRepository.uiState.value.nextEpisodeThresholdMinutesBeforeEnd
++        val windowMs = maxOf(2 * 60_000L, (minutes * 60_000f).toLong())
++        return result.positionMs >= durationMs * 9 / 10 || durationMs - result.positionMs <= windowMs
++    }
++
++    fun dismiss() {
++        pendingState.value = null
++    }
++}
++
++private const val UP_NEXT_COUNTDOWN_SEC = 10
++
++/** Shows the card over the whole app; place it inside the root Box. */
++@Composable
++internal fun ExternalUpNextOverlay(
++    onPlayNext: (WatchProgressPlaybackSession, NextEpisodeInfo) -> Unit,
++    modifier: Modifier = Modifier,
++) {
++    val pending by ExternalUpNext.pending.collectAsStateWithLifecycle()
++    val currentOnPlayNext by rememberUpdatedState(onPlayNext)
++    var countdown by remember { mutableStateOf<Int?>(null) }
++    var askStillWatching by remember { mutableStateOf<ExternalUpNext.Pending?>(null) }
++
++    LaunchedEffect(pending) {
++        val current = pending ?: run {
++            countdown = null
++            return@LaunchedEffect
++        }
++        if (!current.next.hasAired) {
++            countdown = null
++            return@LaunchedEffect
++        }
++        // Fork: after a few episodes in a row nobody touched, ask before playing on.
++        if (ExternalUpNext.shouldAskStillWatching(current.session.profileId)) {
++            countdown = null
++            ExternalUpNext.dismiss()
++            askStillWatching = current
++            return@LaunchedEffect
++        }
++        for (remaining in UP_NEXT_COUNTDOWN_SEC downTo 1) {
++            countdown = remaining
++            delay(1_000L)
++        }
++        countdown = null
++        ExternalUpNext.dismiss()
++        ExternalUpNext.noteAutoStart(current.next)
++        currentOnPlayNext(current.session, current.next)
++    }
++
++    askStillWatching?.let { target ->
++        androidx.compose.material3.AlertDialog(
++            onDismissRequest = {
++                askStillWatching = null
++                ExternalUpNext.resetStillWatching()
++            },
++            title = {
++                androidx.compose.material3.Text(
++                    "Are you still watching${target.session.title.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""}?",
++                )
++            },
++            text = {
++                androidx.compose.material3.Text(
++                    "Up next: S${target.next.season} E${target.next.episode}" +
++                        (target.next.title.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
++                )
++            },
++            confirmButton = {
++                androidx.compose.material3.TextButton(onClick = {
++                    askStillWatching = null
++                    ExternalUpNext.resetStillWatching()
++                    currentOnPlayNext(target.session, target.next)
++                }) { androidx.compose.material3.Text("Continue Watching") }
++            },
++            dismissButton = {
++                androidx.compose.material3.TextButton(onClick = {
++                    askStillWatching = null
++                    ExternalUpNext.resetStillWatching()
++                }) { androidx.compose.material3.Text("Not Now") }
++            },
++        )
++    }
++
++    val current = pending
++    NextEpisodeCard(
++        nextEpisode = current?.next,
++        visible = current != null,
++        isAutoPlaySearching = false,
++        autoPlaySourceName = if (countdown != null) "Infuse" else null,
++        autoPlayCountdownSec = countdown,
++        blurred = false,
++        onPlayNext = {
++            val target = ExternalUpNext.pending.value ?: return@NextEpisodeCard
++            ExternalUpNext.dismiss()
++            ExternalUpNext.resetStillWatching() // Fork: tapped by hand
++            if (target.next.hasAired) currentOnPlayNext(target.session, target.next)
++        },
++        onDismiss = ExternalUpNext::dismiss,
++        modifier = modifier
++            .windowInsetsPadding(WindowInsets.safeDrawing)
++            .padding(end = 16.dp, bottom = 88.dp),
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+index d0d2ac49..a4d5bc8b 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/InfusePlayback.kt
+@@ -1,6 +1,7 @@
+ package com.nuvio.app.features.player
+ 
+ import com.nuvio.app.features.watchprogress.WatchProgressPlaybackSession
++import com.nuvio.app.features.watchprogress.WatchProgressRepository
+ import io.ktor.http.Url
+ import io.ktor.http.encodeURLParameter
+ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -47,9 +48,34 @@ internal class InfusePlaybackCallbacks(
+         )
+         save(json.encodeToString(session))
+         pending.value = null
++        stampProfileForTraktBridge(request, session)
+         return buildInfusePlaybackUrl(request, session.id)
+     }
+ 
++    /**
++     * Fork (Trakt bridge on the home Pi): write this title to the active profile in Nuvio Sync
++     * right before Infuse opens, so the bridge saves Infuse's positions to the profile that
++     * pressed Play (e.g. Kids) instead of the default one. The resume point is unchanged; a new
++     * title gets a 2 s entry that the first Infuse report overwrites.
++     */
++    private fun stampProfileForTraktBridge(request: ExternalPlayerPlaybackRequest, session: InfusePlaybackSession) {
++        val playback = session.playbackSession ?: return
++        val durationMs = session.durationMs ?: return
++        runCatching {
++            WatchProgressRepository.upsertPlaybackProgress(
++                session = playback,
++                snapshot = PlayerPlaybackSnapshot(
++                    isLoading = false,
++                    isPlaying = false,
++                    isEnded = false,
++                    durationMs = durationMs,
++                    positionMs = request.resumePositionMs.coerceAtLeast(2_000L),
++                ),
++                syncRemote = true,
++            )
++        }
++    }
++
+     fun restoreResult() {
+         pending.value = storedSession()?.takeIf { it.returnedPositionMs != null || it.failed }
+     }
+@@ -63,7 +89,10 @@ internal class InfusePlaybackCallbacks(
+         if (path[1] != session.id || session.returnedPositionMs != null || session.failed) return true
+         val result = when (path[2]) {
+             "success" -> {
+-                if (url.parameters["lastPlayedUrl"] != session.sourceUrl) return true
++                // The session id in this callback's path already ties it to the playback Nuvio
++                // started. Infuse reports lastPlayedUrl as the URL it finally played, which differs
++                // from the one Nuvio sent when the stream redirects (debrid/addon resolver links) or
++                // is re-encoded, so requiring an exact match silently dropped the returned position.
+                 val seconds = url.parameters["position"]?.toLongOrNull()
+                     ?.takeIf { it in 0..Long.MAX_VALUE / 1000L } ?: return true
+                 session.copy(returnedPositionMs = seconds * 1000L)
+@@ -98,8 +127,8 @@ internal fun buildInfusePlaybackUrl(request: ExternalPlayerPlaybackRequest, sess
+     append(request.sourceUrl.encodeURLParameter())
+     append("&position=${request.resumePositionMs.coerceAtLeast(0L) / 1000L}")
+     append("&filename=")
+-    append(request.buildPlayerTitle(includeEpisodeTitle = true).encodeURLParameter())
+-    request.subtitles?.forEach { subtitle ->
++    append(request.infuseFilename().encodeURLParameter())
++    infuseSubtitles(request.subtitles).forEach { subtitle ->
+         append("&sub=")
+         append(subtitle.url.encodeURLParameter())
+     }
+@@ -108,3 +137,34 @@ internal fun buildInfusePlaybackUrl(request: ExternalPlayerPlaybackRequest, sess
+     append("&x-error=")
+     append("nuvio://external-player/infuse/$sessionId/error".encodeURLParameter())
+ }
++
++/** Fork: most subtitle addons return a dozen files per language; Infuse only needs a few to pick from. */
++internal const val INFUSE_MAX_SUBTITLES_PER_LANGUAGE = 3
++
++/** Keeps the first few distinct subtitles of each language, in the order the addon ranked them. */
++internal fun infuseSubtitles(subtitles: List<SubtitleInput>?): List<SubtitleInput> =
++    subtitles.orEmpty()
++        .distinctBy { it.url }
++        .groupBy { it.lang.lowercase() }
++        .values
++        .flatMap { it.take(INFUSE_MAX_SUBTITLES_PER_LANGUAGE) }
++
++/**
++ * Fork: the name Infuse shows and matches on. A real release file name
++ * (e.g. "Inception.2010.2160p.BluRay.REMUX-FGT.mkv") lets Infuse's subtitle search find subtitles
++ * timed for that exact release. Falls back to the friendly title when the name is missing, looks
++ * like junk, or (for episodes) does not carry this episode's SxxEyy tag, so a season pack's
++ * wrong file name never mislabels the episode.
++ */
++internal fun ExternalPlayerPlaybackRequest.infuseFilename(): String {
++    val fallback = buildPlayerTitle(includeEpisodeTitle = true)
++    val raw = sourceFilename?.substringAfterLast('/')?.substringAfterLast('\\')?.trim().orEmpty()
++    if (raw.length < 8 || '.' !in raw) return fallback
++    val season = season
++    val episode = episode
++    if (season != null && episode != null) {
++        val tag = Regex("(?i)S0*$season[ ._-]?E0*$episode(\\D|$)")
++        if (!tag.containsMatchIn(raw)) return fallback
++    }
++    return raw
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/StreamWarmup.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/StreamWarmup.kt
+new file mode 100644
+index 00000000..7c07b278
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/StreamWarmup.kt
+@@ -0,0 +1,47 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.features.watchprogress.WatchProgressClock
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Deferred
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.async
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/**
++ * Fork: "warm the stream before you press Play" (from ysosrs123's NuvioTV fork). The stream list
++ * resolves the top links' redirect chains in the background as soon as they appear, so the debrid
++ * service unlocks the file early and pressing Play hands Infuse the final link with no wait.
++ * Results are kept for five minutes. Only links without addon-declared headers are warmed (the
++ * same rule the launch-time redirect resolution uses).
++ */
++internal object StreamWarmup {
++    private const val KeepMs = 5 * 60 * 1000L
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val mutex = Mutex()
++    private val resolved = mutableMapOf<String, Pair<String, Long>>()
++    private val inFlight = mutableMapOf<String, Deferred<String>>()
++
++    fun warm(url: String) {
++        if (!url.startsWith("http://") && !url.startsWith("https://")) return
++        scope.launch { runCatching { resolve(url) } }
++    }
++
++    /** The link [url]'s redirect chain ends at — from the warm-up cache when it is fresh. */
++    suspend fun resolve(url: String): String {
++        val now = WatchProgressClock.nowEpochMs()
++        val pending = mutex.withLock {
++            resolved[url]?.let { (target, at) -> if (now - at < KeepMs) return target }
++            inFlight.getOrPut(url) { scope.async { resolveExternalStreamUrl(url) } }
++        }
++        val target = runCatching { pending.await() }.getOrDefault(url)
++        mutex.withLock {
++            inFlight.remove(url)
++            if (target != url) resolved[url] = target to WatchProgressClock.nowEpochMs()
++            if (resolved.size > 50) resolved.keys.take(resolved.size - 50).forEach(resolved::remove)
++        }
++        return target
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleSyncRelay.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleSyncRelay.kt
+new file mode 100644
+index 00000000..d492b005
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/SubtitleSyncRelay.kt
+@@ -0,0 +1,42 @@
++package com.nuvio.app.features.player
++
++import com.nuvio.app.features.addons.httpRequestRaw
++import kotlin.io.encoding.Base64
++import kotlin.io.encoding.ExperimentalEncodingApi
++import kotlinx.coroutines.withTimeoutOrNull
++
++/**
++ * Fork: subtitles lined up with the video before Infuse plays it.
++ *
++ * Add-on subtitles are often timed for a different release of the episode (all five English
++ * OpenSubtitles files for one Strange New Worlds episode were 0.8-1.2 s early and drifting). The
++ * Kuiper relay can sync a subtitle against the video's audio when its link also names the video
++ * (`/subs/<subtitle>/v/<video>/<name>.srt`). Before Infuse opens, Nuvio asks the relay for the
++ * subtitle once and waits up to [SYNC_WARM_UP_SECONDS] for the synced copy, so Infuse's own fetch
++ * gets it from the relay's cache; if it is not ready in time Infuse gets the original and the
++ * synced copy is used from the next time the episode is opened.
++ */
++internal const val KUIPER_SUBS_RELAY = "https://kuiper.khanofmilton.ca/subs/"
++internal const val SYNC_WARM_UP_SECONDS = 35
++
++@OptIn(ExperimentalEncodingApi::class)
++internal fun relayUrlWithVideo(subtitleUrl: String, videoUrl: String): String {
++    if (!subtitleUrl.startsWith(KUIPER_SUBS_RELAY)) return subtitleUrl
++    if (!videoUrl.startsWith("http://") && !videoUrl.startsWith("https://")) return subtitleUrl
++    val rest = subtitleUrl.removePrefix(KUIPER_SUBS_RELAY)
++    val subtitlePart = rest.substringBefore('/')
++    val name = rest.substringAfterLast('/')
++    if (rest.contains("/v/") || subtitlePart.isEmpty() || name.isEmpty()) return subtitleUrl
++    val video = Base64.UrlSafe.encode(videoUrl.encodeToByteArray()).trimEnd('=')
++    return "$KUIPER_SUBS_RELAY$subtitlePart/v/$video/$name"
++}
++
++/** Asks the relay for the synced subtitle so it is cached before Infuse fetches it. */
++internal suspend fun warmUpSubtitleSync(relayUrl: String) {
++    if (!relayUrl.startsWith(KUIPER_SUBS_RELAY) || !relayUrl.contains("/v/")) return
++    withTimeoutOrNull((SYNC_WARM_UP_SECONDS + 5) * 1_000L) {
++        runCatching {
++            httpRequestRaw(method = "GET", url = "$relayUrl?wait=$SYNC_WARM_UP_SECONDS", headers = emptyMap(), body = "")
++        }
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
+index dd9b385c..7899c90d 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
+@@ -66,7 +66,8 @@ internal fun PlaybackPlayerSettings(
+                         onClick = { showExternalPlayerAppDialog = true },
+                     )
+                 }
+-                if (!isIos && settings.externalPlayerEnabled) {
++                // Fork: Infuse and VLC take subtitle URLs too, so iOS gets the forwarding toggle.
++                if (settings.externalPlayerEnabled) {
+                     SettingsGroupDivider(isTablet = isTablet)
+                     SettingsSwitchRow(
+                         title = stringResource(Res.string.settings_playback_external_player_forward_subtitles),
+@@ -75,6 +76,8 @@ internal fun PlaybackPlayerSettings(
+                         isTablet = isTablet,
+                         onCheckedChange = PlayerSettingsRepository::setExternalPlayerForwardSubtitles,
+                     )
++                }
++                if (!isIos && settings.externalPlayerEnabled) {
+                     SettingsGroupDivider(isTablet = isTablet)
+                     SettingsSwitchRow(
+                         title = stringResource(Res.string.settings_playback_external_player_send_skip_segments),
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt
+index 9b48b7e4..01da05d1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt
+@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+ import androidx.compose.ui.platform.LocalHapticFeedback
+ import androidx.compose.ui.unit.dp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import com.nuvio.app.features.player.PlayerSettingsRepository
+ import com.nuvio.app.features.streams.StreamAutoPlayMode
+ import nuvio.composeapp.generated.resources.*
+@@ -51,6 +52,24 @@ internal fun PlaybackUpNextSettings(
+                     isTablet = isTablet,
+                     onCheckedChange = PlayerSettingsRepository::setStreamAutoPlayNextEpisodeEnabled,
+                 )
++                // Fork: Netflix-style check-in for Up Next in Infuse.
++                run {
++                    val forkSwProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkSwIndex = forkSwProfileState.activeProfile?.profileIndex ?: 1
++                    val forkSwOff by remember {
++                        com.nuvio.app.features.home.ForkHomeSettings.ensureLoaded()
++                        com.nuvio.app.features.home.ForkHomeSettings.stillWatchingOffProfiles
++                    }.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Ask If Still Watching",
++                        description = "After 3 episodes in a row play to the end without being stopped, ask before starting the next one",
++                        checked = forkSwIndex !in forkSwOff,
++                        isTablet = isTablet,
++                        onCheckedChange = { com.nuvio.app.features.home.ForkHomeSettings.setStillWatching(forkSwIndex, it) },
++                    )
++                }
+                 if (settings.streamAutoPlayNextEpisodeEnabled &&
+                     settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
+                     SettingsGroupDivider(isTablet = isTablet)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
+index b16321ee..0a9c1be1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
+@@ -822,6 +822,18 @@ internal fun StreamList(
+         splitPinnedSources(filteredGroups, pinnedSourceIds)
+     }
+ 
++    // Fork: warm the first link of the top two sources so Play hands Infuse a ready link.
++    val warmTargets = filteredGroups
++        .mapNotNull { group -> group.streams.firstOrNull() }
++        .filter { it.behaviorHints.proxyHeaders?.request.isNullOrEmpty() }
++        .mapNotNull { it.playableDirectUrl?.takeIf { url -> url.startsWith("http") } }
++        .take(2)
++    LaunchedEffect(warmTargets) {
++        if (warmTargets.isEmpty()) return@LaunchedEffect
++        kotlinx.coroutines.delay(800)
++        warmTargets.forEach { com.nuvio.app.features.player.StreamWarmup.warm(it) }
++    }
++
+     CompositionLocalProvider(LocalStreamSizeLabelFormat provides formatStreamSize) {
+     LazyColumn(
+         modifier = modifier.fillMaxWidth(),
+@@ -938,7 +950,8 @@ private fun LazyListScope.streamSection(
+     resumePositionMs: Long?,
+     resumeProgressFraction: Float?,
+ ) {
+-    if (group.streams.isEmpty() && !group.isLoading) return
++    // Fork: an addon still loading with nothing yet (or done with nothing) shows no header at all.
++    if (group.streams.isEmpty()) return
+ 
+     if (showHeader) {
+         item(key = "header_$sectionKey") {
+diff --git a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
+index af9b1804..6ea25eda 100644
+--- a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
++++ b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/InfusePlaybackTest.kt
+@@ -41,6 +41,17 @@ class InfusePlaybackTest {
+         assertEquals("0", Url(buildInfusePlaybackUrl(request.copy(resumePositionMs = -1), "session-1")).parameters["position"])
+     }
+ 
++    @Test
++    fun launchForwardsAFewSubtitlesPerLanguage() {
++        val english = (1..6).map { SubtitleInput("https://subs.example/en/$it", "English $it", "en") }
++        val arabic = listOf(SubtitleInput("https://subs.example/ar/1", "Arabic", "ar"))
++        val url = Url(buildInfusePlaybackUrl(request.copy(subtitles = english + english.first() + arabic), "s"))
++        assertEquals(
++            english.take(INFUSE_MAX_SUBTITLES_PER_LANGUAGE).map { it.url } + arabic.map { it.url },
++            url.parameters.getAll("sub"),
++        )
++    }
++
+     @Test
+     fun returnedPositionRetainsVideoAndProfileAfterAppRestart() {
+         val launch = Url(callbacks().prepare(request))
+@@ -160,4 +171,26 @@ class InfusePlaybackTest {
+ 
+     private fun success(launch: Url, seconds: String, source: String = request.sourceUrl): String =
+         "${launch.parameters["x-success"]}?lastPlayedUrl=${source.encodeURLParameter()}&position=${seconds.encodeURLParameter()}"
++
++    @Test
++    fun infuseGetsTheReleaseFileNameWhenItMatchesTheEpisode() {
++        val named = request.copy(sourceFilename = "Series.and.Friends.S02E05.1080p.WEB-DL.DDP5.1-GRP.mkv")
++        assertEquals("Series.and.Friends.S02E05.1080p.WEB-DL.DDP5.1-GRP.mkv", named.infuseFilename())
++    }
++
++    @Test
++    fun infuseKeepsTheFriendlyTitleForAMismatchedOrJunkFileName() {
++        val fallback = request.buildPlayerTitle(includeEpisodeTitle = true)
++        assertEquals(fallback, request.copy(sourceFilename = "Series.S02E15.1080p.mkv").infuseFilename())
++        assertEquals(fallback, request.copy(sourceFilename = "Series.S01E05.1080p.mkv").infuseFilename())
++        assertEquals(fallback, request.copy(sourceFilename = "video").infuseFilename())
++        assertEquals(fallback, request.copy(sourceFilename = null).infuseFilename())
++    }
++
++    @Test
++    fun infuseGetsAMovieReleaseFileName() {
++        val movie = request.copy(season = null, episode = null, episodeTitle = null,
++            sourceFilename = "folder/Inception.2010.2160p.BluRay.REMUX.HEVC-FGT.mkv")
++        assertEquals("Inception.2010.2160p.BluRay.REMUX.HEVC-FGT.mkv", movie.infuseFilename())
++    }
+ }
+diff --git a/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/SubtitleSyncRelayTest.kt b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/SubtitleSyncRelayTest.kt
+new file mode 100644
+index 00000000..ef4ee284
+--- /dev/null
++++ b/composeApp/src/commonTest/kotlin/com/nuvio/app/features/player/SubtitleSyncRelayTest.kt
+@@ -0,0 +1,20 @@
++package com.nuvio.app.features.player
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class SubtitleSyncRelayTest {
++    @Test
++    fun relayLinkGainsTheVideoSegmentOnce() {
++        val relayed = "${KUIPER_SUBS_RELAY}c3Vi/English%201.en.srt"
++        val withVideo = relayUrlWithVideo(relayed, "https://k.example/resolve/tb/abc?x=1")
++        assertEquals("${KUIPER_SUBS_RELAY}c3Vi/v/aHR0cHM6Ly9rLmV4YW1wbGUvcmVzb2x2ZS90Yi9hYmM_eD0x/English%201.en.srt", withVideo)
++        assertEquals(withVideo, relayUrlWithVideo(withVideo, "https://other.example/v.mkv"))
++    }
++
++    @Test
++    fun otherLinksAreLeftAlone() {
++        assertEquals("https://subs.example/1", relayUrlWithVideo("https://subs.example/1", "https://k.example/v"))
++        assertEquals("${KUIPER_SUBS_RELAY}c3Vi/en.srt", relayUrlWithVideo("${KUIPER_SUBS_RELAY}c3Vi/en.srt", "file:///v.mkv"))
++    }
++}
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt
+new file mode 100644
+index 00000000..1f46036f
+--- /dev/null
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/ExternalStreamUrlResolver.ios.kt
+@@ -0,0 +1,48 @@
++package com.nuvio.app.features.player
++
++import io.ktor.client.HttpClient
++import io.ktor.client.engine.darwin.Darwin
++import io.ktor.client.plugins.HttpTimeout
++import io.ktor.client.request.head
++import io.ktor.http.HttpHeaders
++import io.ktor.http.URLBuilder
++import io.ktor.http.takeFrom
++import kotlinx.coroutines.withTimeoutOrNull
++
++private val redirectProbeClient = HttpClient(Darwin) {
++    followRedirects = false
++    expectSuccess = false
++    install(HttpTimeout) {
++        requestTimeoutMillis = 4_000
++        connectTimeoutMillis = 4_000
++    }
++}
++
++private const val MAX_REDIRECT_HOPS = 5
++
++/**
++ * HEAD requests only (no body is downloaded); at most five hops and five seconds. The resolved link
++ * is used only when the chain ends in a 2xx answer; anything else keeps the original link.
++ */
++internal actual suspend fun resolveExternalStreamUrl(url: String): String {
++    if (!url.startsWith("http://") && !url.startsWith("https://")) return url
++    return withTimeoutOrNull(5_000L) {
++        var current = url
++        repeat(MAX_REDIRECT_HOPS) {
++            val response = runCatching { redirectProbeClient.head(current) }.getOrNull() ?: return@withTimeoutOrNull url
++            when (response.status.value) {
++                // Only a link that answered OK is handed over.
++                in 200..299 -> return@withTimeoutOrNull current
++                in 300..399 -> {
++                    val location = response.headers[HttpHeaders.Location]?.takeIf { it.isNotBlank() }
++                        ?: return@withTimeoutOrNull url
++                    current = runCatching { URLBuilder(current).takeFrom(location).buildString() }.getOrNull()
++                        ?: return@withTimeoutOrNull url
++                }
++                // A hop that refuses HEAD (TorBox answers 400) or fails: Infuse gets the original link.
++                else -> return@withTimeoutOrNull url
++            }
++        }
++        url
++    } ?: url
++}
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
+index dc2e47a6..67c417d9 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/player/SubtitleCacheProvider.ios.kt
+@@ -1,12 +1,36 @@
+ package com.nuvio.app.features.player
+ 
++import io.ktor.http.encodeURLPathPart
++import kotlin.io.encoding.Base64
++import kotlin.io.encoding.ExperimentalEncodingApi
++
+ /**
+- * iOS implementation: returns subtitles unchanged (no caching needed).
+- * iOS players like Infuse accept remote subtitle URLs directly via their URL scheme,
+- * so we just pass through the original HTTP URLs without downloading.
++ * iOS: players like Infuse take remote subtitle URLs through their URL scheme, so nothing is
++ * downloaded here.
++ *
++ * Fork: add-on subtitle links (OpenSubtitles and the like) have no file ending, often redirect,
++ * and can be gzipped or WebVTT, and Infuse showed none of them. Each link is sent through
++ * Kuiper's `/subs/` relay instead, which serves it as a plain `.srt` file (and logs the request,
++ * so it is visible whether Infuse fetched it).
+  */
+ actual object SubtitleCacheProvider {
+-    actual suspend fun cacheForExternalPlayer(subtitles: List<SubtitleInput>): List<SubtitleInput>? {
+-        return subtitles.ifEmpty { null }
+-    }
++    actual suspend fun cacheForExternalPlayer(subtitles: List<SubtitleInput>): List<SubtitleInput>? =
++        subtitles.mapIndexed { index, sub -> sub.copy(url = relaySubtitleUrl(sub.url, sub.lang, sub.name, index + 1)) }
++            .ifEmpty { null }
++}
++
++internal const val SUBTITLE_RELAY_BASE = "https://kuiper.khanofmilton.ca/subs/"
++
++/**
++ * The file name carries the subtitle's label and a two-letter language code
++ * ("English (OpenSubtitles v3) 1.en.srt"): Infuse reads the language from the code before ".srt"
++ * and shows the name, so forwarded tracks are easy to tell apart from the built-in ones.
++ */
++@OptIn(ExperimentalEncodingApi::class)
++internal fun relaySubtitleUrl(url: String, lang: String, name: String = "", number: Int = 1): String {
++    if (url.startsWith(SUBTITLE_RELAY_BASE) || !(url.startsWith("https://") || url.startsWith("http://"))) return url
++    val encoded = Base64.UrlSafe.encode(url.encodeToByteArray()).trimEnd('=')
++    val code = normalizeLanguageCode(lang)?.substringBefore('-')?.filter { it.isLetter() }?.ifEmpty { null } ?: "und"
++    val label = name.filter { it.isLetterOrDigit() || it in " ()-_." }.trim().take(60).ifEmpty { "Subtitle" }
++    return "$SUBTITLE_RELAY_BASE$encoded/${"$label $number.$code.srt".encodeURLPathPart()}"
+ }
