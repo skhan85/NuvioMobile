@@ -230,6 +230,61 @@ index 944a2843..5f63630c 100644
                      if (meta.genres.isNotEmpty()) {
                          Spacer(modifier = Modifier.height(8.dp))
                          Text(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
+index edc00fc2..cadbfc18 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
+@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.remember
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+@@ -85,6 +86,18 @@ fun DetailMetaInfo(
+         val releaseLine = formatMetaReleaseLineForDetails(meta)
+         val runtimeText = formatRuntimeForDisplay(meta.runtime)
+         val ageBadge = meta.ageRating?.trim()?.takeIf { it.isNotBlank() }
++        // Fork: the original language ("Korean") for non-English titles, from the add-on or TMDB.
++        val forkLanguage by androidx.compose.runtime.produceState(
++            initialValue = com.nuvio.app.features.home.ForkLanguages.displayName(meta.language),
++            meta.id,
++            meta.language,
++        ) {
++            if (meta.language.isNullOrBlank()) {
++                value = runCatching {
++                    com.nuvio.app.features.tmdb.TmdbMetadataService.forkFreshness(meta.id, meta.type)
++                }.getOrNull()?.third?.let(com.nuvio.app.features.home.ForkLanguages::displayName)
++            }
++        }
+         val validImdbRating = meta.imdbRating
+             ?.takeIf { showOverallRatings && !isMdbListActive }
+             ?.toDoubleOrNull()
+@@ -93,6 +106,7 @@ fun DetailMetaInfo(
+         val hasMetaRow = releaseLine != null ||
+             runtimeText != null ||
+             ageBadge != null ||
++            forkLanguage != null ||
+             validImdbRating != null
+         if (hasMetaRow) {
+             Row(
+@@ -118,6 +132,15 @@ fun DetailMetaInfo(
+                 ageBadge?.let { badge ->
+                     DetailHeroMetaBadge(text = badge)
+                 }
++                forkLanguage?.let { language ->
++                    Text(
++                        text = language,
++                        style = MaterialTheme.typography.titleMedium,
++                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f),
++                        fontWeight = FontWeight.SemiBold,
++                        maxLines = 1,
++                    )
++                }
+                 if (validImdbRating != null) {
+                     val imdbTextStyle = MaterialTheme.typography.titleMedium.copy(
+                         fontWeight = FontWeight.Bold,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt
 new file mode 100644
 index 00000000..6d70081f
@@ -396,3 +451,66 @@ index 8033d602..246befe7 100644
                  SettingsChipRow(
                      title = stringResource(Res.string.settings_meta_background_mode),
                      description = stringResource(Res.string.settings_meta_background_mode_description),
+diff --git a/composeApp/src/iosFull/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.ios.kt b/composeApp/src/iosFull/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.ios.kt
+index b3114592..8ae90fab 100644
+--- a/composeApp/src/iosFull/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.ios.kt
++++ b/composeApp/src/iosFull/kotlin/com/nuvio/app/features/details/components/HeroTrailerPlayerSurface.ios.kt
+@@ -3,14 +3,19 @@ package com.nuvio.app.features.details.components
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.size
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.rememberUpdatedState
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.interop.UIKitViewController
++import androidx.compose.ui.unit.dp
+ import co.touchlab.kermit.Logger
+ import com.nuvio.app.features.player.NuvioPlayerBridgeFactory
+ import kotlinx.cinterop.ExperimentalForeignApi
+@@ -38,6 +43,10 @@ actual fun HeroTrailerPlayerSurface(
+     val latestOnError = rememberUpdatedState(onError)
+     val latestOnPositionUpdate = rememberUpdatedState(onPositionUpdate)
+     val bridge = remember { NuvioPlayerBridgeFactory.create() }
++    // Fork: the native video view cuts through the page wherever it sits, so a full-size view
++    // showed black over the backdrop from the moment the trailer started loading (and for good
++    // when it never played). It stays 1 point until frames are actually playing.
++    var showVideo by remember(sourceUrl, sourceAudioUrl) { mutableStateOf(false) }
+ 
+     if (bridge == null) {
+         LaunchedEffect(Unit) { latestOnError.value() }
+@@ -110,7 +119,13 @@ actual fun HeroTrailerPlayerSurface(
+                 return@LaunchedEffect
+             }
+             if (readyReported) {
+-                runCatching { bridge.getPositionMs() }.getOrNull()?.let(latestOnPositionUpdate.value)
++                val position = runCatching { bridge.getPositionMs() }.getOrNull()
++                position?.let(latestOnPositionUpdate.value)
++                if (!showVideo && position != null && position > 150L &&
++                    runCatching { bridge.getIsPlaying() }.getOrDefault(false)
++                ) {
++                    showVideo = true
++                }
+             }
+             delay(250L)
+         }
+@@ -128,10 +143,10 @@ actual fun HeroTrailerPlayerSurface(
+         }
+     }
+ 
+-    Box(modifier = modifier.background(Color.Black)) {
++    Box(modifier = if (showVideo) modifier.background(Color.Black) else modifier) {
+         UIKitViewController(
+             factory = { bridge.createPlayerViewController() },
+-            modifier = Modifier.fillMaxSize(),
++            modifier = if (showVideo) Modifier.fillMaxSize() else Modifier.size(1.dp),
+             interactive = false,
+         )
+     }

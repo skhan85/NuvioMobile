@@ -751,10 +751,10 @@ index 00000000..59206924
 +    }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
 new file mode 100644
-index 00000000..1804a83d
+index 00000000..092ab8fc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,166 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -837,6 +837,33 @@ index 00000000..1804a83d
 +    fun originalLabel(code: String?): String? {
 +        val normalized = code?.lowercase()?.takeIf { it in indian } ?: return null
 +        return table.firstOrNull { it.second == normalized }?.first
++    }
++
++    private val names = mapOf(
++        "ar" to "Arabic", "bg" to "Bulgarian", "bn" to "Bengali", "ca" to "Catalan", "cn" to "Cantonese",
++        "cs" to "Czech", "da" to "Danish", "de" to "German", "el" to "Greek", "es" to "Spanish",
++        "et" to "Estonian", "fa" to "Persian", "fi" to "Finnish", "fil" to "Filipino", "fr" to "French",
++        "gu" to "Gujarati", "he" to "Hebrew", "hi" to "Hindi", "hr" to "Croatian", "hu" to "Hungarian",
++        "id" to "Indonesian", "is" to "Icelandic", "it" to "Italian", "ja" to "Japanese", "ka" to "Georgian",
++        "kn" to "Kannada", "ko" to "Korean", "lt" to "Lithuanian", "lv" to "Latvian", "ml" to "Malayalam",
++        "mr" to "Marathi", "ms" to "Malay", "nb" to "Norwegian", "nl" to "Dutch", "no" to "Norwegian",
++        "pa" to "Punjabi", "pl" to "Polish", "pt" to "Portuguese", "ro" to "Romanian", "ru" to "Russian",
++        "sk" to "Slovak", "sl" to "Slovenian", "sr" to "Serbian", "sv" to "Swedish", "sw" to "Swahili",
++        "ta" to "Tamil", "te" to "Telugu", "th" to "Thai", "tl" to "Tagalog", "tr" to "Turkish",
++        "uk" to "Ukrainian", "ur" to "Urdu", "vi" to "Vietnamese", "zh" to "Chinese",
++    )
++
++    /**
++     * The original language for the details page ("Korean"), from TMDB's code ("ko") or an add-on's
++     * name ("Korean, English"); null for English, unknown codes or nothing.
++     */
++    fun displayName(value: String?): String? {
++        val first = value?.split(',', '/', '|')?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
++        val lower = first.lowercase()
++        if (lower == "en" || lower == "eng" || lower == "english") return null
++        names[lower]?.let { return it }
++        if (lower.length <= 3 || first.any { !it.isLetter() && it != ' ' }) return null
++        return first.replaceFirstChar { it.uppercaseChar() }
 +    }
 +
 +    /** The language to list first for a profile audio setting ("hi"), or null (English, device, original…). */
