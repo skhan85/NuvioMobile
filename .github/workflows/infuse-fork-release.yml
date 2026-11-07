@@ -3,8 +3,8 @@ name: Infuse Fork Release
 # Builds an unsigned iOS IPA of NuvioMobile-Enhanced (luqmanfadlli/NuvioMobile-Enhanced, branch
 # `enhanced`, which carries official Nuvio plus its own features) with the patches in /patches
 # applied, and publishes it as a GitHub release (picked up by the Raspberry Pi release watcher).
-# Checks every 6 hours, but builds at most once a day (Toronto 2-9 pm) when the Enhanced branch has moved. A change to /patches or
-# this file also triggers a rebuild.
+# Checks once a day (2:23 pm Toronto in winter, 3:23 pm in summer) and builds when the Enhanced branch
+# has moved. A change to /patches or this file also triggers a rebuild.
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "23 */6 * * *" # every 6 hours (hourly runs got Actions disabled on this fork)
+    - cron: "23 19 * * *" # once a day; more often got Actions disabled on this fork (hourly, then 6-hourly)
   push:
     paths:
       - "patches/**"
