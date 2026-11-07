@@ -751,10 +751,10 @@ index 00000000..59206924
 +    }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
 new file mode 100644
-index 00000000..092ab8fc
+index 00000000..d3e72dc8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,161 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -776,8 +776,8 @@ index 00000000..092ab8fc
 + * Fork: audio languages a source says it has, read from its name, text and file name ("Hindi",
 + * "Dual Audio", "🇮🇳 Hindi | English", "MULTi"), shown as small tags on the source card. When the
 + * profile's audio language isn't English, sources in that language are listed first, so Infuse
-+ * (which can't be told which audio track to pick) gets the right file. Also the HINDI tag on
-+ * Indian titles' cards (from TMDB's original language).
++ * (which can't be told which audio track to pick) gets the right file. Also the language tag
++ * (KOREAN, HINDI…) on non-English titles' cards (from TMDB's original language).
 + */
 +internal object ForkLanguages {
 +    data class Tags(val languages: List<String> = emptyList(), val multiAudio: Boolean = false) {
@@ -818,8 +818,6 @@ index 00000000..092ab8fc
 +        RegexOption.IGNORE_CASE,
 +    )
 +
-+    private val indian = setOf("hi", "ta", "te", "ml", "kn", "pa", "bn", "mr", "ur")
-+
 +    fun tags(stream: StreamItem): Tags = tags(
 +        listOfNotNull(stream.name, stream.title, stream.description, stream.behaviorHints.filename)
 +            .joinToString("\n"),
@@ -833,11 +831,8 @@ index 00000000..092ab8fc
 +        return Tags(languages, multiAudio)
 +    }
 +
-+    /** "Hindi" for TMDB's "hi"; null for languages that don't get a card tag. */
-+    fun originalLabel(code: String?): String? {
-+        val normalized = code?.lowercase()?.takeIf { it in indian } ?: return null
-+        return table.firstOrNull { it.second == normalized }?.first
-+    }
++    /** "Korean" for TMDB's "ko"; null for English, "xx" (no language) and codes not listed. */
++    fun originalLabel(code: String?): String? = code?.lowercase()?.let { names[it] }
 +
 +    private val names = mapOf(
 +        "ar" to "Arabic", "bg" to "Bulgarian", "bn" to "Bengali", "ca" to "Catalan", "cn" to "Cantonese",
@@ -880,7 +875,7 @@ index 00000000..092ab8fc
 +    }
 +}
 +
-+/** "HINDI" on an Indian title's card. */
++/** "KOREAN" on a non-English title's card. */
 +@Composable
 +internal fun ForkLanguageTag(language: String, modifier: Modifier = Modifier) {
 +    Text(
@@ -923,10 +918,10 @@ index 00000000..092ab8fc
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..4684be82
+index 00000000..0f2f4135
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,437 @@
+@@ -0,0 +1,445 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -998,12 +993,12 @@ index 00000000..4684be82
 + * Fork: per-title freshness tags from TMDB, looked up a few at a time and kept for 12 hours.
 + */
 +internal object ForkCardBadges {
-+    /** `language`: original language when it gets a tag ("Hindi"), see [ForkLanguages.originalLabel]. */
++    /** `language`: original language when it isn't English ("Korean"), see [ForkLanguages.originalLabel]. */
 +    data class Entry(val primary: String?, val secondary: String?, val atMs: Long, val language: String? = null)
 +
 +    private const val TTL_MS = 12 * 60 * 60 * 1000L
 +    private const val KEEP_MS = 4 * TTL_MS
-+    private const val STORE_KEY = "fork_card_badges_cache_v2"
++    private const val STORE_KEY = "fork_card_badges_cache_v3"
 +    private val entriesState = MutableStateFlow<Map<String, Entry>>(emptyMap())
 +    val entries: StateFlow<Map<String, Entry>>
 +        get() {
@@ -1304,6 +1299,14 @@ index 00000000..4684be82
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 3,
++            date = "Nov 6, 2026",
++            items = listOf(
++                "Home cards now tag every non-English title with its language (KOREAN, SPANISH, HINDI…), not just Indian ones.",
++                "The details page shows a title's original language (Korean, Hindi…) in the info line, and the backdrop stays up until a trailer actually starts playing.",
++            ),
++        ),
 +        Entry(
 +            id = 2,
 +            date = "Nov 6, 2026",
@@ -2455,7 +2458,7 @@ index 8f575137..5089da8f 100644
                              ) { keyedSection ->
                                  val section = keyedSection.value
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-index a2f4a7c3..2ca6cc18 100644
+index a2f4a7c3..ed859e14 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 @@ -45,6 +45,8 @@ import com.nuvio.app.features.addons.AddonRepository
@@ -2589,7 +2592,7 @@ index a2f4a7c3..2ca6cc18 100644
 +                        SettingsGroupDivider(isTablet = isTablet)
 +                        SettingsSwitchRow(
 +                            title = "Card Tags",
-+                            description = "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and a HINDI (or Tamil, Telugu…) tag on Indian titles, from TMDB",
++                            description = "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and the original language (KOREAN, HINDI…) on non-English titles, from TMDB",
 +                            checked = forkCardBadges,
 +                            isTablet = isTablet,
 +                            onCheckedChange = ForkHomeSettings::setCardBadges,
