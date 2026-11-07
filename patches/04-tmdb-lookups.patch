@@ -1,17 +1,18 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 2b8cb3a7..e759bbce 100644
+index 2b8cb3a7..15d16033 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-@@ -1,5 +1,8 @@
+@@ -1,5 +1,9 @@
  package com.nuvio.app.features.tmdb
  
 +import kotlinx.datetime.plus
++import kotlinx.datetime.minus
 +import kotlinx.datetime.daysUntil
 +import kotlinx.datetime.toLocalDateTime
  import co.touchlab.kermit.Logger
  import com.nuvio.app.features.addons.httpGetText
  import com.nuvio.app.features.details.MetaCompany
-@@ -415,7 +418,9 @@ object TmdbMetadataService {
+@@ -415,7 +419,9 @@ object TmdbMetadataService {
          fallbackName: String? = null,
      ): TmdbEntityBrowseData? = withContext(Dispatchers.Default) {
          val settings = TmdbSettingsRepository.snapshot()
@@ -22,7 +23,7 @@ index 2b8cb3a7..e759bbce 100644
          val language = normalizeTmdbLanguage(settings.language)
          val normalizedSourceType = normalizeEntitySourceType(sourceType)
          val cacheKey = "${entityKind.routeValue}:$entityId:$normalizedSourceType:$language"
-@@ -1301,6 +1306,252 @@ object TmdbMetadataService {
+@@ -1301,6 +1307,271 @@ object TmdbMetadataService {
          )
      }
  
@@ -126,7 +127,18 @@ index 2b8cb3a7..e759bbce 100644
 +            .filter { (it.type ?: 0) >= 4 }
 +            .mapNotNull { day(it.releaseDate) }
 +            .minOrNull()
-+        if (homeRelease != null && homeRelease.daysUntil(today) in 0..30) return Triple("Recently Added", null, language)
++        // Fork: already out at home somewhere (any country): "Recently Added" for a month, then
++        // nothing. Never "Coming Soon" just because a later date (another country, a disc) is ahead.
++        if (homeRelease != null && homeRelease.daysUntil(today) >= 0) {
++            return Triple(if (homeRelease.daysUntil(today) <= 30) "Recently Added" else null, null, language)
++        }
++        // Fork: in cinemas more than 90 days ago: treat it as out, whatever TMDB is missing.
++        val cinema = releases.results
++            .flatMap { it.releaseDates }
++            .filter { (it.type ?: 0) in 2..3 }
++            .mapNotNull { day(it.releaseDate) }
++            .minOrNull()
++        if (cinema != null && cinema.daysUntil(today) > 90) return Triple(null, null, language)
 +        // Fork: streaming soon — "Coming Soon" with the day (this week) or the date.
 +        val upcoming = releases.results
 +            .flatMap { it.releaseDates }
@@ -187,6 +199,14 @@ index 2b8cb3a7..e759bbce 100644
 +                    .mapNotNull { it.releaseDate?.take(10) }
 +                    .filter { it >= tomorrow }
 +                    .sorted()
++                // Fork: already watchable at home somewhere (any country), or in cinemas more than
++                // 90 days ago: it's out, so it isn't Coming Soon.
++                val all = releases.flatMap { it.releaseDates }
++                val todayText = today.toString()
++                val cutoff = today.minus(90, kotlinx.datetime.DateTimeUnit.DAY).toString()
++                val alreadyOut = all.any { (it.type ?: 0) >= 4 && (it.releaseDate?.take(10) ?: "9999") <= todayText } ||
++                    all.any { (it.type ?: 0) in 2..3 && (it.releaseDate?.take(10) ?: "9999") < cutoff }
++                if (alreadyOut) return@async movie to null
 +                movie to (homeDays(releases.filter { it.country == "US" }).firstOrNull() ?: homeDays(releases).firstOrNull())
 +            }
 +        }.awaitAll()
@@ -275,7 +295,7 @@ index 2b8cb3a7..e759bbce 100644
      private suspend fun fetchMoreLikeThis(
          tmdbId: Int,
          mediaType: String,
-@@ -2129,6 +2380,48 @@ private data class TmdbReleaseDate(
+@@ -2129,6 +2400,48 @@ private data class TmdbReleaseDate(
      val certification: String? = null,
  )
  
@@ -324,7 +344,7 @@ index 2b8cb3a7..e759bbce 100644
  @Serializable
  private data class TmdbTvContentRatingsResponse(
      val results: List<TmdbTvContentRating> = emptyList(),
-@@ -2376,3 +2669,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
+@@ -2376,3 +2689,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
          ?.filePath
          ?.trim()
  }

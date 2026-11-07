@@ -918,7 +918,7 @@ index 00000000..d3e72dc8
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..0f2f4135
+index 00000000..e1684bc2
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 @@ -0,0 +1,445 @@
@@ -998,7 +998,7 @@ index 00000000..0f2f4135
 +
 +    private const val TTL_MS = 12 * 60 * 60 * 1000L
 +    private const val KEEP_MS = 4 * TTL_MS
-+    private const val STORE_KEY = "fork_card_badges_cache_v3"
++    private const val STORE_KEY = "fork_card_badges_cache_v4"
 +    private val entriesState = MutableStateFlow<Map<String, Entry>>(emptyMap())
 +    val entries: StateFlow<Map<String, Entry>>
 +        get() {
