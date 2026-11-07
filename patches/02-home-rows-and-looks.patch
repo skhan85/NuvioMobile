@@ -1369,7 +1369,7 @@ index 00000000..0f2f4135
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
 new file mode 100644
-index 00000000..cb51617b
+index 00000000..63921435
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
 @@ -0,0 +1,104 @@
@@ -1457,7 +1457,7 @@ index 00000000..cb51617b
 +        modifier = Modifier
 +            .padding(horizontal = horizontalPadding, vertical = 6.dp)
 +            .clip(RoundedCornerShape(50))
-+            .background(Color.White.copy(alpha = 0.16f))
++            .background(Color.White) // solid, so it stands out on any hero tint
 +            .clickable(onClick = onClick)
 +            .padding(horizontal = 16.dp, vertical = 9.dp),
 +        verticalAlignment = Alignment.CenterVertically,
@@ -1466,12 +1466,12 @@ index 00000000..cb51617b
 +        Icon(
 +            imageVector = Icons.Rounded.Shuffle,
 +            contentDescription = null,
-+            tint = Color.White,
++            tint = Color.Black,
 +            modifier = Modifier.size(18.dp),
 +        )
 +        Text(
 +            text = "Play Something",
-+            color = Color.White,
++            color = Color.Black,
 +            fontSize = 14.sp,
 +            fontWeight = FontWeight.SemiBold,
 +        )
