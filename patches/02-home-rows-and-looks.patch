@@ -918,10 +918,10 @@ index 00000000..d3e72dc8
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..e1684bc2
+index 00000000..0b1414f5
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,451 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1100,22 +1100,28 @@ index 00000000..e1684bc2
 +    if (isTop10) {
 +        ForkTop10Tag(Modifier.align(Alignment.TopEnd).padding(5.dp))
 +    }
-+    entry?.language?.let { language ->
-+        ForkLanguageTag(
-+            language,
-+            Modifier.align(if (landscape) Alignment.BottomStart else Alignment.TopStart).padding(5.dp),
-+        )
-+    }
-+    entry?.primary?.let { primary ->
-+        ForkFreshPill(
-+            primary = primary,
-+            secondary = entry.secondary,
-+            modifier = if (landscape) {
-+                Modifier.align(Alignment.TopStart).padding(6.dp)
-+            } else {
-+                Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
-+            },
-+        )
++    if (landscape) {
++        // Fork: tags stack in the top-left corner, clear of the title art at the bottom.
++        if (entry?.primary != null || entry?.language != null) {
++            Column(
++                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
++                verticalArrangement = Arrangement.spacedBy(4.dp),
++            ) {
++                entry?.primary?.let { ForkFreshPill(primary = it, secondary = entry.secondary) }
++                entry?.language?.let { ForkLanguageTag(it) }
++            }
++        }
++    } else {
++        entry?.language?.let { language ->
++            ForkLanguageTag(language, Modifier.align(Alignment.TopStart).padding(5.dp))
++        }
++        entry?.primary?.let { primary ->
++            ForkFreshPill(
++                primary = primary,
++                secondary = entry.secondary,
++                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp),
++            )
++        }
 +    }
 +}
 +
