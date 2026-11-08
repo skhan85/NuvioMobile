@@ -751,10 +751,10 @@ index 00000000..59206924
 +    }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
 new file mode 100644
-index 00000000..d3e72dc8
+index 00000000..6198594f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,190 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -823,12 +823,41 @@ index 00000000..d3e72dc8
 +            .joinToString("\n"),
 +    )
 +
-+    fun tags(text: String): Tags {
-+        if (text.isBlank()) return Tags()
++    fun tags(raw: String): Tags {
++        if (raw.isBlank()) return Tags()
++        val text = withAioLanguages(raw)
 +        val languages = table.filter { it.third.containsMatchIn(text) }.map { it.first }
 +        val hasEnglish = english.containsMatchIn(text)
 +        val multiAudio = multi.containsMatchIn(text) || languages.size + (if (hasEnglish) 1 else 0) >= 2
 +        return Tags(languages, multiAudio)
++    }
++
++    /**
++     * AIOStreams rewrites each source's text and lists its audio languages as small-caps ISO codes after a
++     * marker ("📣 ᴇɴ • ʜɪ • ᴋᴏ"), which the words and flags above never match. The codes on such a line are
++     * turned back into names ("English Hindi Korean") and added to the text, so tags and the
++     * preferred-language order see them too.
++     */
++    private val smallCaps = mapOf(
++        'ᴀ' to 'a', 'ʙ' to 'b', 'ᴄ' to 'c', 'ᴅ' to 'd', 'ᴇ' to 'e', 'ꜰ' to 'f', 'ɢ' to 'g', 'ʜ' to 'h', 'ɪ' to 'i',
++        'ᴊ' to 'j', 'ᴋ' to 'k', 'ʟ' to 'l', 'ᴍ' to 'm', 'ɴ' to 'n', 'ᴏ' to 'o', 'ᴘ' to 'p', 'ǫ' to 'q', 'ʀ' to 'r',
++        'ꜱ' to 's', 'ᴛ' to 't', 'ᴜ' to 'u', 'ᴠ' to 'v', 'ᴡ' to 'w', 'ʏ' to 'y', 'ᴢ' to 'z',
++    )
++    private val languageMarkers = listOf("📣", "🗣")
++
++    internal fun withAioLanguages(text: String): String {
++        val found = text.lineSequence()
++            .mapNotNull { line -> languageMarkers.map { line.indexOf(it) }.filter { it >= 0 }.minOrNull()?.let { line.substring(it) } }
++            .flatMap { line ->
++                line.map { smallCaps[it] ?: it }.joinToString("").lowercase()
++                    .split(Regex("[^a-z-]+")).asSequence()
++            }
++            .map { it.substringBefore('-') }
++            .filter { it.length in 2..3 }
++            .mapNotNull { code -> if (code == "en" || code == "eng") "English" else table.firstOrNull { it.second == code }?.first }
++            .distinct()
++            .toList()
++        return if (found.isEmpty()) text else text + "\n" + found.joinToString(" ")
 +    }
 +
 +    /** "Korean" for TMDB's "ko"; null for English, "xx" (no language) and codes not listed. */
