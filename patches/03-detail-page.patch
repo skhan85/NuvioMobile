@@ -128,10 +128,10 @@ index 00000000..cfa7b21b
 +/** Fork: addon subtitles arrive out of sync in Infuse; it uses its own tracks instead. */
 +internal const val INFUSE_FORWARDS_ADDON_SUBTITLES = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index b68011c8..fe6bb750 100644
+index b4abc5c0..b6be6bca 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-@@ -54,6 +54,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
+@@ -55,6 +55,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
  import androidx.compose.material3.MaterialTheme
  import androidx.compose.material3.Text
  import androidx.compose.runtime.Composable
@@ -139,7 +139,7 @@ index b68011c8..fe6bb750 100644
  import androidx.compose.runtime.CompositionLocalProvider
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.State
-@@ -875,6 +876,29 @@ fun MetaDetailsScreen(
+@@ -880,6 +881,29 @@ fun MetaDetailsScreen(
                          }
                      }
                  }
@@ -169,7 +169,7 @@ index b68011c8..fe6bb750 100644
                  fun runPlayAction(
                      handler: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)?,
                      resumePositionMs: Long?,
-@@ -2613,7 +2637,7 @@ private fun ConfiguredMetaSections(
+@@ -2627,7 +2651,7 @@ private fun ConfiguredMetaSections(
                      }
                      DetailPosterRailSection(
                          title = stringResource(Res.string.details_more_like_this),
@@ -179,10 +179,10 @@ index b68011c8..fe6bb750 100644
                          fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                          showHeader = showHeader,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
-index 43f9610b..0dfcdf5e 100644
+index 22049b9a..fbf4db14 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
-@@ -724,6 +724,8 @@ private fun PlayButton(
+@@ -725,6 +725,8 @@ private fun PlayButton(
      onPlayLongClick: (() -> Unit)?,
      modifier: Modifier = Modifier,
  ) {
@@ -191,7 +191,7 @@ index 43f9610b..0dfcdf5e 100644
          Surface(
              modifier = modifier
                  .height(buttonHeight)
-@@ -731,14 +733,22 @@ private fun PlayButton(
+@@ -732,14 +734,22 @@ private fun PlayButton(
                      if (playEnabled) {
                          Modifier
                              .clip(playShape)
@@ -217,10 +217,10 @@ index 43f9610b..0dfcdf5e 100644
              } else {
                  MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-index 944a2843..5f63630c 100644
+index e08d1cfa..b4269d26 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-@@ -274,6 +274,9 @@ fun DetailHero(
+@@ -277,6 +277,9 @@ fun DetailHero(
                          )
                      }
  

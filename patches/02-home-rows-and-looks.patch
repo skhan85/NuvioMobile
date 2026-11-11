@@ -103,7 +103,7 @@ index ebc28a5a..78c6b7d2 100644
          if (shouldShowTitleBelow) {
              Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt
-index 4ade5f02..ab905365 100644
+index c83206f9..503c4588 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt
 @@ -1,5 +1,6 @@
@@ -113,7 +113,7 @@ index 4ade5f02..ab905365 100644
  import androidx.compose.foundation.background
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Arrangement
-@@ -266,6 +267,7 @@ private fun TabbedGridContent(
+@@ -272,6 +273,7 @@ private fun TabbedGridContent(
  
          Spacer(modifier = Modifier.height(8.dp))
  
@@ -121,7 +121,7 @@ index 4ade5f02..ab905365 100644
          val selectedTab = uiState.tabs.getOrNull(uiState.selectedTabIndex)
          if (selectedTab == null) return
  
-@@ -290,7 +292,7 @@ private fun TabbedGridContent(
+@@ -296,7 +298,7 @@ private fun TabbedGridContent(
                          verticalArrangement = Arrangement.spacedBy(14.dp),
                      ) {
                          items(
@@ -130,7 +130,7 @@ index 4ade5f02..ab905365 100644
                              key = { item -> item.lazyKey },
                          ) { keyedItem ->
                              val item = keyedItem.value
-@@ -328,7 +330,8 @@ private fun RowsContent(
+@@ -334,7 +336,8 @@ private fun RowsContent(
      onCatalogClick: (HomeCatalogSection) -> Unit,
      onPosterClick: (MetaPreview) -> Unit,
  ) {
@@ -2116,10 +2116,10 @@ index abb8ca38..7b8bb138 100644
  private fun ArtworkPanel(
      imageUrl: String?,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-index ea52ed4e..8746303b 100644
+index c9a86ae8..bb8f183a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-@@ -882,6 +882,25 @@ private fun HeroContentBlock(
+@@ -884,6 +884,25 @@ private fun HeroContentBlock(
              showMdbListRatings = showMdbListRatings,
          )
  
@@ -2464,7 +2464,7 @@ index ce9a9f8a..51c05ce0 100644
                  .sortedBy(EpisodeReleaseNotificationRequest::releaseDateIso)
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
-index 8f575137..5089da8f 100644
+index 1f40b32f..464610f3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.search
@@ -2475,7 +2475,7 @@ index 8f575137..5089da8f 100644
  import androidx.compose.foundation.clickable
  import androidx.compose.foundation.background
  import androidx.compose.foundation.layout.Arrangement
-@@ -188,6 +189,7 @@ fun SearchScreen(
+@@ -199,6 +200,7 @@ fun SearchScreen(
              }
      }
  
@@ -2483,7 +2483,7 @@ index 8f575137..5089da8f 100644
      ScreenActivityEffect(query, lastRequestedQuery, uiState.isLoading, uiState.sections) { screenActive ->
          if (!screenActive) return@ScreenActivityEffect
          val normalizedQuery = query.trim()
-@@ -387,7 +389,7 @@ fun SearchScreen(
+@@ -426,7 +428,7 @@ fun SearchScreen(
  
                          else -> {
                              items(
