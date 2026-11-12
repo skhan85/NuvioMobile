@@ -82,7 +82,7 @@ index 00000000..e3b665eb
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
-index ebc28a5a..78c6b7d2 100644
+index ebc28a5a..77016d6e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
 @@ -136,6 +136,8 @@ fun NuvioPosterCard(
@@ -102,6 +102,17 @@ index ebc28a5a..78c6b7d2 100644
          }
          if (shouldShowTitleBelow) {
              Text(
+@@ -276,7 +279,9 @@ private fun NuvioShelfSectionHeader(
+     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
+ ) {
+     val tokens = MaterialTheme.nuvio
+-    val showAccent = rememberShowCatalogAccentEnabled()
++    // Fork: none of Netflix, Disney+ or Max underline their row titles, so only Custom keeps the bar.
++    val showAccent = rememberShowCatalogAccentEnabled() &&
++        com.nuvio.app.features.home.rememberForkActiveStyle() == com.nuvio.app.features.home.ForkStyle.CUSTOM
+     Column(
+         modifier = modifier.fillMaxWidth(),
+     ) {
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
 index 664b15ac..61c800ee 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
@@ -1013,10 +1024,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..32176ce2
+index 00000000..f5454236
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,459 @@
+@@ -0,0 +1,471 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1294,14 +1305,26 @@ index 00000000..32176ce2
 +        val key get() = (if (isNetwork) "network-" else "company-") + tmdbId
 +    }
 +
-+    val brands = listOf(
++    /** Disney+'s own row under the hero: Disney, Pixar, Marvel, Star Wars, National Geographic. */
++    val disneyBrands = listOf(
 +        Brand(2, "Disney", false),
 +        Brand(3, "Pixar", false),
-+        Brand(521, "DreamWorks", false),
-+        Brand(6704, "Illumination", false),
-+        Brand(13, "Nickelodeon", true),
-+        Brand(56, "Cartoon Network", true),
++        Brand(420, "Marvel", false),
++        Brand(1, "Star Wars", false),
++        Brand(43, "National Geographic", true),
 +    )
++
++    /** Max's: HBO, DC, Warner Bros., Discovery, Adult Swim, TLC. */
++    val maxBrands = listOf(
++        Brand(49, "HBO", true),
++        Brand(9993, "DC", false),
++        Brand(174, "Warner Bros.", false),
++        Brand(64, "Discovery", true),
++        Brand(80, "Adult Swim", true),
++        Brand(84, "TLC", true),
++    )
++
++    val brands = (disneyBrands + maxBrands).distinctBy { it.key }
 +
 +
 +    private val logosState = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -1328,7 +1351,7 @@ index 00000000..32176ce2
 +    androidx.compose.runtime.staticCompositionLocalOf<((String, Int, String) -> Unit)?> { null }
 +
 +@Composable
-+internal fun ForkKidsBrandRow(horizontalPadding: Dp, modifier: Modifier = Modifier) {
++internal fun ForkKidsBrandRow(horizontalPadding: Dp, style: ForkStyle, modifier: Modifier = Modifier) {
 +    val logos by ForkDisneyKids.logos.collectAsStateWithLifecycle()
 +    LaunchedEffect(Unit) { ForkDisneyKids.loadLogosIfNeeded() }
 +    androidx.compose.foundation.lazy.LazyRow(
@@ -1336,27 +1359,27 @@ index 00000000..32176ce2
 +        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = horizontalPadding),
 +        horizontalArrangement = Arrangement.spacedBy(10.dp),
 +    ) {
-+        items(ForkDisneyKids.brands.size) { index ->
-+            val brand = ForkDisneyKids.brands[index]
-+            ForkKidsBrandTile(brand = brand, logoUrl = logos[brand.key])
++        val list = if (style == ForkStyle.MAX) ForkDisneyKids.maxBrands else ForkDisneyKids.disneyBrands
++        items(list.size) { index ->
++            val brand = list[index]
++            ForkKidsBrandTile(brand = brand, logoUrl = logos[brand.key], style = style)
 +        }
 +    }
 +}
 +
 +@Composable
-+private fun ForkKidsBrandTile(brand: ForkDisneyKids.Brand, logoUrl: String?) {
++private fun ForkKidsBrandTile(brand: ForkDisneyKids.Brand, logoUrl: String?, style: ForkStyle) {
 +    val openBrand = LocalForkOpenBrand.current
-+    val shape = RoundedCornerShape(10.dp)
++    val max = style == ForkStyle.MAX
++    val shape = RoundedCornerShape(if (max) 8.dp else 10.dp)
++    // Disney+: a 16:9 tile that glows from blue at the top to deep navy; Max: charcoal on black.
++    val gradient = if (max) listOf(Color(0xFF262626), Color(0xFF111111)) else listOf(Color(0xFF30395F), Color(0xFF1A213D))
 +    Box(
 +        modifier = Modifier
-+            .size(width = 128.dp, height = 72.dp)
++            .size(width = if (max) 120.dp else 144.dp, height = if (max) 68.dp else 81.dp)
 +            .clip(shape)
-+            .background(
-+                androidx.compose.ui.graphics.Brush.verticalGradient(
-+                    listOf(Color(0xFF30395F), Color(0xFF1A213D)),
-+                ),
-+            )
-+            .border(1.dp, Color.White.copy(alpha = 0.18f), shape)
++            .background(androidx.compose.ui.graphics.Brush.verticalGradient(gradient))
++            .border(if (max) 1.dp else 1.5.dp, Color.White.copy(alpha = if (max) 0.14f else 0.28f), shape)
 +            .clickable {
 +                openBrand?.invoke(
 +                    if (brand.isNetwork) "network" else "company",
@@ -1755,7 +1778,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..d67007ae 100644
+index 7b1e4c28..c1717d5f 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,5 +1,6 @@
@@ -1885,9 +1908,9 @@ index 7b1e4c28..d67007ae 100644
 +                    }
 +                }
 +
-+                if (forkDisneyStyle) {
++                if (forkStyle == ForkStyle.DISNEY || forkStyle == ForkStyle.MAX) {
 +                    item(key = "fork_kids_brands") {
-+                        ForkKidsBrandRow(horizontalPadding = homeSectionPadding)
++                        ForkKidsBrandRow(horizontalPadding = homeSectionPadding, style = forkStyle)
 +                    }
 +                }
 +
@@ -2006,10 +2029,59 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..57b79711 100644
+index e8916fa1..fec4f14b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-@@ -147,15 +147,35 @@ private fun CollectionFolderCard(
+@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.BoxWithConstraints
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.layout.aspectRatio
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -34,7 +35,9 @@ import com.nuvio.app.core.ui.posterCardClickable
+ import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
+ import com.nuvio.app.features.collection.Collection
+ import com.nuvio.app.features.collection.CollectionFolder
++import com.nuvio.app.features.home.ForkStyle
+ import com.nuvio.app.features.home.PosterShape
++import com.nuvio.app.features.home.rememberForkActiveStyle
+ 
+ @Composable
+ fun HomeCollectionRowSection(
+@@ -123,7 +126,21 @@ private fun CollectionFolderCard(
+         modifier = modifier.width(cardWidth),
+         verticalArrangement = Arrangement.spacedBy(6.dp),
+     ) {
+-        val shapeCorner = RoundedCornerShape(posterCardStyle.cornerRadiusDp.dp)
++        // Fork: each style frames its catalogue tiles the way that service does.
++        val forkStyle = rememberForkActiveStyle()
++        val shapeCorner = RoundedCornerShape(
++            when (forkStyle) {
++                ForkStyle.NETFLIX -> 4.dp
++                ForkStyle.DISNEY -> 10.dp
++                ForkStyle.MAX -> 6.dp
++                ForkStyle.CUSTOM -> posterCardStyle.cornerRadiusDp.dp
++            },
++        )
++        val forkBorder = when (forkStyle) {
++            ForkStyle.DISNEY -> BorderStroke(1.5.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.28f))
++            ForkStyle.MAX -> BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.14f))
++            else -> null
++        }
+         val imageUrl = collectionFolderCardImageUrl(folder)
+         Card(
+             modifier = Modifier
+@@ -140,6 +157,7 @@ private fun CollectionFolderCard(
+             elevation = CardDefaults.cardElevation(
+                 defaultElevation = 2.dp,
+             ),
++            border = forkBorder,
+         ) {
+             Box(
+                 modifier = Modifier.fillMaxSize(),
+@@ -147,15 +165,35 @@ private fun CollectionFolderCard(
              ) {
                  when {
                      !imageUrl.isNullOrBlank() -> {
