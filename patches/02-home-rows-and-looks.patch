@@ -1024,10 +1024,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..f5454236
+index 00000000..8d78919b
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,471 @@
+@@ -0,0 +1,481 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1389,7 +1389,17 @@ index 00000000..f5454236
 +            },
 +        contentAlignment = Alignment.Center,
 +    ) {
-+        if (logoUrl != null) {
++        if (brand.name == "Disney") {
++            // TMDB only has the "Walt Disney Pictures" mark, so Disney is set as a plain wordmark.
++            Text(
++                text = "Disney",
++                color = Color.White,
++                fontWeight = FontWeight.Bold,
++                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
++                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
++                fontSize = 30.sp,
++            )
++        } else if (logoUrl != null) {
 +            coil3.compose.AsyncImage(
 +                model = logoUrl,
 +                contentDescription = brand.name,
@@ -2029,18 +2039,20 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..fec4f14b 100644
+index e8916fa1..b4b8eac4 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
+@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.Column
  import androidx.compose.foundation.layout.PaddingValues
 +import androidx.compose.foundation.BorderStroke
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.padding
  import androidx.compose.foundation.layout.aspectRatio
  import androidx.compose.foundation.layout.fillMaxSize
  import androidx.compose.foundation.layout.fillMaxWidth
-@@ -34,7 +35,9 @@ import com.nuvio.app.core.ui.posterCardClickable
+@@ -34,7 +37,9 @@ import com.nuvio.app.core.ui.posterCardClickable
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
  import com.nuvio.app.features.collection.Collection
  import com.nuvio.app.features.collection.CollectionFolder
@@ -2050,7 +2062,7 @@ index e8916fa1..fec4f14b 100644
  
  @Composable
  fun HomeCollectionRowSection(
-@@ -123,7 +126,21 @@ private fun CollectionFolderCard(
+@@ -123,7 +128,21 @@ private fun CollectionFolderCard(
          modifier = modifier.width(cardWidth),
          verticalArrangement = Arrangement.spacedBy(6.dp),
      ) {
@@ -2073,7 +2085,7 @@ index e8916fa1..fec4f14b 100644
          val imageUrl = collectionFolderCardImageUrl(folder)
          Card(
              modifier = Modifier
-@@ -140,6 +157,7 @@ private fun CollectionFolderCard(
+@@ -140,22 +159,68 @@ private fun CollectionFolderCard(
              elevation = CardDefaults.cardElevation(
                  defaultElevation = 2.dp,
              ),
@@ -2081,9 +2093,34 @@ index e8916fa1..fec4f14b 100644
          ) {
              Box(
                  modifier = Modifier.fillMaxSize(),
-@@ -147,15 +165,35 @@ private fun CollectionFolderCard(
+                 contentAlignment = Alignment.Center,
              ) {
                  when {
++                    forkStyle != ForkStyle.CUSTOM -> {
++                        // Fork: Netflix, Disney+ and Max show a plain tile with the name instead of
++                        // the imported cover art (whose baked-in text and outlines don't suit them).
++                        val tileColors = when (forkStyle) {
++                            ForkStyle.DISNEY -> listOf(androidx.compose.ui.graphics.Color(0xFF30395F), androidx.compose.ui.graphics.Color(0xFF1A213D))
++                            ForkStyle.MAX -> listOf(androidx.compose.ui.graphics.Color(0xFF262626), androidx.compose.ui.graphics.Color(0xFF111111))
++                            else -> listOf(androidx.compose.ui.graphics.Color(0xFF2F2F2F), androidx.compose.ui.graphics.Color(0xFF1F1F1F))
++                        }
++                        Box(
++                            modifier = Modifier
++                                .fillMaxSize()
++                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(tileColors)),
++                            contentAlignment = if (forkStyle == ForkStyle.MAX) Alignment.BottomStart else Alignment.Center,
++                        ) {
++                            Text(
++                                text = folder.title,
++                                style = MaterialTheme.typography.titleMedium,
++                                color = androidx.compose.ui.graphics.Color.White,
++                                textAlign = if (forkStyle == ForkStyle.MAX) TextAlign.Start else TextAlign.Center,
++                                maxLines = 2,
++                                overflow = TextOverflow.Ellipsis,
++                                modifier = Modifier.padding(12.dp),
++                            )
++                        }
++                    }
                      !imageUrl.isNullOrBlank() -> {
 -                        NuvioAsyncImage(
 -                            imageUrl = imageUrl,
@@ -2126,6 +2163,15 @@ index e8916fa1..fec4f14b 100644
                      }
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
+@@ -183,7 +248,7 @@ private fun CollectionFolderCard(
+             }
+         }
+ 
+-        if (!folder.hideTitle) {
++        if (!folder.hideTitle && forkStyle == ForkStyle.CUSTOM) {
+             Text(
+                 text = folder.title,
+                 style = MaterialTheme.typography.bodyMedium,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
 index abb8ca38..7b8bb138 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
