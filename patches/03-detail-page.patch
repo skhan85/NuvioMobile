@@ -287,7 +287,7 @@ index edc00fc2..cadbfc18 100644
                          fontWeight = FontWeight.Bold,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt
 new file mode 100644
-index 00000000..6d70081f
+index 00000000..0c75d9a1
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt
 @@ -0,0 +1,77 @@
@@ -318,7 +318,7 @@ index 00000000..6d70081f
 +import com.nuvio.app.features.home.ForkHomeSettings
 +
 +/** Fork: Netflix red, used for the Top 10 badge. */
-+private val ForkNetflixRed = Color(0xFFE50914)
++private val ForkNetflixRed: Color get() = com.nuvio.app.features.home.forkActiveStyleNow().brandColor // the active style's spot colour
 +
 +/**
 + * Fork: Netflix-style "TOP 10 · #3 in TV Shows Today" line under the title on the details page,

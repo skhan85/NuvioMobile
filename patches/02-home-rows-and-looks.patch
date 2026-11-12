@@ -1013,10 +1013,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..4209c459
+index 00000000..32176ce2
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,458 @@
+@@ -0,0 +1,459 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1069,7 +1069,8 @@ index 00000000..4209c459
 +
 +/** Fork: Netflix home touches shared by Home, the hero and Continue Watching. */
 +internal object ForkNetflixHome {
-+    val NetflixRed = Color(0xFFE50914)
++    /** Named for Netflix, but it is the active style's spot colour: Netflix red, Disney+ blue or Max Blue. */
++    val NetflixRed: Color get() = forkActiveStyleNow().brandColor
 +
 +    /** Home's poster tap, so a Continue Watching card's ⓘ can open the details page. */
 +    var onCwInfo: ((MetaPreview) -> Unit)? = null
@@ -1587,10 +1588,10 @@ index 00000000..63921435
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
 new file mode 100644
-index 00000000..464b5be8
+index 00000000..35209934
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,128 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.material3.ColorScheme
@@ -1678,6 +1679,17 @@ index 00000000..464b5be8
 +        CUSTOM -> base
 +    }
 +
++    /**
++     * The one spot colour of this look: progress bars and the TOP 10 / New Episode / Airs Today tags. Netflix red, Disney+ blue
++     * or Max Blue; Custom keeps the red the fork always used.
++     */
++    val brandColor: Color
++        get() = when (this) {
++            NETFLIX, CUSTOM -> Color(0xFFE50914)
++            DISNEY -> Color(0xFF0089EC)
++            MAX -> Color(0xFF002BE7)
++        }
++
 +    /** The glow behind the wordmark on the start-up screen: Netflix red, Disney+ blue, Max Blue; null keeps the theme accent. */
 +    val splashAccent: Color?
 +        get() = when (this) {
@@ -1701,6 +1713,12 @@ index 00000000..464b5be8
 +    val disneyProfiles by ForkHomeSettings.disneyProfiles.collectAsStateWithLifecycle()
 +    val index = profileState.activeProfile?.profileIndex ?: 1
 +    return styles[index] ?: if (index in disneyProfiles) ForkStyle.DISNEY else ForkStyle.CUSTOM
++}
++
++/** The active profile's [ForkStyle], read outside composition (the tags and progress bars that draw in the style's colour). */
++internal fun forkActiveStyleNow(): ForkStyle {
++    ForkHomeSettings.ensureLoaded()
++    return ForkHomeSettings.styleFor(com.nuvio.app.features.profiles.ProfileRepository.state.value.activeProfile?.profileIndex ?: 1)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 index 32d51fc1..ee74b1b7 100644
