@@ -1557,10 +1557,10 @@ index 00000000..63921435
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
 new file mode 100644
-index 00000000..4b119d88
+index 00000000..5d4d5ba6
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,45 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.material3.ColorScheme
@@ -1588,9 +1588,10 @@ index 00000000..4b119d88
 +            primary = ForkDisneyKids.Sky,
 +        )
 +        NETFLIX -> base.copy(
-+            background = Color(0xFF121212),
-+            surface = Color(0xFF1C1C1C),
-+            surfaceVariant = Color(0xFF262626),
++            // Netflix's own app colours: #141414 background, #1F1F1F and #2F2F2F raised surfaces
++            background = Color(0xFF141414),
++            surface = Color(0xFF1F1F1F),
++            surfaceVariant = Color(0xFF2F2F2F),
 +        )
 +        MAX -> base.copy(
 +            background = Color(0xFF0B0714),
