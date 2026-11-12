@@ -1737,7 +1737,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..9b9cf038 100644
+index 7b1e4c28..d67007ae 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,5 +1,6 @@
@@ -1834,7 +1834,7 @@ index 7b1e4c28..9b9cf038 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,7 +1071,10 @@ fun HomeScreen(
+@@ -1009,7 +1071,11 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -1842,11 +1842,12 @@ index 7b1e4c28..9b9cf038 100644
 +        // Fork: Disney+ look — navy theme instead of the artwork wash.
 +        val forkDisneyColors = forkStyle.colors(MaterialTheme.colorScheme) // Fork: Style
 +        MaterialTheme(colorScheme = forkDisneyColors) {
-+        DynamicArtworkBackground(artworkUrl = if (forkDisneyStyle) null else activeHeroArtworkUrl) {
++        // Fork: a Style (Netflix / Disney+ / Max) has its own flat background; only Custom keeps the artwork tint
++        DynamicArtworkBackground(artworkUrl = if (forkStyle != ForkStyle.CUSTOM) null else activeHeroArtworkUrl) {
              NuvioScreen(
                  modifier = Modifier.fillMaxSize().then(heroStretchModifier),
                  horizontalPadding = 0.dp,
-@@ -1065,6 +1130,28 @@ fun HomeScreen(
+@@ -1065,6 +1131,28 @@ fun HomeScreen(
                      }
                  }
  
@@ -1875,7 +1876,7 @@ index 7b1e4c28..9b9cf038 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1280,47 @@ fun HomeScreen(
+@@ -1193,6 +1281,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -1923,7 +1924,7 @@ index 7b1e4c28..9b9cf038 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1235,6 +1363,7 @@ fun HomeScreen(
+@@ -1235,6 +1364,7 @@ fun HomeScreen(
                  }
              }
          }
