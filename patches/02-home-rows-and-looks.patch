@@ -455,10 +455,10 @@ index 00000000..9d8ec56b
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
 new file mode 100644
-index 00000000..9e548ddd
+index 00000000..c8c50083
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,211 @@
 +package com.nuvio.app.features.home
 +
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -583,6 +583,14 @@ index 00000000..9e548ddd
 +    fun styleFor(profileIndex: Int): ForkStyle =
 +        _styleProfiles.value[profileIndex]
 +            ?: if (profileIndex in _disneyProfiles.value) ForkStyle.DISNEY else ForkStyle.CUSTOM
++
++    /** The style of whichever profile was last on Home: the start-up screen uses it, before any profile is chosen. */
++    fun lastStyle(): ForkStyle =
++        ForkStyle.fromStored(ForkHomeSettingsStorage.loadForkString("fork_last_style")) ?: ForkStyle.CUSTOM
++
++    fun rememberLastStyle(style: ForkStyle) {
++        ForkHomeSettingsStorage.saveForkString("fork_last_style", style.name)
++    }
 +
 +    fun setStyle(profileIndex: Int, style: ForkStyle) {
 +        ensureLoaded()
@@ -1557,10 +1565,10 @@ index 00000000..63921435
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
 new file mode 100644
-index 00000000..5d4d5ba6
+index 00000000..37807af9
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,56 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.material3.ColorScheme
@@ -1574,18 +1582,19 @@ index 00000000..5d4d5ba6
 + * Max Style is a deep violet. Custom changes nothing.
 + */
 +enum class ForkStyle(val label: String, val summary: String) {
-+    NETFLIX("Netflix Style", "Near-black Home with the billboard, Top 10, card tags and \"Continue Watching for\" rows"),
-+    DISNEY("Disney+ Style", "Navy Home with a pale-blue accent and Disney, Pixar, DreamWorks, Illumination, Nickelodeon and Cartoon Network tiles"),
-+    MAX("Max Style", "Deep violet Home with a violet accent"),
++    NETFLIX("Netflix Style", "Netflix's own #141414 Home with the billboard, Top 10, card tags and \"Continue Watching for\" rows"),
++    DISNEY("Disney+ Style", "Disney+'s deep navy Home with its blue accent and Disney, Pixar, DreamWorks, Illumination, Nickelodeon and Cartoon Network tiles"),
++    MAX("Max Style", "Max's black Home with Max Blue (#002BE7) as the accent"),
 +    CUSTOM("Custom", "Nothing is changed for you: your theme and switches decide the look");
 +
 +    /** Colours for this profile's Home; [base] is returned untouched for Custom. */
 +    fun colors(base: ColorScheme): ColorScheme = when (this) {
 +        DISNEY -> base.copy(
-+            background = ForkDisneyKids.Navy,
-+            surface = ForkDisneyKids.NavySurface,
-+            surfaceVariant = ForkDisneyKids.NavySurfaceVariant,
-+            primary = ForkDisneyKids.Sky,
++            // Disney+: deep navy #040714, #0E1735 and #1A2151 raised surfaces, brand blue #0089EC
++            background = Color(0xFF040714),
++            surface = Color(0xFF0E1735),
++            surfaceVariant = Color(0xFF1A2151),
++            primary = Color(0xFF0089EC),
 +        )
 +        NETFLIX -> base.copy(
 +            // Netflix's own app colours: #141414 background, #1F1F1F and #2F2F2F raised surfaces
@@ -1594,13 +1603,23 @@ index 00000000..5d4d5ba6
 +            surfaceVariant = Color(0xFF2F2F2F),
 +        )
 +        MAX -> base.copy(
-+            background = Color(0xFF0B0714),
-+            surface = Color(0xFF16102A),
-+            surfaceVariant = Color(0xFF211A3C),
-+            primary = Color(0xFFA78BFA),
++            // Max: pure black #000000 and Max Blue #002BE7 (both from the brand site); the raised greys are generic
++            background = Color(0xFF000000),
++            surface = Color(0xFF121212),
++            surfaceVariant = Color(0xFF1F1F1F),
++            primary = Color(0xFF002BE7),
 +        )
 +        CUSTOM -> base
 +    }
++
++    /** The glow behind the wordmark on the start-up screen: Netflix red, Disney+ blue, Max Blue; null keeps the theme accent. */
++    val splashAccent: Color?
++        get() = when (this) {
++            NETFLIX -> Color(0xFFE50914)
++            DISNEY -> Color(0xFF0089EC)
++            MAX -> Color(0xFF002BE7)
++            CUSTOM -> null
++        }
 +
 +    companion object {
 +        fun fromStored(value: String?): ForkStyle? = entries.firstOrNull { it.name == value }
@@ -1641,7 +1660,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..11491f56 100644
+index 7b1e4c28..9b9cf038 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,5 +1,6 @@
@@ -1699,7 +1718,7 @@ index 7b1e4c28..11491f56 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -559,6 +601,22 @@ fun HomeScreen(
+@@ -559,6 +601,23 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
@@ -1712,6 +1731,7 @@ index 7b1e4c28..11491f56 100644
 +    val forkStyle = forkStyleProfiles[activeProfileId]
 +        ?: if (activeProfileId in forkDisneyProfiles) ForkStyle.DISNEY else ForkStyle.CUSTOM
 +    val forkDisneyStyle = forkStyle == ForkStyle.DISNEY
++    androidx.compose.runtime.LaunchedEffect(forkStyle) { ForkHomeSettings.rememberLastStyle(forkStyle) }
 +    val forkPlaySomethingEnabled by remember {
 +        ForkHomeSettings.ensureLoaded()
 +        ForkHomeSettings.playSomething
@@ -1722,7 +1742,7 @@ index 7b1e4c28..11491f56 100644
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -911,9 +969,12 @@ fun HomeScreen(
+@@ -911,9 +970,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -1737,7 +1757,7 @@ index 7b1e4c28..11491f56 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,7 +1070,10 @@ fun HomeScreen(
+@@ -1009,7 +1071,10 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -1749,7 +1769,7 @@ index 7b1e4c28..11491f56 100644
              NuvioScreen(
                  modifier = Modifier.fillMaxSize().then(heroStretchModifier),
                  horizontalPadding = 0.dp,
-@@ -1065,6 +1129,28 @@ fun HomeScreen(
+@@ -1065,6 +1130,28 @@ fun HomeScreen(
                      }
                  }
  
@@ -1778,7 +1798,7 @@ index 7b1e4c28..11491f56 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1279,47 @@ fun HomeScreen(
+@@ -1193,6 +1280,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -1826,7 +1846,7 @@ index 7b1e4c28..11491f56 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1235,6 +1362,7 @@ fun HomeScreen(
+@@ -1235,6 +1363,7 @@ fun HomeScreen(
                  }
              }
          }

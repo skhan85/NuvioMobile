@@ -1,3 +1,29 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppIntroContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppIntroContent.kt
+index 88f5dddd..86b887c0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppIntroContent.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppIntroContent.kt
+@@ -69,13 +69,19 @@ internal fun AppIntroContent(modifier: Modifier = Modifier) {
+         )
+     }
+ 
++    // Fork: the start-up screen wears the look of the profile that was last on Home.
++    val forkIntroStyle = remember { com.nuvio.app.features.home.ForkHomeSettings.lastStyle() }
++    val forkIntroColors = forkIntroStyle.colors(MaterialTheme.colorScheme)
+     Box(
+         modifier = modifier
+             .fillMaxSize()
+-            .background(MaterialTheme.nuvio.colors.background),
++            .background(
++                if (forkIntroStyle == com.nuvio.app.features.home.ForkStyle.CUSTOM) MaterialTheme.nuvio.colors.background
++                else forkIntroColors.background,
++            ),
+         contentAlignment = Alignment.Center,
+     ) {
+-        val accent = MaterialTheme.nuvio.colors.accent
++        val accent = forkIntroStyle.splashAccent ?: MaterialTheme.nuvio.colors.accent
+         Box(
+             modifier = Modifier
+                 .size(190.dp)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
 index 9720bed5..7ad810ec 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt
