@@ -102,6 +102,28 @@ index ebc28a5a..78c6b7d2 100644
          }
          if (shouldShowTitleBelow) {
              Text(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
+index 664b15ac..61c800ee 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
+@@ -200,11 +200,13 @@ fun NuvioTheme(
+     customThemeColors: CustomThemeColors = CustomThemeColors.Default,
+     content: @Composable () -> Unit,
+ ) {
+-    val palette = remember(appTheme, customThemeColors) {
+-        ThemeColors.getColorPalette(appTheme, customThemeColors)
++    // Fork: the profile's Style (Netflix / Disney+ / Max) recolours the whole app; Custom leaves the Appearance theme alone.
++    val forkStyle = com.nuvio.app.features.home.rememberForkActiveStyle()
++    val palette = remember(appTheme, customThemeColors, forkStyle) {
++        forkStyle.applyTo(ThemeColors.getColorPalette(appTheme, customThemeColors))
+     }
+-    val colorScheme = buildColorScheme(palette, amoled = amoled)
+-    val tokens = defaultNuvioThemeTokens(palette, amoled = amoled, colorScheme = colorScheme)
++    val colorScheme = buildColorScheme(palette, amoled = amoled && forkStyle == com.nuvio.app.features.home.ForkStyle.CUSTOM)
++    val tokens = defaultNuvioThemeTokens(palette, amoled = amoled && forkStyle == com.nuvio.app.features.home.ForkStyle.CUSTOM, colorScheme = colorScheme)
+ 
+     val density = LocalDensity.current
+     CompositionLocalProvider(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt
 index c83206f9..503c4588 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailScreen.kt
@@ -1565,14 +1587,19 @@ index 00000000..63921435
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
 new file mode 100644
-index 00000000..37807af9
+index 00000000..464b5be8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,111 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.material3.ColorScheme
 +import androidx.compose.ui.graphics.Color
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.core.ui.ThemeColorPalette
++import com.nuvio.app.core.ui.ThemeColors
 +
 +/**
 + * Fork: one look per profile (Settings > Homescreen > Style).
@@ -1612,6 +1639,45 @@ index 00000000..37807af9
 +        CUSTOM -> base
 +    }
 +
++    /**
++     * The whole app's palette for this look (Settings, Search, Library, details, the tab bar), not just Home. Custom returns
++     * [base] untouched, so the Appearance theme keeps working as before. Netflix and Max use a white / Max Blue accent, Disney+ its blue.
++     */
++    fun applyTo(base: ThemeColorPalette): ThemeColorPalette = when (this) {
++        NETFLIX -> ThemeColors.White.copy(
++            background = Color(0xFF141414),
++            backgroundElevated = Color(0xFF1F1F1F),
++            backgroundCard = Color(0xFF2F2F2F),
++        )
++        DISNEY -> base.copy(
++            secondary = Color(0xFF0089EC),
++            secondaryVariant = Color(0xFF0068B4),
++            accentGradient = listOf(Color(0xFF0089EC)),
++            nativeAccentHex = "#0089EC",
++            onSecondary = Color.White,
++            onSecondaryVariant = Color.White,
++            focusRing = Color(0xFF8FD3FF),
++            focusBackground = Color(0xFF1A2151),
++            background = Color(0xFF040714),
++            backgroundElevated = Color(0xFF0E1735),
++            backgroundCard = Color(0xFF1A2151),
++        )
++        MAX -> base.copy(
++            secondary = Color(0xFF002BE7),
++            secondaryVariant = Color(0xFF0021B0),
++            accentGradient = listOf(Color(0xFF002BE7)),
++            nativeAccentHex = "#002BE7",
++            onSecondary = Color.White,
++            onSecondaryVariant = Color.White,
++            focusRing = Color.White,
++            focusBackground = Color(0xFF1F1F1F),
++            background = Color(0xFF000000),
++            backgroundElevated = Color(0xFF121212),
++            backgroundCard = Color(0xFF1F1F1F),
++        )
++        CUSTOM -> base
++    }
++
 +    /** The glow behind the wordmark on the start-up screen: Netflix red, Disney+ blue, Max Blue; null keeps the theme accent. */
 +    val splashAccent: Color?
 +        get() = when (this) {
@@ -1624,6 +1690,17 @@ index 00000000..37807af9
 +    companion object {
 +        fun fromStored(value: String?): ForkStyle? = entries.firstOrNull { it.name == value }
 +    }
++}
++
++/** The Style of the profile that is active right now; updates when the profile or its style changes. */
++@Composable
++fun rememberForkActiveStyle(): ForkStyle {
++    androidx.compose.runtime.remember { ForkHomeSettings.ensureLoaded() }
++    val profileState by com.nuvio.app.features.profiles.ProfileRepository.state.collectAsStateWithLifecycle()
++    val styles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
++    val disneyProfiles by ForkHomeSettings.disneyProfiles.collectAsStateWithLifecycle()
++    val index = profileState.activeProfile?.profileIndex ?: 1
++    return styles[index] ?: if (index in disneyProfiles) ForkStyle.DISNEY else ForkStyle.CUSTOM
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 index 32d51fc1..ee74b1b7 100644
