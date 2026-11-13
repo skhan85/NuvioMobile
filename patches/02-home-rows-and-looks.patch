@@ -1024,10 +1024,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..111ddbf8
+index 00000000..39060b18
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,606 @@
+@@ -0,0 +1,602 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1084,7 +1084,7 @@ index 00000000..111ddbf8
 +
 +/** Fork: Netflix home touches shared by Home, the hero and Continue Watching. */
 +internal object ForkNetflixHome {
-+    /** Named for Netflix, but it is the active style's spot colour: Netflix red, Disney+ blue or Max Blue. */
++    /** Named for Netflix, but it is the active style's spot colour: Netflix red or Disney+ blue. */
 +    val NetflixRed: Color get() = forkActiveStyleNow().brandColor
 +
 +    /** Home's poster tap, so a Continue Watching card's ⓘ can open the details page. */
@@ -1319,17 +1319,7 @@ index 00000000..111ddbf8
 +        Brand(43, "National Geographic", true),
 +    )
 +
-+    /** Max's: HBO, DC, Warner Bros., Discovery, Adult Swim, TLC. */
-+    val maxBrands = listOf(
-+        Brand(49, "HBO", true),
-+        Brand(9993, "DC", false),
-+        Brand(174, "Warner Bros.", false, filled = true),
-+        Brand(64, "Discovery", true),
-+        Brand(80, "Adult Swim", true),
-+        Brand(84, "TLC", true, filled = true),
-+    )
-+
-+    val brands = (disneyBrands + maxBrands).distinctBy { it.key }
++    val brands = disneyBrands
 +
 +
 +    private val logosState = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -1364,7 +1354,7 @@ index 00000000..111ddbf8
 +        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = horizontalPadding),
 +        horizontalArrangement = Arrangement.spacedBy(10.dp),
 +    ) {
-+        val list = if (style == ForkStyle.MAX) ForkDisneyKids.maxBrands else ForkDisneyKids.disneyBrands
++        val list = ForkDisneyKids.disneyBrands
 +        items(list.size) { index ->
 +            val brand = list[index]
 +            ForkKidsBrandTile(brand = brand, logoUrl = logos[brand.key], style = style)
@@ -1375,16 +1365,15 @@ index 00000000..111ddbf8
 +@Composable
 +private fun ForkKidsBrandTile(brand: ForkDisneyKids.Brand, logoUrl: String?, style: ForkStyle) {
 +    val openBrand = LocalForkOpenBrand.current
-+    val max = style == ForkStyle.MAX
-+    val shape = RoundedCornerShape(if (max) 8.dp else 10.dp)
-+    // Disney+: a 16:9 tile that glows from blue at the top to deep navy; Max: charcoal on black.
-+    val gradient = if (max) listOf(Color(0xFF262626), Color(0xFF111111)) else listOf(Color(0xFF30395F), Color(0xFF1A213D))
++    val shape = RoundedCornerShape(10.dp)
++    // Disney+: a 16:9 tile that glows from blue at the top to deep navy.
++    val gradient = listOf(Color(0xFF30395F), Color(0xFF1A213D))
 +    Box(
 +        modifier = Modifier
-+            .size(width = if (max) 120.dp else 144.dp, height = if (max) 68.dp else 81.dp)
++            .size(width = 144.dp, height = 81.dp)
 +            .clip(shape)
 +            .background(androidx.compose.ui.graphics.Brush.verticalGradient(gradient))
-+            .border(if (max) 1.dp else 1.5.dp, Color.White.copy(alpha = if (max) 0.14f else 0.28f), shape)
++            .border(1.5.dp, Color.White.copy(alpha = 0.28f), shape)
 +            .clickable {
 +                openBrand?.invoke(
 +                    if (brand.isNetwork) "network" else "company",
@@ -1472,7 +1461,7 @@ index 00000000..111ddbf8
 +}
 +
 +/**
-+ * Fork: a backdrop for each catalogue tile under Netflix, Disney+ and Max Style — the wide picture of
++ * Fork: a backdrop for each catalogue tile under Netflix and Disney+ Style — the wide picture of
 + * the first title in the folder's first source (the folder's own hero backdrop wins if it has one).
 + * Tiles in the same row don't repeat a picture. Kept for the app session.
 + */
@@ -1541,6 +1530,13 @@ index 00000000..111ddbf8
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 7,
++            date = "Nov 13, 2026",
++            items = listOf(
++                "Max Style is gone: the choices are Netflix Style, Disney+ Style (made for Kids profiles) and Custom. A profile that was on Max Style now uses Netflix Style.",
++            ),
++        ),
 +        Entry(
 +            id = 6,
 +            date = "Nov 12, 2026",
@@ -1746,10 +1742,10 @@ index 00000000..63921435
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
 new file mode 100644
-index 00000000..35209934
+index 00000000..94db5cbc
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,106 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.material3.ColorScheme
@@ -1765,12 +1761,11 @@ index 00000000..35209934
 + *
 + * The look is chosen per profile and read on Home. Disney+ Style is the existing Disney look
 + * (navy, kids studio tiles); Netflix Style is a neutral near-black with the Netflix Home rows;
-+ * Max Style is a deep violet. Custom changes nothing.
++ * Custom changes nothing. (Max Style was dropped on 2026-11-13; a saved Max choice reads as Netflix.)
 + */
 +enum class ForkStyle(val label: String, val summary: String) {
 +    NETFLIX("Netflix Style", "Netflix's own #141414 Home with the billboard, Top 10, card tags and \"Continue Watching for\" rows"),
-+    DISNEY("Disney+ Style", "Disney+'s deep navy Home with its blue accent and Disney, Pixar, DreamWorks, Illumination, Nickelodeon and Cartoon Network tiles"),
-+    MAX("Max Style", "Max's black Home with Max Blue (#002BE7) as the accent"),
++    DISNEY("Disney+ Style", "Made for Kids profiles: Disney+'s deep navy with its blue accent and Disney, Pixar, Marvel, Star Wars and National Geographic tiles"),
 +    CUSTOM("Custom", "Nothing is changed for you: your theme and switches decide the look");
 +
 +    /** Colours for this profile's Home; [base] is returned untouched for Custom. */
@@ -1788,19 +1783,12 @@ index 00000000..35209934
 +            surface = Color(0xFF1F1F1F),
 +            surfaceVariant = Color(0xFF2F2F2F),
 +        )
-+        MAX -> base.copy(
-+            // Max: pure black #000000 and Max Blue #002BE7 (both from the brand site); the raised greys are generic
-+            background = Color(0xFF000000),
-+            surface = Color(0xFF121212),
-+            surfaceVariant = Color(0xFF1F1F1F),
-+            primary = Color(0xFF002BE7),
-+        )
 +        CUSTOM -> base
 +    }
 +
 +    /**
 +     * The whole app's palette for this look (Settings, Search, Library, details, the tab bar), not just Home. Custom returns
-+     * [base] untouched, so the Appearance theme keeps working as before. Netflix and Max use a white / Max Blue accent, Disney+ its blue.
++     * [base] untouched, so the Appearance theme keeps working as before. Netflix uses a white accent, Disney+ its blue.
 +     */
 +    fun applyTo(base: ThemeColorPalette): ThemeColorPalette = when (this) {
 +        NETFLIX -> ThemeColors.White.copy(
@@ -1821,44 +1809,30 @@ index 00000000..35209934
 +            backgroundElevated = Color(0xFF0E1735),
 +            backgroundCard = Color(0xFF1A2151),
 +        )
-+        MAX -> base.copy(
-+            secondary = Color(0xFF002BE7),
-+            secondaryVariant = Color(0xFF0021B0),
-+            accentGradient = listOf(Color(0xFF002BE7)),
-+            nativeAccentHex = "#002BE7",
-+            onSecondary = Color.White,
-+            onSecondaryVariant = Color.White,
-+            focusRing = Color.White,
-+            focusBackground = Color(0xFF1F1F1F),
-+            background = Color(0xFF000000),
-+            backgroundElevated = Color(0xFF121212),
-+            backgroundCard = Color(0xFF1F1F1F),
-+        )
 +        CUSTOM -> base
 +    }
 +
 +    /**
-+     * The one spot colour of this look: progress bars and the TOP 10 / New Episode / Airs Today tags. Netflix red, Disney+ blue
-+     * or Max Blue; Custom keeps the red the fork always used.
++     * The one spot colour of this look: progress bars and the TOP 10 / New Episode / Airs Today tags. Netflix red or Disney+
++     * blue; Custom keeps the red the fork always used.
 +     */
 +    val brandColor: Color
 +        get() = when (this) {
 +            NETFLIX, CUSTOM -> Color(0xFFE50914)
 +            DISNEY -> Color(0xFF0089EC)
-+            MAX -> Color(0xFF002BE7)
 +        }
 +
-+    /** The glow behind the wordmark on the start-up screen: Netflix red, Disney+ blue, Max Blue; null keeps the theme accent. */
++    /** The glow behind the wordmark on the start-up screen: Netflix red or Disney+ blue; null keeps the theme accent. */
 +    val splashAccent: Color?
 +        get() = when (this) {
 +            NETFLIX -> Color(0xFFE50914)
 +            DISNEY -> Color(0xFF0089EC)
-+            MAX -> Color(0xFF002BE7)
 +            CUSTOM -> null
 +        }
 +
 +    companion object {
-+        fun fromStored(value: String?): ForkStyle? = entries.firstOrNull { it.name == value }
++        fun fromStored(value: String?): ForkStyle? =
++            if (value == "MAX") NETFLIX else entries.firstOrNull { it.name == value }
 +    }
 +}
 +
@@ -1913,7 +1887,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..63a218ef 100644
+index 7b1e4c28..b1458f12 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,12 +1,18 @@
@@ -2061,7 +2035,7 @@ index 7b1e4c28..63a218ef 100644
 +                    }
 +                }
 +
-+                if (forkStyle == ForkStyle.DISNEY || forkStyle == ForkStyle.MAX) {
++                if (forkStyle == ForkStyle.DISNEY) {
 +                    item(key = "fork_kids_brands") {
 +                        ForkKidsBrandRow(horizontalPadding = homeSectionPadding, style = forkStyle)
 +                    }
@@ -2204,7 +2178,7 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..59fe90c7 100644
+index e8916fa1..d714bd7e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
@@ -2237,7 +2211,7 @@ index e8916fa1..59fe90c7 100644
  
  @Composable
  fun HomeCollectionRowSection(
-@@ -123,7 +130,26 @@ private fun CollectionFolderCard(
+@@ -123,7 +130,24 @@ private fun CollectionFolderCard(
          modifier = modifier.width(cardWidth),
          verticalArrangement = Arrangement.spacedBy(6.dp),
      ) {
@@ -2253,19 +2227,17 @@ index e8916fa1..59fe90c7 100644
 +            when (forkStyle) {
 +                ForkStyle.NETFLIX -> 4.dp
 +                ForkStyle.DISNEY -> 10.dp
-+                ForkStyle.MAX -> 6.dp
 +                ForkStyle.CUSTOM -> posterCardStyle.cornerRadiusDp.dp
 +            },
 +        )
 +        val forkBorder = when (forkStyle) {
 +            ForkStyle.DISNEY -> BorderStroke(1.5.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.28f))
-+            ForkStyle.MAX -> BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.14f))
 +            else -> null
 +        }
          val imageUrl = collectionFolderCardImageUrl(folder)
          Card(
              modifier = Modifier
-@@ -140,22 +166,93 @@ private fun CollectionFolderCard(
+@@ -140,22 +164,92 @@ private fun CollectionFolderCard(
              elevation = CardDefaults.cardElevation(
                  defaultElevation = 2.dp,
              ),
@@ -2277,11 +2249,10 @@ index e8916fa1..59fe90c7 100644
              ) {
                  when {
 +                    forkStyle != ForkStyle.CUSTOM -> {
-+                        // Fork: Netflix, Disney+ and Max show a plain tile with the name instead of
++                        // Fork: Netflix and Disney+ show a plain tile with the name instead of
 +                        // the imported cover art (whose baked-in text and outlines don't suit them).
 +                        val tileColors = when (forkStyle) {
 +                            ForkStyle.DISNEY -> listOf(androidx.compose.ui.graphics.Color(0xFF30395F), androidx.compose.ui.graphics.Color(0xFF1A213D))
-+                            ForkStyle.MAX -> listOf(androidx.compose.ui.graphics.Color(0xFF262626), androidx.compose.ui.graphics.Color(0xFF111111))
 +                            else -> listOf(androidx.compose.ui.graphics.Color(0xFF2F2F2F), androidx.compose.ui.graphics.Color(0xFF1F1F1F))
 +                        }
 +                        // The first title's backdrop sits under the name; the plain gradient shows until it loads.
@@ -2294,7 +2265,7 @@ index e8916fa1..59fe90c7 100644
 +                            modifier = Modifier
 +                                .fillMaxSize()
 +                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(tileColors)),
-+                            contentAlignment = if (forkStyle == ForkStyle.MAX || backdrop != null) Alignment.BottomStart else Alignment.Center,
++                            contentAlignment = if (backdrop != null) Alignment.BottomStart else Alignment.Center,
 +                        ) {
 +                            if (backdrop != null) {
 +                                NuvioAsyncImage(
@@ -2319,7 +2290,7 @@ index e8916fa1..59fe90c7 100644
 +                                text = folder.title,
 +                                style = MaterialTheme.typography.titleMedium,
 +                                color = androidx.compose.ui.graphics.Color.White,
-+                                textAlign = if (forkStyle == ForkStyle.MAX || backdrop != null) TextAlign.Start else TextAlign.Center,
++                                textAlign = if (backdrop != null) TextAlign.Start else TextAlign.Center,
 +                                maxLines = 2,
 +                                overflow = TextOverflow.Ellipsis,
 +                                modifier = Modifier.padding(12.dp),
@@ -2368,7 +2339,7 @@ index e8916fa1..59fe90c7 100644
                      }
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
-@@ -183,7 +280,7 @@ private fun CollectionFolderCard(
+@@ -183,7 +277,7 @@ private fun CollectionFolderCard(
              }
          }
  
