@@ -2204,7 +2204,7 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..05c373d1 100644
+index e8916fa1..59fe90c7 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
@@ -2299,7 +2299,7 @@ index e8916fa1..05c373d1 100644
 +                            if (backdrop != null) {
 +                                NuvioAsyncImage(
 +                                    imageUrl = backdrop,
-+                                    contentDescription = null,
++                                    contentDescription = folder.title,
 +                                    modifier = Modifier.fillMaxSize(),
 +                                    contentScale = ContentScale.Crop,
 +                                )
