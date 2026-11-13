@@ -1024,10 +1024,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..8d78919b
+index 00000000..113212ab
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,481 @@
+@@ -0,0 +1,537 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1038,7 +1038,10 @@ index 00000000..8d78919b
 +import androidx.compose.foundation.layout.BoxScope
 +import androidx.compose.foundation.layout.Column
 +import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.asPaddingValues
 +import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.statusBars
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.layout.size
 +import androidx.compose.foundation.shape.CircleShape
@@ -1301,7 +1304,8 @@ index 00000000..8d78919b
 +    val NavySurfaceVariant = Color(0xFF232C52)
 +    val Sky = Color(0xFF3FA0F5)
 +
-+    data class Brand(val tmdbId: Int, val name: String, val isNetwork: Boolean) {
++    /** [filled]: TMDB's logo is a solid colour shape with the name cut out in white (Marvel, Warner Bros., TLC). */
++    data class Brand(val tmdbId: Int, val name: String, val isNetwork: Boolean, val filled: Boolean = false) {
 +        val key get() = (if (isNetwork) "network-" else "company-") + tmdbId
 +    }
 +
@@ -1309,7 +1313,7 @@ index 00000000..8d78919b
 +    val disneyBrands = listOf(
 +        Brand(2, "Disney", false),
 +        Brand(3, "Pixar", false),
-+        Brand(420, "Marvel", false),
++        Brand(420, "Marvel", false, filled = true),
 +        Brand(1, "Star Wars", false),
 +        Brand(43, "National Geographic", true),
 +    )
@@ -1318,10 +1322,10 @@ index 00000000..8d78919b
 +    val maxBrands = listOf(
 +        Brand(49, "HBO", true),
 +        Brand(9993, "DC", false),
-+        Brand(174, "Warner Bros.", false),
++        Brand(174, "Warner Bros.", false, filled = true),
 +        Brand(64, "Discovery", true),
 +        Brand(80, "Adult Swim", true),
-+        Brand(84, "TLC", true),
++        Brand(84, "TLC", true, filled = true),
 +    )
 +
 +    val brands = (disneyBrands + maxBrands).distinctBy { it.key }
@@ -1403,10 +1407,17 @@ index 00000000..8d78919b
 +            coil3.compose.AsyncImage(
 +                model = logoUrl,
 +                contentDescription = brand.name,
-+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-+                    Color.White,
-+                    androidx.compose.ui.graphics.BlendMode.SrcIn,
-+                ),
++                // Most TMDB logos are black marks, painted white here. Painting a filled logo white
++                // would turn it into a blank block, so those are drawn white with the light parts
++                // (the lettering) cut out instead.
++                colorFilter = if (brand.filled) {
++                    androidx.compose.ui.graphics.ColorFilter.colorMatrix(ForkLogoKnockout)
++                } else {
++                    androidx.compose.ui.graphics.ColorFilter.tint(
++                        Color.White,
++                        androidx.compose.ui.graphics.BlendMode.SrcIn,
++                    )
++                },
 +                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
 +                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
 +            )
@@ -1424,6 +1435,41 @@ index 00000000..8d78919b
 +    }
 +}
 +
++/** White everywhere; opacity = 2 x (alpha - brightness), so dark/colour shapes stay and white lettering becomes a hole. */
++private val ForkLogoKnockout = androidx.compose.ui.graphics.ColorMatrix(
++    floatArrayOf(
++        0f, 0f, 0f, 0f, 255f,
++        0f, 0f, 0f, 0f, 255f,
++        0f, 0f, 0f, 0f, 255f,
++        -0.4252f, -1.4304f, -0.1444f, 2f, 0f,
++    ),
++)
++
++/**
++ * Fork: with a Style, the top of Home fades into the background colour under the status bar,
++ * so rows scrolling up don't run into the clock and battery (as the Netflix, Disney+ and Max apps do).
++ */
++@Composable
++internal fun BoxScope.ForkStatusBarFade() {
++    val top = androidx.compose.foundation.layout.WindowInsets.statusBars
++        .asPaddingValues().calculateTopPadding()
++    if (top <= 0.dp) return
++    val bg = MaterialTheme.colorScheme.background
++    Box(
++        Modifier
++            .align(Alignment.TopCenter)
++            .fillMaxWidth()
++            .height(top + 18.dp)
++            .background(
++                androidx.compose.ui.graphics.Brush.verticalGradient(
++                    0f to bg.copy(alpha = 0.92f),
++                    0.65f to bg.copy(alpha = 0.7f),
++                    1f to Color.Transparent,
++                ),
++            ),
++    )
++}
++
 +// MARK: Fork: "What's new in your fork"
 +
 +/**
@@ -1434,6 +1480,16 @@ index 00000000..8d78919b
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 5,
++            date = "Nov 12, 2026",
++            items = listOf(
++                "Disney+ and Max studio rows: the Marvel, Warner Bros. and TLC logos show properly instead of as white blocks.",
++                "With a Style, the top of Home fades under the clock so rows no longer run into it.",
++                "Wide cards (Top 10 and others) no longer show the title twice, on the picture and again underneath.",
++                "Turned sideways, Home stays clear of the Dynamic Island.",
++            ),
++        ),
 +        Entry(
 +            id = 4,
 +            date = "Nov 11, 2026",
@@ -1788,17 +1844,26 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..c1717d5f 100644
+index 7b1e4c28..78106337 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-@@ -1,5 +1,6 @@
+@@ -1,12 +1,15 @@
  package com.nuvio.app.features.home
  
 +import androidx.compose.material3.MaterialTheme
  import androidx.compose.animation.Crossfade
  import androidx.compose.animation.core.tween
  import androidx.compose.foundation.MutatePriority
-@@ -331,6 +332,47 @@ fun HomeScreen(
+ import androidx.compose.foundation.gestures.stopScroll
+ import androidx.compose.foundation.layout.BoxWithConstraints
+ import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.only
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.windowInsetsPadding
+ import androidx.compose.foundation.lazy.LazyListScope
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.lazy.rememberLazyListState
+@@ -331,6 +334,47 @@ fun HomeScreen(
      var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
      var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }
  
@@ -1846,7 +1911,7 @@ index 7b1e4c28..c1717d5f 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -559,6 +601,23 @@ fun HomeScreen(
+@@ -559,6 +603,23 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
@@ -1870,7 +1935,7 @@ index 7b1e4c28..c1717d5f 100644
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -911,9 +970,12 @@ fun HomeScreen(
+@@ -911,9 +972,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -1885,7 +1950,7 @@ index 7b1e4c28..c1717d5f 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,7 +1071,11 @@ fun HomeScreen(
+@@ -1009,7 +1073,18 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -1895,10 +1960,17 @@ index 7b1e4c28..c1717d5f 100644
 +        MaterialTheme(colorScheme = forkDisneyColors) {
 +        // Fork: a Style (Netflix / Disney+ / Max) has its own flat background; only Custom keeps the artwork tint
 +        DynamicArtworkBackground(artworkUrl = if (forkStyle != ForkStyle.CUSTOM) null else activeHeroArtworkUrl) {
++            // Fork: in landscape, keep Home clear of the camera cut-out / Dynamic Island.
++            androidx.compose.foundation.layout.Box(
++                Modifier.fillMaxSize().windowInsetsPadding(
++                    androidx.compose.foundation.layout.WindowInsets.displayCutout
++                        .only(androidx.compose.foundation.layout.WindowInsetsSides.Horizontal),
++                ),
++            ) {
              NuvioScreen(
                  modifier = Modifier.fillMaxSize().then(heroStretchModifier),
                  horizontalPadding = 0.dp,
-@@ -1065,6 +1131,28 @@ fun HomeScreen(
+@@ -1065,6 +1140,28 @@ fun HomeScreen(
                      }
                  }
  
@@ -1927,7 +1999,7 @@ index 7b1e4c28..c1717d5f 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1281,47 @@ fun HomeScreen(
+@@ -1193,6 +1290,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -1975,14 +2047,17 @@ index 7b1e4c28..c1717d5f 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1235,6 +1364,7 @@ fun HomeScreen(
+@@ -1234,6 +1372,10 @@ fun HomeScreen(
+                     }
                  }
              }
-         }
++            // Fork: a Style fades the top edge under the status bar so rows don't run into the clock.
++            if (forkStyle != ForkStyle.CUSTOM) ForkStatusBarFade()
++            }
 +        }
+         }
      }
  }
- 
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
 index a6269454..333325a1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
@@ -2473,7 +2548,7 @@ index c9a86ae8..bb8f183a 100644
              Spacer(modifier = Modifier.height(10.dp))
              Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
-index df86bf7b..0403cc35 100644
+index df86bf7b..0262bf14 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
 @@ -8,6 +8,7 @@ import com.nuvio.app.core.ui.NuvioPosterShape
@@ -2484,7 +2559,27 @@ index df86bf7b..0403cc35 100644
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.home.PosterShape
  
-@@ -39,6 +40,7 @@ fun HomePosterCard(
+@@ -26,6 +27,9 @@ fun HomePosterCard(
+     val effectiveLandscapePoster = if (posterCardStyle.alwaysShowLandscapeClearlogo) null else item.landscapePoster
+     val images = item.homePosterImages(posterCardStyle, useLandscapeBackdropMode)
+ 
++    val logoOnArt = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank()) item.logo else null
++    val nameOnArt = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank() && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null
++
+     NuvioPosterCard(
+         title = item.name,
+         imageUrl = images.imageUrl,
+@@ -33,12 +37,14 @@ fun HomePosterCard(
+         fallbackImageUrl = images.fallbackImageUrl,
+         shape = images.shape,
+         detailLine = if (isLandscapeMode || posterCardStyle.hideLabelsEnabled) null else item.releaseInfo?.let { formatReleaseDateForDisplay(it) },
+-        showTitleBelow = !posterCardStyle.hideLabelsEnabled,
+-        bottomLeftLogoUrl = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank()) item.logo else null,
+-        bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank() && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
++        // Fork: don't repeat the title under a wide card that already shows it (logo or name) on the art.
++        showTitleBelow = !posterCardStyle.hideLabelsEnabled && logoOnArt.isNullOrBlank() && nameOnArt == null,
++        bottomLeftLogoUrl = logoOnArt,
++        bottomLeftText = nameOnArt,
          isWatched = isWatched,
          onClick = onClick,
          onLongClick = onLongClick,
