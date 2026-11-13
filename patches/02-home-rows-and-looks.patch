@@ -1023,10 +1023,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..57e743c8
+index 00000000..7e72ee4c
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,502 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1080,6 +1080,7 @@ index 00000000..57e743c8
 +import kotlinx.coroutines.sync.withLock
 +import kotlinx.coroutines.sync.withPermit
 +import kotlin.time.Clock
++import kotlinx.datetime.toLocalDateTime
 +
 +/** Fork: Netflix home touches shared by Home, the hero and Continue Watching. */
 +internal object ForkNetflixHome {
@@ -1386,6 +1387,30 @@ index 00000000..57e743c8
 +    }
 +}
 +
++/** Fork: "Ends at 9:42 PM" if a movie of this length started now (Netflix Style). */
++internal object ForkEndsAt {
++    /** Minutes from a runtime like "96 min", "1h 36m" or "1:36". */
++    fun minutes(runtime: String?): Int? {
++        val text = runtime?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
++        val numbers = Regex("\\d+").findAll(text).mapNotNull { it.value.toIntOrNull() }.toList()
++        val first = numbers.firstOrNull() ?: return null
++        val hasHours = text.contains("h") || text.contains(":")
++        val total = if (hasHours) first * 60 + (numbers.getOrNull(1) ?: 0) else first
++        return total.takeIf { it > 0 }
++    }
++
++    /** nil for series and unknown lengths. */
++    fun text(runtime: String?, isSeries: Boolean): String? {
++        if (isSeries) return null
++        val minutes = minutes(runtime) ?: return null
++        val end = (kotlin.time.Clock.System.now() + with(kotlin.time.Duration.Companion) { minutes.minutes })
++            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
++        val hour12 = when (val h = end.hour % 12) { 0 -> 12; else -> h }
++        val amPm = if (end.hour < 12) "AM" else "PM"
++        return "Ends at $hour12:${end.minute.toString().padStart(2, '0')} $amPm"
++    }
++}
++
 +// MARK: Fork: "What's new in your fork"
 +
 +/**
@@ -1396,6 +1421,14 @@ index 00000000..57e743c8
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 8,
++            date = "Nov 13, 2026",
++            items = listOf(
++                "Home's banner is marked FILM or SERIES above the title, shows the length and (for movies) what time it would end if you started now, and uses short dashes for its pages.",
++                "Details page: \"Ends at\" next to the length for movies, the summary right under the info line, then Cast (first three names) and the director.",
++            ),
++        ),
 +        Entry(
 +            id = 7,
 +            date = "Nov 13, 2026",
@@ -2441,10 +2474,80 @@ index abb8ca38..7b8bb138 100644
  private fun ArtworkPanel(
      imageUrl: String?,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-index c9a86ae8..bb8f183a 100644
+index c9a86ae8..b676032c 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-@@ -884,6 +884,25 @@ private fun HeroContentBlock(
+@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.Dp
+ import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import coil3.SingletonImageLoader
+ import coil3.compose.AsyncImage
+@@ -685,8 +686,10 @@ private fun HeroPageIndicator(
+     pagerState: PagerState,
+     coroutineScope: CoroutineScope,
+ ) {
++    val forkDashes = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++        com.nuvio.app.features.home.ForkStyle.NETFLIX
+     Row(
+-        horizontalArrangement = Arrangement.spacedBy(8.dp),
++        horizontalArrangement = Arrangement.spacedBy(if (forkDashes) 5.dp else 8.dp),
+         verticalAlignment = Alignment.CenterVertically,
+     ) {
+         repeat(itemCount) { index ->
+@@ -700,13 +703,14 @@ private fun HeroPageIndicator(
+                             )
+                         }
+                     }
+-                    .clip(CircleShape)
++                    // Fork: Netflix Style shows short dashes instead of dots.
++                    .clip(if (forkDashes) RoundedCornerShape(1.5.dp) else CircleShape)
+                     .background(MaterialTheme.colorScheme.onBackground)
+                     .graphicsLayer {
+                         alpha = 0.35f + (0.57f * activeFraction)
+                     }
+-                    .width(8.dp + (24.dp * activeFraction))
+-                    .height(8.dp),
++                    .width(if (forkDashes) 14.dp + (14.dp * activeFraction) else 8.dp + (24.dp * activeFraction))
++                    .height(if (forkDashes) 3.dp else 8.dp),
+             )
+         }
+     }
+@@ -814,6 +818,31 @@ private fun HeroContentBlock(
+             .animateContentSize(),
+         horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
+     ) {
++        // Fork: Netflix Style marks the banner FILM / SERIES above the title (a red bar, not the service's mark).
++        val forkNetflixStyle = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++            com.nuvio.app.features.home.ForkStyle.NETFLIX
++        val forkIsSeries = item.type.equals("series", ignoreCase = true) || item.type.equals("tv", ignoreCase = true)
++        if (forkNetflixStyle) {
++            Row(
++                verticalAlignment = Alignment.CenterVertically,
++                horizontalArrangement = Arrangement.spacedBy(6.dp),
++                modifier = Modifier.padding(bottom = 6.dp),
++            ) {
++                Box(
++                    modifier = Modifier
++                        .width(3.dp)
++                        .height(14.dp)
++                        .background(androidx.compose.ui.graphics.Color(0xFFE50914), RoundedCornerShape(1.dp)),
++                )
++                Text(
++                    text = if (forkIsSeries) "SERIES" else "FILM",
++                    style = MaterialTheme.typography.labelMedium,
++                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
++                    fontWeight = FontWeight.SemiBold,
++                    letterSpacing = 2.5.sp,
++                )
++            }
++        }
+         if (logoUrl != null && !logoLoadError) {
+             AsyncImage(
+                 model = logoUrl,
+@@ -884,6 +913,46 @@ private fun HeroContentBlock(
              showMdbListRatings = showMdbListRatings,
          )
  
@@ -2465,6 +2568,27 @@ index c9a86ae8..bb8f183a 100644
 +                maxLines = 1,
 +                overflow = TextOverflow.Ellipsis,
 +            )
++        }
++
++        // Fork: Netflix Style — "1h 36m  ·  Ends at 9:42 PM" for movies.
++        if (forkNetflixStyle) {
++            val forkRuntime = item.runtime ?: details?.runtime
++            val forkLine = listOfNotNull(
++                com.nuvio.app.features.details.formatRuntimeForDisplay(forkRuntime),
++                com.nuvio.app.features.home.ForkEndsAt.text(forkRuntime, forkIsSeries),
++            ).joinToString("  ·  ")
++            if (forkLine.isNotBlank()) {
++                Spacer(modifier = Modifier.height(6.dp))
++                Text(
++                    text = forkLine,
++                    modifier = Modifier.fillMaxWidth(),
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f),
++                    textAlign = if (layout.isTablet) TextAlign.Start else TextAlign.Center,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis,
++                )
++            }
 +        }
 +
          if (synopsis != null) {

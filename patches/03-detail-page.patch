@@ -231,7 +231,7 @@ index e08d1cfa..b4269d26 100644
                          Spacer(modifier = Modifier.height(8.dp))
                          Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
-index edc00fc2..cadbfc18 100644
+index edc00fc2..717c5b73 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailMetaInfo.kt
 @@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
@@ -242,7 +242,15 @@ index edc00fc2..cadbfc18 100644
  import androidx.compose.runtime.remember
  import androidx.compose.ui.Alignment
  import androidx.compose.ui.Modifier
-@@ -85,6 +86,18 @@ fun DetailMetaInfo(
+@@ -82,9 +83,26 @@ fun DetailMetaInfo(
+             .animateContentSize(),
+         verticalArrangement = Arrangement.spacedBy(12.dp),
+     ) {
++        // Fork: Netflix Style adds "Ends at", a Cast line, and puts the summary before the credits.
++        val forkNetflix = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++            com.nuvio.app.features.home.ForkStyle.NETFLIX
++        val forkIsSeries = meta.type.equals("series", ignoreCase = true) || meta.type.equals("tv", ignoreCase = true)
++        val forkEndsAt = if (forkNetflix) com.nuvio.app.features.home.ForkEndsAt.text(meta.runtime, forkIsSeries) else null
          val releaseLine = formatMetaReleaseLineForDetails(meta)
          val runtimeText = formatRuntimeForDisplay(meta.runtime)
          val ageBadge = meta.ageRating?.trim()?.takeIf { it.isNotBlank() }
@@ -261,7 +269,7 @@ index edc00fc2..cadbfc18 100644
          val validImdbRating = meta.imdbRating
              ?.takeIf { showOverallRatings && !isMdbListActive }
              ?.toDoubleOrNull()
-@@ -93,6 +106,7 @@ fun DetailMetaInfo(
+@@ -93,6 +111,7 @@ fun DetailMetaInfo(
          val hasMetaRow = releaseLine != null ||
              runtimeText != null ||
              ageBadge != null ||
@@ -269,7 +277,19 @@ index edc00fc2..cadbfc18 100644
              validImdbRating != null
          if (hasMetaRow) {
              Row(
-@@ -118,6 +132,15 @@ fun DetailMetaInfo(
+@@ -115,9 +134,27 @@ fun DetailMetaInfo(
+                         fontWeight = FontWeight.Bold,
+                     )
+                 }
++                forkEndsAt?.let { ends ->
++                    Text(
++                        text = ends,
++                        style = MaterialTheme.typography.titleMedium,
++                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f),
++                        fontWeight = FontWeight.SemiBold,
++                        maxLines = 1,
++                    )
++                }
                  ageBadge?.let { badge ->
                      DetailHeroMetaBadge(text = badge)
                  }
@@ -285,6 +305,38 @@ index edc00fc2..cadbfc18 100644
                  if (validImdbRating != null) {
                      val imdbTextStyle = MaterialTheme.typography.titleMedium.copy(
                          fontWeight = FontWeight.Bold,
+@@ -149,6 +186,22 @@ fun DetailMetaInfo(
+             )
+         }
+ 
++        if (forkNetflix && !meta.description.isNullOrBlank()) {
++            ExpandableDescription(
++                text = meta.description,
++                collapsedMaxLines = 3,
++                style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp),
++            )
++        }
++
++        val forkCastNames = meta.cast.map { it.name.trim() }.filter { it.isNotEmpty() }.take(3)
++        if (forkNetflix && forkCastNames.isNotEmpty()) {
++            MetaLabelValueRow(
++                label = "Cast",
++                value = forkCastNames.joinToString(", "),
++            )
++        }
++
+         if (meta.director.isNotEmpty()) {
+             MetaLabelValueRow(
+                 label = stringResource(Res.string.details_director),
+@@ -163,7 +216,7 @@ fun DetailMetaInfo(
+             )
+         }
+ 
+-        if (!meta.description.isNullOrBlank()) {
++        if (!forkNetflix && !meta.description.isNullOrBlank()) {
+             ExpandableDescription(
+                 text = meta.description,
+                 collapsedMaxLines = 3,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/ForkNetflixDetails.kt
 new file mode 100644
 index 00000000..0c75d9a1
