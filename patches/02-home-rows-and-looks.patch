@@ -1023,10 +1023,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..7e72ee4c
+index 00000000..ea833dc9
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,502 @@
+@@ -0,0 +1,503 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1427,6 +1427,7 @@ index 00000000..7e72ee4c
 +            items = listOf(
 +                "Home's banner is marked FILM or SERIES above the title, shows the length and (for movies) what time it would end if you started now, and uses short dashes for its pages.",
 +                "Details page: \"Ends at\" next to the length for movies, the summary right under the info line, then Cast (first three names) and the director.",
++                "Studio and network tiles (Marvel, DC, Disney, Pixar…) now look like the other catalogue tiles: a picture from the first title with the name on top.",
 +            ),
 +        ),
 +        Entry(
@@ -2043,7 +2044,7 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..9164685a 100644
+index e8916fa1..8534bbed 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
@@ -2076,18 +2077,14 @@ index e8916fa1..9164685a 100644
  
  @Composable
  fun HomeCollectionRowSection(
-@@ -123,7 +130,20 @@ private fun CollectionFolderCard(
+@@ -123,7 +130,16 @@ private fun CollectionFolderCard(
          modifier = modifier.width(cardWidth),
          verticalArrangement = Arrangement.spacedBy(6.dp),
      ) {
 -        val shapeCorner = RoundedCornerShape(posterCardStyle.cornerRadiusDp.dp)
-+        // Fork: each style frames its catalogue tiles the way that service does.
-+        // Studio and network folders (TMDB company/network sources) keep their cover art in every style.
-+        val keepsArtwork = folder.resolvedSources.any {
-+            it.isTmdb && (it.tmdbSourceType.equals("COMPANY", true) || it.tmdbSourceType.equals("NETWORK", true))
-+        }
-+        val activeStyle = rememberForkActiveStyle()
-+        val forkStyle = if (keepsArtwork) ForkStyle.CUSTOM else activeStyle
++        // Fork: Netflix Style frames every catalogue tile the same way (studios and networks included):
++        // a picture from the folder's first title with the name on top.
++        val forkStyle = rememberForkActiveStyle()
 +        val shapeCorner = RoundedCornerShape(
 +            when (forkStyle) {
 +                ForkStyle.NETFLIX -> 4.dp
@@ -2098,7 +2095,7 @@ index e8916fa1..9164685a 100644
          val imageUrl = collectionFolderCardImageUrl(folder)
          Card(
              modifier = Modifier
-@@ -140,22 +160,91 @@ private fun CollectionFolderCard(
+@@ -140,22 +156,91 @@ private fun CollectionFolderCard(
              elevation = CardDefaults.cardElevation(
                  defaultElevation = 2.dp,
              ),
@@ -2199,7 +2196,7 @@ index e8916fa1..9164685a 100644
                      }
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
-@@ -183,7 +272,7 @@ private fun CollectionFolderCard(
+@@ -183,7 +268,7 @@ private fun CollectionFolderCard(
              }
          }
  
