@@ -1024,7 +1024,7 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..8f8367e0
+index 00000000..111ddbf8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 @@ -0,0 +1,606 @@
@@ -1451,14 +1451,14 @@ index 00000000..8f8367e0
 + * so rows scrolling up don't run into the clock and battery (as the Netflix, Disney+ and Max apps do).
 + */
 +@Composable
-+internal fun BoxScope.ForkStatusBarFade() {
++internal fun ForkStatusBarFade() {
 +    val top = androidx.compose.foundation.layout.WindowInsets.statusBars
 +        .asPaddingValues().calculateTopPadding()
 +    if (top <= 0.dp) return
 +    val bg = MaterialTheme.colorScheme.background
 +    Box(
++        // Drawn after the list inside Home's box, so it sits on top at the top edge.
 +        Modifier
-+            .align(Alignment.TopCenter)
 +            .fillMaxWidth()
 +            .height(top + 18.dp)
 +            .background(
@@ -1913,10 +1913,10 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..97b73408 100644
+index 7b1e4c28..63a218ef 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-@@ -1,12 +1,15 @@
+@@ -1,12 +1,18 @@
  package com.nuvio.app.features.home
  
 +import androidx.compose.material3.MaterialTheme
@@ -1926,13 +1926,16 @@ index 7b1e4c28..97b73408 100644
  import androidx.compose.foundation.gestures.stopScroll
  import androidx.compose.foundation.layout.BoxWithConstraints
  import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.WindowInsetsSides
++import androidx.compose.foundation.layout.displayCutout
 +import androidx.compose.foundation.layout.only
  import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.layout.windowInsetsPadding
  import androidx.compose.foundation.lazy.LazyListScope
  import androidx.compose.foundation.lazy.LazyListState
  import androidx.compose.foundation.lazy.rememberLazyListState
-@@ -331,6 +334,47 @@ fun HomeScreen(
+@@ -331,6 +337,47 @@ fun HomeScreen(
      var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
      var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }
  
@@ -1980,7 +1983,7 @@ index 7b1e4c28..97b73408 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -559,6 +603,23 @@ fun HomeScreen(
+@@ -559,6 +606,23 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
@@ -2004,7 +2007,7 @@ index 7b1e4c28..97b73408 100644
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -911,9 +972,12 @@ fun HomeScreen(
+@@ -911,9 +975,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -2019,7 +2022,7 @@ index 7b1e4c28..97b73408 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,7 +1073,18 @@ fun HomeScreen(
+@@ -1009,9 +1076,16 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -2029,17 +2032,16 @@ index 7b1e4c28..97b73408 100644
 +        MaterialTheme(colorScheme = forkDisneyColors) {
 +        // Fork: a Style (Netflix / Disney+ / Max) has its own flat background; only Custom keeps the artwork tint
 +        DynamicArtworkBackground(artworkUrl = if (forkStyle != ForkStyle.CUSTOM) null else activeHeroArtworkUrl) {
-+            // Fork: in landscape, keep Home clear of the camera cut-out / Dynamic Island.
-+            androidx.compose.foundation.layout.Box(
-+                Modifier.fillMaxSize().windowInsetsPadding(
-+                    androidx.compose.foundation.layout.WindowInsets.displayCutout
-+                        .only(androidx.compose.foundation.layout.WindowInsetsSides.Horizontal),
-+                ),
-+            ) {
              NuvioScreen(
-                 modifier = Modifier.fillMaxSize().then(heroStretchModifier),
+-                modifier = Modifier.fillMaxSize().then(heroStretchModifier),
++                // Fork: in landscape, keep Home clear of the camera cut-out / Dynamic Island.
++                modifier = Modifier.fillMaxSize()
++                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
++                    .then(heroStretchModifier),
                  horizontalPadding = 0.dp,
-@@ -1065,6 +1140,28 @@ fun HomeScreen(
+                 topPadding = if (showHeroSlot) 0.dp else null,
+                 listState = homeListState,
+@@ -1065,6 +1139,28 @@ fun HomeScreen(
                      }
                  }
  
@@ -2068,7 +2070,7 @@ index 7b1e4c28..97b73408 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1290,47 @@ fun HomeScreen(
+@@ -1193,6 +1289,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -2116,18 +2118,17 @@ index 7b1e4c28..97b73408 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1234,6 +1372,10 @@ fun HomeScreen(
+@@ -1234,6 +1371,9 @@ fun HomeScreen(
                      }
                  }
              }
 +            // Fork: a Style fades the top edge under the status bar so rows don't run into the clock.
 +            if (forkStyle != ForkStyle.CUSTOM) ForkStatusBarFade()
-+            }
 +        }
          }
      }
  }
-@@ -1698,6 +1840,19 @@ internal fun buildHomeContinueWatchingItems(
+@@ -1698,6 +1838,19 @@ internal fun buildHomeContinueWatchingItems(
              val key = candidate.item.parentMetaId.ifBlank { candidate.item.videoId }
              seen.add(key)
          }
