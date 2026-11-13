@@ -488,10 +488,10 @@ index 00000000..9d8ec56b
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
 new file mode 100644
-index 00000000..c8c50083
+index 00000000..bd9feb01
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,210 @@
 +package com.nuvio.app.features.home
 +
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -605,17 +605,16 @@ index 00000000..c8c50083
 +    val cardBadges: StateFlow<Boolean> = _cardBadges.asStateFlow()
 +
 +    private val _disneyProfiles = MutableStateFlow<Set<Int>>(emptySet())
-+    /** Fork: profiles (by profile index) with the Disney+ look (navy theme, kids studio tiles). */
++    /** Fork: profiles that had the old Disney+ look on (retired 2026-11-13; kept so the saved list still loads). */
 +    val disneyProfiles: StateFlow<Set<Int>> = _disneyProfiles.asStateFlow()
 +
 +    private val _styleProfiles = MutableStateFlow<Map<Int, ForkStyle>>(emptyMap())
-+    /** Fork: the style chosen per profile (by profile index). A profile with none chosen keeps its old Disney switch. */
++    /** Fork: the style chosen per profile (by profile index). A profile with none chosen gets Netflix Style. */
 +    val styleProfiles: StateFlow<Map<Int, ForkStyle>> = _styleProfiles.asStateFlow()
 +
-+    /** The style for a profile: the one chosen, else Disney+ if that profile had the old Disney switch on, else Custom. */
++    /** The style for a profile: the one chosen, else Netflix Style (the default for every profile). */
 +    fun styleFor(profileIndex: Int): ForkStyle =
-+        _styleProfiles.value[profileIndex]
-+            ?: if (profileIndex in _disneyProfiles.value) ForkStyle.DISNEY else ForkStyle.CUSTOM
++        _styleProfiles.value[profileIndex] ?: ForkStyle.NETFLIX
 +
 +    /** The style of whichever profile was last on Home: the start-up screen uses it, before any profile is chosen. */
 +    fun lastStyle(): ForkStyle =
@@ -633,7 +632,7 @@ index 00000000..c8c50083
 +            "fork_style_profiles",
 +            updated.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value.name}" },
 +        )
-+        setDisneyStyle(profileIndex, style == ForkStyle.DISNEY) // the studio tiles still follow this switch
++        setDisneyStyle(profileIndex, false) // the old Disney switch is retired
 +        if (style == ForkStyle.NETFLIX) {
 +            // The Netflix rows are what makes Netflix Style: make sure they are on.
 +            setNetflixHome(true)
@@ -1024,10 +1023,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..39060b18
+index 00000000..57e743c8
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,602 @@
+@@ -0,0 +1,469 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1084,7 +1083,7 @@ index 00000000..39060b18
 +
 +/** Fork: Netflix home touches shared by Home, the hero and Continue Watching. */
 +internal object ForkNetflixHome {
-+    /** Named for Netflix, but it is the active style's spot colour: Netflix red or Disney+ blue. */
++    /** Named for Netflix, but it is the active style's spot colour: Netflix red. */
 +    val NetflixRed: Color get() = forkActiveStyleNow().brandColor
 +
 +    /** Home's poster tap, so a Continue Watching card's ⓘ can open the details page. */
@@ -1296,148 +1295,15 @@ index 00000000..39060b18
 +    }
 +}
 +
-+// MARK: Fork: Disney+ look for a Kids profile
-+
-+/** Navy theme and kids studio tiles (Disney, Pixar, DreamWorks, Illumination, Nickelodeon, Cartoon Network). */
-+internal object ForkDisneyKids {
-+    val Navy = Color(0xFF111833)
-+    val NavySurface = Color(0xFF1A2244)
-+    val NavySurfaceVariant = Color(0xFF232C52)
-+    val Sky = Color(0xFF3FA0F5)
-+
-+    /** [filled]: TMDB's logo is a solid colour shape with the name cut out in white (Marvel, Warner Bros., TLC). */
-+    data class Brand(val tmdbId: Int, val name: String, val isNetwork: Boolean, val filled: Boolean = false) {
-+        val key get() = (if (isNetwork) "network-" else "company-") + tmdbId
-+    }
-+
-+    /** Disney+'s own row under the hero: Disney, Pixar, Marvel, Star Wars, National Geographic. */
-+    val disneyBrands = listOf(
-+        Brand(2, "Disney", false),
-+        Brand(3, "Pixar", false),
-+        Brand(420, "Marvel", false, filled = true),
-+        Brand(1, "Star Wars", false),
-+        Brand(43, "National Geographic", true),
-+    )
-+
-+    val brands = disneyBrands
-+
-+
-+    private val logosState = MutableStateFlow<Map<String, String>>(emptyMap())
-+    val logos: StateFlow<Map<String, String>> = logosState.asStateFlow()
-+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-+    private var loading = false
-+
-+    fun loadLogosIfNeeded() {
-+        if (loading || logosState.value.size == brands.size) return
-+        loading = true
-+        scope.launch {
-+            brands.forEach { brand ->
-+                if (brand.key in logosState.value) return@forEach
-+                val url = runCatching { TmdbMetadataService.forkBrandLogo(brand.tmdbId, brand.isNetwork) }.getOrNull()
-+                if (url != null) logosState.update { it + (brand.key to url) }
-+            }
-+            loading = false
-+        }
-+    }
-+}
++// MARK: Fork: studio tiles
 +
 +/** Fork: the Home tab's "open studio" action — (kind "company"/"network", TMDB id, name). */
 +internal val LocalForkOpenBrand =
 +    androidx.compose.runtime.staticCompositionLocalOf<((String, Int, String) -> Unit)?> { null }
 +
-+@Composable
-+internal fun ForkKidsBrandRow(horizontalPadding: Dp, style: ForkStyle, modifier: Modifier = Modifier) {
-+    val logos by ForkDisneyKids.logos.collectAsStateWithLifecycle()
-+    LaunchedEffect(Unit) { ForkDisneyKids.loadLogosIfNeeded() }
-+    androidx.compose.foundation.lazy.LazyRow(
-+        modifier = modifier.fillMaxWidth().padding(vertical = 10.dp),
-+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = horizontalPadding),
-+        horizontalArrangement = Arrangement.spacedBy(10.dp),
-+    ) {
-+        val list = ForkDisneyKids.disneyBrands
-+        items(list.size) { index ->
-+            val brand = list[index]
-+            ForkKidsBrandTile(brand = brand, logoUrl = logos[brand.key], style = style)
-+        }
-+    }
-+}
-+
-+@Composable
-+private fun ForkKidsBrandTile(brand: ForkDisneyKids.Brand, logoUrl: String?, style: ForkStyle) {
-+    val openBrand = LocalForkOpenBrand.current
-+    val shape = RoundedCornerShape(10.dp)
-+    // Disney+: a 16:9 tile that glows from blue at the top to deep navy.
-+    val gradient = listOf(Color(0xFF30395F), Color(0xFF1A213D))
-+    Box(
-+        modifier = Modifier
-+            .size(width = 144.dp, height = 81.dp)
-+            .clip(shape)
-+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(gradient))
-+            .border(1.5.dp, Color.White.copy(alpha = 0.28f), shape)
-+            .clickable {
-+                openBrand?.invoke(
-+                    if (brand.isNetwork) "network" else "company",
-+                    brand.tmdbId,
-+                    brand.name,
-+                )
-+            },
-+        contentAlignment = Alignment.Center,
-+    ) {
-+        if (brand.name == "Disney") {
-+            // TMDB only has the "Walt Disney Pictures" mark, so Disney is set as a plain wordmark.
-+            Text(
-+                text = "Disney",
-+                color = Color.White,
-+                fontWeight = FontWeight.Bold,
-+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-+                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-+                fontSize = 30.sp,
-+            )
-+        } else if (logoUrl != null) {
-+            coil3.compose.AsyncImage(
-+                model = logoUrl,
-+                contentDescription = brand.name,
-+                // Most TMDB logos are black marks, painted white here. Painting a filled logo white
-+                // would turn it into a blank block, so those are drawn white with the light parts
-+                // (the lettering) cut out instead.
-+                colorFilter = if (brand.filled) {
-+                    androidx.compose.ui.graphics.ColorFilter.colorMatrix(ForkLogoKnockout)
-+                } else {
-+                    androidx.compose.ui.graphics.ColorFilter.tint(
-+                        Color.White,
-+                        androidx.compose.ui.graphics.BlendMode.SrcIn,
-+                    )
-+                },
-+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-+            )
-+        } else {
-+            Text(
-+                text = brand.name,
-+                color = Color.White,
-+                fontWeight = FontWeight.Bold,
-+                fontSize = 13.sp,
-+                maxLines = 2,
-+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-+                modifier = Modifier.padding(horizontal = 8.dp),
-+            )
-+        }
-+    }
-+}
-+
-+/** White everywhere; opacity = 2 x (alpha - brightness), so dark/colour shapes stay and white lettering becomes a hole. */
-+private val ForkLogoKnockout = androidx.compose.ui.graphics.ColorMatrix(
-+    floatArrayOf(
-+        0f, 0f, 0f, 0f, 255f,
-+        0f, 0f, 0f, 0f, 255f,
-+        0f, 0f, 0f, 0f, 255f,
-+        -0.4252f, -1.4304f, -0.1444f, 2f, 0f,
-+    ),
-+)
-+
 +/**
 + * Fork: with a Style, the top of Home fades into the background colour under the status bar,
-+ * so rows scrolling up don't run into the clock and battery (as the Netflix, Disney+ and Max apps do).
++ * so rows scrolling up don't run into the clock and battery (as the Netflix app does).
 + */
 +@Composable
 +internal fun ForkStatusBarFade() {
@@ -1461,7 +1327,7 @@ index 00000000..39060b18
 +}
 +
 +/**
-+ * Fork: a backdrop for each catalogue tile under Netflix and Disney+ Style — the wide picture of
++ * Fork: a backdrop for each catalogue tile under Netflix Style — the wide picture of
 + * the first title in the folder's first source (the folder's own hero backdrop wins if it has one).
 + * Tiles in the same row don't repeat a picture. Kept for the app session.
 + */
@@ -1534,7 +1400,7 @@ index 00000000..39060b18
 +            id = 7,
 +            date = "Nov 13, 2026",
 +            items = listOf(
-+                "Max Style is gone: the choices are Netflix Style, Disney+ Style (made for Kids profiles) and Custom. A profile that was on Max Style now uses Netflix Style.",
++                "One look: Netflix Style is now the default for every profile, Kids included. Disney+ Style and Max Style are gone; Custom is still there if you want your own theme. Kids profiles keep their age-rating limits and kids rows.",
 +            ),
 +        ),
 +        Entry(
@@ -1742,10 +1608,10 @@ index 00000000..63921435
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
 new file mode 100644
-index 00000000..94db5cbc
+index 00000000..c5e28b72
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,81 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.material3.ColorScheme
@@ -1759,24 +1625,15 @@ index 00000000..94db5cbc
 +/**
 + * Fork: one look per profile (Settings > Homescreen > Style).
 + *
-+ * The look is chosen per profile and read on Home. Disney+ Style is the existing Disney look
-+ * (navy, kids studio tiles); Netflix Style is a neutral near-black with the Netflix Home rows;
-+ * Custom changes nothing. (Max Style was dropped on 2026-11-13; a saved Max choice reads as Netflix.)
++ * Netflix Style is the default for every profile (Kids included); Custom changes nothing. Max Style and
++ * Disney+ Style were dropped on 2026-11-13: a saved Max or Disney+ choice, or the old Disney switch, reads as Netflix.
 + */
 +enum class ForkStyle(val label: String, val summary: String) {
 +    NETFLIX("Netflix Style", "Netflix's own #141414 Home with the billboard, Top 10, card tags and \"Continue Watching for\" rows"),
-+    DISNEY("Disney+ Style", "Made for Kids profiles: Disney+'s deep navy with its blue accent and Disney, Pixar, Marvel, Star Wars and National Geographic tiles"),
 +    CUSTOM("Custom", "Nothing is changed for you: your theme and switches decide the look");
 +
 +    /** Colours for this profile's Home; [base] is returned untouched for Custom. */
 +    fun colors(base: ColorScheme): ColorScheme = when (this) {
-+        DISNEY -> base.copy(
-+            // Disney+: deep navy #040714, #0E1735 and #1A2151 raised surfaces, brand blue #0089EC
-+            background = Color(0xFF040714),
-+            surface = Color(0xFF0E1735),
-+            surfaceVariant = Color(0xFF1A2151),
-+            primary = Color(0xFF0089EC),
-+        )
 +        NETFLIX -> base.copy(
 +            // Netflix's own app colours: #141414 background, #1F1F1F and #2F2F2F raised surfaces
 +            background = Color(0xFF141414),
@@ -1788,7 +1645,7 @@ index 00000000..94db5cbc
 +
 +    /**
 +     * The whole app's palette for this look (Settings, Search, Library, details, the tab bar), not just Home. Custom returns
-+     * [base] untouched, so the Appearance theme keeps working as before. Netflix uses a white accent, Disney+ its blue.
++     * [base] untouched, so the Appearance theme keeps working as before. Netflix uses a white accent.
 +     */
 +    fun applyTo(base: ThemeColorPalette): ThemeColorPalette = when (this) {
 +        NETFLIX -> ThemeColors.White.copy(
@@ -1796,43 +1653,28 @@ index 00000000..94db5cbc
 +            backgroundElevated = Color(0xFF1F1F1F),
 +            backgroundCard = Color(0xFF2F2F2F),
 +        )
-+        DISNEY -> base.copy(
-+            secondary = Color(0xFF0089EC),
-+            secondaryVariant = Color(0xFF0068B4),
-+            accentGradient = listOf(Color(0xFF0089EC)),
-+            nativeAccentHex = "#0089EC",
-+            onSecondary = Color.White,
-+            onSecondaryVariant = Color.White,
-+            focusRing = Color(0xFF8FD3FF),
-+            focusBackground = Color(0xFF1A2151),
-+            background = Color(0xFF040714),
-+            backgroundElevated = Color(0xFF0E1735),
-+            backgroundCard = Color(0xFF1A2151),
-+        )
 +        CUSTOM -> base
 +    }
 +
 +    /**
-+     * The one spot colour of this look: progress bars and the TOP 10 / New Episode / Airs Today tags. Netflix red or Disney+
-+     * blue; Custom keeps the red the fork always used.
++     * The one spot colour of this look: progress bars and the TOP 10 / New Episode / Airs Today tags: Netflix red (Custom keeps
++     * the same red the fork always used).
 +     */
 +    val brandColor: Color
 +        get() = when (this) {
 +            NETFLIX, CUSTOM -> Color(0xFFE50914)
-+            DISNEY -> Color(0xFF0089EC)
 +        }
 +
-+    /** The glow behind the wordmark on the start-up screen: Netflix red or Disney+ blue; null keeps the theme accent. */
++    /** The glow behind the wordmark on the start-up screen: Netflix red; null keeps the theme accent. */
 +    val splashAccent: Color?
 +        get() = when (this) {
 +            NETFLIX -> Color(0xFFE50914)
-+            DISNEY -> Color(0xFF0089EC)
 +            CUSTOM -> null
 +        }
 +
 +    companion object {
 +        fun fromStored(value: String?): ForkStyle? =
-+            if (value == "MAX") NETFLIX else entries.firstOrNull { it.name == value }
++            if (value == "MAX" || value == "DISNEY") NETFLIX else entries.firstOrNull { it.name == value }
 +    }
 +}
 +
@@ -1842,9 +1684,8 @@ index 00000000..94db5cbc
 +    androidx.compose.runtime.remember { ForkHomeSettings.ensureLoaded() }
 +    val profileState by com.nuvio.app.features.profiles.ProfileRepository.state.collectAsStateWithLifecycle()
 +    val styles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
-+    val disneyProfiles by ForkHomeSettings.disneyProfiles.collectAsStateWithLifecycle()
 +    val index = profileState.activeProfile?.profileIndex ?: 1
-+    return styles[index] ?: if (index in disneyProfiles) ForkStyle.DISNEY else ForkStyle.CUSTOM
++    return styles[index] ?: ForkStyle.NETFLIX
 +}
 +
 +/** The active profile's [ForkStyle], read outside composition (the tags and progress bars that draw in the style's colour). */
@@ -1887,7 +1728,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..b1458f12 100644
+index 7b1e4c28..150208bf 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,12 +1,18 @@
@@ -1957,19 +1798,16 @@ index 7b1e4c28..b1458f12 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -559,6 +606,23 @@ fun HomeScreen(
+@@ -559,6 +606,20 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
-+    // Fork: Disney+ look for this profile (Kids).
-+    val forkDisneyProfiles by remember {
++    // Fork: this profile's Style (Netflix Style unless Custom was chosen).
++    val forkStyleProfiles by remember {
 +        ForkHomeSettings.ensureLoaded()
-+        ForkHomeSettings.disneyProfiles
++        ForkHomeSettings.styleProfiles
 +    }.collectAsStateWithLifecycle()
-+    val forkStyleProfiles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
-+    val forkStyle = forkStyleProfiles[activeProfileId]
-+        ?: if (activeProfileId in forkDisneyProfiles) ForkStyle.DISNEY else ForkStyle.CUSTOM
-+    val forkDisneyStyle = forkStyle == ForkStyle.DISNEY
++    val forkStyle = forkStyleProfiles[activeProfileId] ?: ForkStyle.NETFLIX
 +    androidx.compose.runtime.LaunchedEffect(forkStyle) { ForkHomeSettings.rememberLastStyle(forkStyle) }
 +    val forkPlaySomethingEnabled by remember {
 +        ForkHomeSettings.ensureLoaded()
@@ -1981,7 +1819,7 @@ index 7b1e4c28..b1458f12 100644
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -911,9 +975,12 @@ fun HomeScreen(
+@@ -911,9 +972,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -1996,15 +1834,15 @@ index 7b1e4c28..b1458f12 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1009,9 +1076,16 @@ fun HomeScreen(
+@@ -1009,9 +1073,16 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
 -        DynamicArtworkBackground(artworkUrl = activeHeroArtworkUrl) {
-+        // Fork: Disney+ look — navy theme instead of the artwork wash.
++        // Fork: the Style's colours instead of the artwork wash.
 +        val forkDisneyColors = forkStyle.colors(MaterialTheme.colorScheme) // Fork: Style
 +        MaterialTheme(colorScheme = forkDisneyColors) {
-+        // Fork: a Style (Netflix / Disney+ / Max) has its own flat background; only Custom keeps the artwork tint
++        // Fork: Netflix Style has its own flat background; only Custom keeps the artwork tint
 +        DynamicArtworkBackground(artworkUrl = if (forkStyle != ForkStyle.CUSTOM) null else activeHeroArtworkUrl) {
              NuvioScreen(
 -                modifier = Modifier.fillMaxSize().then(heroStretchModifier),
@@ -2015,7 +1853,7 @@ index 7b1e4c28..b1458f12 100644
                  horizontalPadding = 0.dp,
                  topPadding = if (showHeroSlot) 0.dp else null,
                  listState = homeListState,
-@@ -1065,6 +1139,28 @@ fun HomeScreen(
+@@ -1065,6 +1136,22 @@ fun HomeScreen(
                      }
                  }
  
@@ -2035,16 +1873,10 @@ index 7b1e4c28..b1458f12 100644
 +                    }
 +                }
 +
-+                if (forkStyle == ForkStyle.DISNEY) {
-+                    item(key = "fork_kids_brands") {
-+                        ForkKidsBrandRow(horizontalPadding = homeSectionPadding, style = forkStyle)
-+                    }
-+                }
-+
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1193,6 +1289,47 @@ fun HomeScreen(
+@@ -1193,6 +1280,47 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -2092,7 +1924,7 @@ index 7b1e4c28..b1458f12 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1234,6 +1371,9 @@ fun HomeScreen(
+@@ -1234,6 +1362,9 @@ fun HomeScreen(
                      }
                  }
              }
@@ -2102,7 +1934,7 @@ index 7b1e4c28..b1458f12 100644
          }
      }
  }
-@@ -1698,6 +1838,19 @@ internal fun buildHomeContinueWatchingItems(
+@@ -1698,6 +1829,19 @@ internal fun buildHomeContinueWatchingItems(
              val key = candidate.item.parentMetaId.ifBlank { candidate.item.videoId }
              seen.add(key)
          }
@@ -2178,7 +2010,7 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..d714bd7e 100644
+index e8916fa1..9164685a 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
@@ -2211,7 +2043,7 @@ index e8916fa1..d714bd7e 100644
  
  @Composable
  fun HomeCollectionRowSection(
-@@ -123,7 +130,24 @@ private fun CollectionFolderCard(
+@@ -123,7 +130,20 @@ private fun CollectionFolderCard(
          modifier = modifier.width(cardWidth),
          verticalArrangement = Arrangement.spacedBy(6.dp),
      ) {
@@ -2226,18 +2058,14 @@ index e8916fa1..d714bd7e 100644
 +        val shapeCorner = RoundedCornerShape(
 +            when (forkStyle) {
 +                ForkStyle.NETFLIX -> 4.dp
-+                ForkStyle.DISNEY -> 10.dp
 +                ForkStyle.CUSTOM -> posterCardStyle.cornerRadiusDp.dp
 +            },
 +        )
-+        val forkBorder = when (forkStyle) {
-+            ForkStyle.DISNEY -> BorderStroke(1.5.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.28f))
-+            else -> null
-+        }
++        val forkBorder: BorderStroke? = null
          val imageUrl = collectionFolderCardImageUrl(folder)
          Card(
              modifier = Modifier
-@@ -140,22 +164,92 @@ private fun CollectionFolderCard(
+@@ -140,22 +160,91 @@ private fun CollectionFolderCard(
              elevation = CardDefaults.cardElevation(
                  defaultElevation = 2.dp,
              ),
@@ -2249,10 +2077,9 @@ index e8916fa1..d714bd7e 100644
              ) {
                  when {
 +                    forkStyle != ForkStyle.CUSTOM -> {
-+                        // Fork: Netflix and Disney+ show a plain tile with the name instead of
++                        // Fork: Netflix Style shows a plain tile with the name instead of
 +                        // the imported cover art (whose baked-in text and outlines don't suit them).
 +                        val tileColors = when (forkStyle) {
-+                            ForkStyle.DISNEY -> listOf(androidx.compose.ui.graphics.Color(0xFF30395F), androidx.compose.ui.graphics.Color(0xFF1A213D))
 +                            else -> listOf(androidx.compose.ui.graphics.Color(0xFF2F2F2F), androidx.compose.ui.graphics.Color(0xFF1F1F1F))
 +                        }
 +                        // The first title's backdrop sits under the name; the plain gradient shows until it loads.
@@ -2339,7 +2166,7 @@ index e8916fa1..d714bd7e 100644
                      }
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
-@@ -183,7 +277,7 @@ private fun CollectionFolderCard(
+@@ -183,7 +272,7 @@ private fun CollectionFolderCard(
              }
          }
  
@@ -3011,7 +2838,7 @@ index 1f40b32f..464610f3 100644
                              ) { keyedSection ->
                                  val section = keyedSection.value
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-index a2f4a7c3..7b62b5af 100644
+index a2f4a7c3..1d5015e3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 @@ -45,6 +45,10 @@ import com.nuvio.app.features.addons.AddonRepository
@@ -3033,7 +2860,7 @@ index a2f4a7c3..7b62b5af 100644
  import org.jetbrains.compose.resources.stringResource
  import sh.calvin.reorderable.ReorderableCollectionItemScope
  import sh.calvin.reorderable.ReorderableItem
-@@ -257,6 +260,146 @@ internal fun LazyListScope.homescreenSettingsContent(
+@@ -257,6 +260,144 @@ internal fun LazyListScope.homescreenSettingsContent(
                  val hapticFeedback = LocalHapticFeedback.current
                  val pinToMoveToast = stringResource(Res.string.settings_homescreen_pin_to_move_toast)
  
@@ -3131,14 +2958,12 @@ index a2f4a7c3..7b62b5af 100644
 +                            isTablet = isTablet,
 +                            onCheckedChange = ForkHomeSettings::setNetflixHome,
 +                        )
-+                        // Fork: Style, per profile (replaces the Disney+ switch; Disney+ Style is one of the choices).
++                        // Fork: Style, per profile: Netflix Style (the default) or Custom.
 +                        val forkStyleProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
 +                            .collectAsStateWithLifecycle()
 +                        val forkStyleIndex = forkStyleProfileState.activeProfile?.profileIndex ?: 1
 +                        val forkStyleProfiles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
-+                        val forkDisneyProfiles by ForkHomeSettings.disneyProfiles.collectAsStateWithLifecycle()
-+                        val forkCurrentStyle = forkStyleProfiles[forkStyleIndex]
-+                            ?: if (forkStyleIndex in forkDisneyProfiles) ForkStyle.DISNEY else ForkStyle.CUSTOM
++                        val forkCurrentStyle = forkStyleProfiles[forkStyleIndex] ?: ForkStyle.NETFLIX
 +                        SettingsGroupDivider(isTablet = isTablet)
 +                        SettingsChipRow(
 +                            title = "Style",
