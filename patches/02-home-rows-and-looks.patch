@@ -1024,10 +1024,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..113212ab
+index 00000000..8f8367e0
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,537 @@
+@@ -0,0 +1,606 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1065,6 +1065,7 @@ index 00000000..113212ab
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.unit.sp
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.collection.findCollectionCatalog
 +import com.nuvio.app.features.tmdb.TmdbMetadataService
 +import com.nuvio.app.features.watchprogress.ContinueWatchingItem
 +import kotlinx.coroutines.CoroutineScope
@@ -1470,6 +1471,66 @@ index 00000000..113212ab
 +    )
 +}
 +
++/**
++ * Fork: a backdrop for each catalogue tile under Netflix, Disney+ and Max Style — the wide picture of
++ * the first title in the folder's first source (the folder's own hero backdrop wins if it has one).
++ * Tiles in the same row don't repeat a picture. Kept for the app session.
++ */
++internal object ForkFolderBackdrops {
++    private val state = MutableStateFlow<Map<String, String>>(emptyMap())
++    val backdrops: StateFlow<Map<String, String>> = state.asStateFlow()
++    private val requested = mutableSetOf<String>()
++    private val lock = Mutex()
++    private val gate = Semaphore(3)
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++
++    fun load(folder: com.nuvio.app.features.collection.CollectionFolder) {
++        scope.launch {
++            val fresh = lock.withLock { requested.add(folder.id) }
++            if (!fresh) return@launch
++            folder.heroBackdropUrl?.takeIf { it.isNotBlank() }?.let { url ->
++                state.update { it + (folder.id to url) }
++                return@launch
++            }
++            val items = gate.withPermit {
++                runCatching { firstPage(folder) }.getOrNull().orEmpty()
++            }
++            val pictures = items.mapNotNull { item ->
++                item.banner?.takeIf { it.isNotBlank() }
++                    // Smaller TMDB size: tiles are about 230 points wide.
++                    ?.replace("/t/p/w1280/", "/t/p/w780/")
++                    ?.replace("/t/p/original/", "/t/p/w780/")
++            }
++            if (pictures.isEmpty()) return@launch
++            lock.withLock {
++                val used = state.value.values.toSet()
++                val pick = pictures.firstOrNull { it !in used } ?: pictures.first()
++                state.update { it + (folder.id to pick) }
++            }
++        }
++    }
++
++    private suspend fun firstPage(folder: com.nuvio.app.features.collection.CollectionFolder): List<MetaPreview> {
++        val source = folder.resolvedSources.firstOrNull() ?: return emptyList()
++        return when {
++            source.isTmdb -> com.nuvio.app.features.collection.TmdbCollectionSourceResolver.resolve(source).items
++            source.isTrakt -> com.nuvio.app.features.trakt.TraktPublicListSourceResolver.resolve(source).items
++            else -> {
++                val catalogSource = source.addonCatalogSource() ?: return emptyList()
++                val resolved = com.nuvio.app.features.addons.AddonRepository.uiState.value.addons
++                    .findCollectionCatalog(catalogSource) ?: return emptyList()
++                com.nuvio.app.features.catalog.fetchCatalogPage(
++                    manifestUrl = resolved.addon.manifestUrl,
++                    type = catalogSource.type,
++                    catalogId = catalogSource.catalogId,
++                    genre = catalogSource.genre,
++                    maxItems = 12,
++                ).items
++            }
++        }
++    }
++}
++
 +// MARK: Fork: "What's new in your fork"
 +
 +/**
@@ -1480,6 +1541,14 @@ index 00000000..113212ab
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 6,
++            date = "Nov 12, 2026",
++            items = listOf(
++                "With a Style, catalogue tiles (Tonight's Vibe, Genres, Desi Nights…) show a picture from the first title inside, with the name on top.",
++                "Continue Watching no longer shows the same show twice when it was saved under two different ids.",
++            ),
++        ),
 +        Entry(
 +            id = 5,
 +            date = "Nov 12, 2026",
@@ -1844,7 +1913,7 @@ index 32d51fc1..ee74b1b7 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 7b1e4c28..78106337 100644
+index 7b1e4c28..97b73408 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,12 +1,15 @@
@@ -2058,6 +2127,26 @@ index 7b1e4c28..78106337 100644
          }
      }
  }
+@@ -1698,6 +1840,19 @@ internal fun buildHomeContinueWatchingItems(
+             val key = candidate.item.parentMetaId.ifBlank { candidate.item.videoId }
+             seen.add(key)
+         }
++        // Fork: the same show can arrive under two ids (IMDb and TMDB) from different sources; the
++        // same name at the same season and episode is one show, so only the most recent card stays.
++        .filter { candidate ->
++            val item = candidate.item
++            val season = item.seasonNumber
++            val episode = item.episodeNumber
++            val name = item.title.lowercase().filter { it.isLetterOrDigit() }
++            if (season == null || episode == null || name.isEmpty()) {
++                true
++            } else {
++                seen.add("fork-name:$name:$season:$episode")
++            }
++        }
+ 
+     return when (sortMode) {
+         ContinueWatchingSortMode.DEFAULT,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
 index a6269454..333325a1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
@@ -2114,7 +2203,7 @@ index e8e2d83b..87003c97 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..b1006cae 100644
+index e8916fa1..05c373d1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
@@ -2127,7 +2216,17 @@ index e8916fa1..b1006cae 100644
  import androidx.compose.foundation.layout.aspectRatio
  import androidx.compose.foundation.layout.fillMaxSize
  import androidx.compose.foundation.layout.fillMaxWidth
-@@ -34,7 +37,9 @@ import com.nuvio.app.core.ui.posterCardClickable
+@@ -17,7 +20,9 @@ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.runtime.getValue
+ import androidx.compose.ui.layout.ContentScale
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.Dp
+@@ -34,7 +39,9 @@ import com.nuvio.app.core.ui.posterCardClickable
  import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
  import com.nuvio.app.features.collection.Collection
  import com.nuvio.app.features.collection.CollectionFolder
@@ -2137,7 +2236,7 @@ index e8916fa1..b1006cae 100644
  
  @Composable
  fun HomeCollectionRowSection(
-@@ -123,7 +128,26 @@ private fun CollectionFolderCard(
+@@ -123,7 +130,26 @@ private fun CollectionFolderCard(
          modifier = modifier.width(cardWidth),
          verticalArrangement = Arrangement.spacedBy(6.dp),
      ) {
@@ -2165,7 +2264,7 @@ index e8916fa1..b1006cae 100644
          val imageUrl = collectionFolderCardImageUrl(folder)
          Card(
              modifier = Modifier
-@@ -140,22 +164,68 @@ private fun CollectionFolderCard(
+@@ -140,22 +166,93 @@ private fun CollectionFolderCard(
              elevation = CardDefaults.cardElevation(
                  defaultElevation = 2.dp,
              ),
@@ -2184,17 +2283,42 @@ index e8916fa1..b1006cae 100644
 +                            ForkStyle.MAX -> listOf(androidx.compose.ui.graphics.Color(0xFF262626), androidx.compose.ui.graphics.Color(0xFF111111))
 +                            else -> listOf(androidx.compose.ui.graphics.Color(0xFF2F2F2F), androidx.compose.ui.graphics.Color(0xFF1F1F1F))
 +                        }
++                        // The first title's backdrop sits under the name; the plain gradient shows until it loads.
++                        androidx.compose.runtime.LaunchedEffect(folder.id) {
++                            com.nuvio.app.features.home.ForkFolderBackdrops.load(folder)
++                        }
++                        val backdrops by com.nuvio.app.features.home.ForkFolderBackdrops.backdrops.collectAsStateWithLifecycle()
++                        val backdrop = backdrops[folder.id]
 +                        Box(
 +                            modifier = Modifier
 +                                .fillMaxSize()
 +                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(tileColors)),
-+                            contentAlignment = if (forkStyle == ForkStyle.MAX) Alignment.BottomStart else Alignment.Center,
++                            contentAlignment = if (forkStyle == ForkStyle.MAX || backdrop != null) Alignment.BottomStart else Alignment.Center,
 +                        ) {
++                            if (backdrop != null) {
++                                NuvioAsyncImage(
++                                    imageUrl = backdrop,
++                                    contentDescription = null,
++                                    modifier = Modifier.fillMaxSize(),
++                                    contentScale = ContentScale.Crop,
++                                )
++                                Box(
++                                    Modifier
++                                        .fillMaxSize()
++                                        .background(
++                                            androidx.compose.ui.graphics.Brush.verticalGradient(
++                                                0f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.10f),
++                                                0.45f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f),
++                                                1f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.85f),
++                                            ),
++                                        ),
++                                )
++                            }
 +                            Text(
 +                                text = folder.title,
 +                                style = MaterialTheme.typography.titleMedium,
 +                                color = androidx.compose.ui.graphics.Color.White,
-+                                textAlign = if (forkStyle == ForkStyle.MAX) TextAlign.Start else TextAlign.Center,
++                                textAlign = if (forkStyle == ForkStyle.MAX || backdrop != null) TextAlign.Start else TextAlign.Center,
 +                                maxLines = 2,
 +                                overflow = TextOverflow.Ellipsis,
 +                                modifier = Modifier.padding(12.dp),
@@ -2243,7 +2367,7 @@ index e8916fa1..b1006cae 100644
                      }
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
-@@ -183,7 +253,7 @@ private fun CollectionFolderCard(
+@@ -183,7 +280,7 @@ private fun CollectionFolderCard(
              }
          }
  
