@@ -1023,10 +1023,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..ea833dc9
+index 00000000..dac5980e
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,503 @@
+@@ -0,0 +1,499 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1211,27 +1211,15 @@ index 00000000..ea833dc9
 +    if (isTop10) {
 +        ForkTop10Tag(Modifier.align(Alignment.TopEnd).padding(5.dp))
 +    }
-+    if (landscape) {
-+        // Fork: tags stack in the top-left corner, clear of the title art at the bottom.
-+        if (entry?.primary != null || entry?.language != null) {
-+            Column(
-+                modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
-+                verticalArrangement = Arrangement.spacedBy(4.dp),
-+            ) {
-+                entry?.primary?.let { ForkFreshPill(primary = it, secondary = entry.secondary) }
-+                entry?.language?.let { ForkLanguageTag(it) }
-+            }
-+        }
-+    } else {
-+        entry?.language?.let { language ->
-+            ForkLanguageTag(language, Modifier.align(Alignment.TopStart).padding(5.dp))
-+        }
-+        entry?.primary?.let { primary ->
-+            ForkFreshPill(
-+                primary = primary,
-+                secondary = entry.secondary,
-+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp),
-+            )
++    // Fork: tags stack in the top-left corner on every card, clear of the title art and of the
++    // ratings strip some poster services print along the bottom of the poster.
++    if (entry?.primary != null || entry?.language != null) {
++        Column(
++            modifier = Modifier.align(Alignment.TopStart).padding(if (landscape) 6.dp else 5.dp),
++            verticalArrangement = Arrangement.spacedBy(4.dp),
++        ) {
++            entry?.primary?.let { ForkFreshPill(primary = it, secondary = entry.secondary) }
++            entry?.language?.let { ForkLanguageTag(it) }
 +        }
 +    }
 +}
@@ -1421,6 +1409,14 @@ index 00000000..ea833dc9
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 9,
++            date = "Nov 13, 2026",
++            items = listOf(
++                "Recently Added / New Episode tags sit in the poster's top-left corner, so they no longer cover the ratings line along the bottom of the poster.",
++                "Netflix Style: row names drop the \" - Movies\" / \" - Series\" ending, and posters have no title and year underneath, as in the Netflix app.",
++            ),
++        ),
 +        Entry(
 +            id = 8,
 +            date = "Nov 13, 2026",
@@ -2002,7 +1998,7 @@ index a6269454..333325a1 100644
 +    item.isUnreleased(todayIsoDate, nowEpochMs) || CinemaOnlyReleases.isCinemaOnly(item, todayIsoDate)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
-index e8e2d83b..87003c97 100644
+index e8e2d83b..4872e437 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
 @@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
@@ -2013,7 +2009,7 @@ index e8e2d83b..87003c97 100644
  import com.nuvio.app.core.ui.NuvioShelfSection
  import com.nuvio.app.core.ui.NuvioViewAllPillSize
  import com.nuvio.app.core.ui.PosterRowImagePrefetchEffect
-@@ -79,6 +80,14 @@ private fun HomeCatalogRowSectionContent(
+@@ -79,9 +80,25 @@ private fun HomeCatalogRowSectionContent(
          }
      }
      PosterRowImagePrefetchEffect(state = rowState, targets = prefetchTargets)
@@ -2026,9 +2022,21 @@ index e8e2d83b..87003c97 100644
 +        posterCardStyle.heightDp.dp
 +    }
  
++    // Fork: Netflix Style drops the " - Movies" / " - Series" type suffix from row names.
++    val forkNetflix = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++        com.nuvio.app.features.home.ForkStyle.NETFLIX
++    val shownTitle = if (forkNetflix) {
++        section.title.replace(Regex("""\s+[-–]\s+(Movies?|Series|Shows?|TV|Anime|Films?)$""", RegexOption.IGNORE_CASE), "")
++    } else {
++        section.title
++    }
      NuvioShelfSection(
-         title = section.title,
-@@ -91,6 +100,7 @@ private fun HomeCatalogRowSectionContent(
+-        title = section.title,
++        title = shownTitle,
+         entries = entries,
+         modifier = modifier,
+         headerHorizontalPadding = sectionPadding,
+@@ -91,6 +108,7 @@ private fun HomeCatalogRowSectionContent(
          key = { item -> item.stableKey() },
          state = rowState,
      ) { item ->
@@ -2036,7 +2044,7 @@ index e8e2d83b..87003c97 100644
          HomePosterCard(
              item = item,
              useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
-@@ -102,5 +112,6 @@ private fun HomeCatalogRowSectionContent(
+@@ -102,5 +120,6 @@ private fun HomeCatalogRowSectionContent(
              onClick = onPosterClick?.let { { it(item) } },
              onLongClick = onPosterLongClick?.let { { it(item) } },
          )
@@ -2592,7 +2600,7 @@ index c9a86ae8..b676032c 100644
              Spacer(modifier = Modifier.height(10.dp))
              Text(
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
-index df86bf7b..0262bf14 100644
+index df86bf7b..98b2de88 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
 @@ -8,6 +8,7 @@ import com.nuvio.app.core.ui.NuvioPosterShape
@@ -2613,15 +2621,17 @@ index df86bf7b..0262bf14 100644
      NuvioPosterCard(
          title = item.name,
          imageUrl = images.imageUrl,
-@@ -33,12 +37,14 @@ fun HomePosterCard(
+@@ -33,12 +37,16 @@ fun HomePosterCard(
          fallbackImageUrl = images.fallbackImageUrl,
          shape = images.shape,
          detailLine = if (isLandscapeMode || posterCardStyle.hideLabelsEnabled) null else item.releaseInfo?.let { formatReleaseDateForDisplay(it) },
 -        showTitleBelow = !posterCardStyle.hideLabelsEnabled,
 -        bottomLeftLogoUrl = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank()) item.logo else null,
 -        bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank() && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
-+        // Fork: don't repeat the title under a wide card that already shows it (logo or name) on the art.
-+        showTitleBelow = !posterCardStyle.hideLabelsEnabled && logoOnArt.isNullOrBlank() && nameOnArt == null,
++        // Fork: don't repeat the title under a wide card that already shows it (logo or name) on the art,
++        // and in Netflix Style show no caption under posters at all (the artwork carries the title).
++        showTitleBelow = !posterCardStyle.hideLabelsEnabled && logoOnArt.isNullOrBlank() && nameOnArt == null &&
++            com.nuvio.app.features.home.rememberForkActiveStyle() != com.nuvio.app.features.home.ForkStyle.NETFLIX,
 +        bottomLeftLogoUrl = logoOnArt,
 +        bottomLeftText = nameOnArt,
          isWatched = isWatched,
