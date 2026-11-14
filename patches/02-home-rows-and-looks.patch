@@ -175,10 +175,10 @@ index c83206f9..503c4588 100644
          LoadingIndicator()
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/CinemaOnlyReleases.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/CinemaOnlyReleases.kt
 new file mode 100644
-index 00000000..df31738d
+index 00000000..ef5a3420
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/CinemaOnlyReleases.kt
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,138 @@
 +package com.nuvio.app.features.home
 +
 +import com.nuvio.app.features.tmdb.TmdbMetadataService
@@ -269,6 +269,32 @@ index 00000000..df31738d
 +        return !atHome
 +    }
 +
++    /**
++     * Fork: the Top 10 Movies and Trending Now rows only list films people can watch at home:
++     * TMDB must show a digital, physical or TV release (types 4-6) on or before today. Films
++     * first out more than [WINDOW_DAYS] ago, and films TMDB can't answer for, stay in.
++     */
++    suspend fun isOutAtHome(item: MetaPreview, todayIsoDate: String): Boolean {
++        if (!item.type.equals("movie", ignoreCase = true)) return true
++        val today = parseDay(todayIsoDate) ?: return true
++        val releases = runCatching {
++            gate.withPermit { TmdbMetadataService.forkMovieReleaseDates(item.id) }
++        }.getOrNull() ?: return true
++        val days = releases.mapNotNull { (type, raw) -> parseDay(raw)?.let { type to it } }
++        if (days.isEmpty()) return true
++        if (days.any { (type, day) -> type >= 4 && day <= today }) return true
++        // Not out anywhere yet, or only in cinemas so far.
++        val firstRelease = days.minOf { it.second }
++        return firstRelease <= today && firstRelease.daysUntil(today) > WINDOW_DAYS
++    }
++
++    /** [items] in their order, films not yet out at home left out (checked all at once). */
++    suspend fun keepingOutAtHome(items: List<MetaPreview>, todayIsoDate: String): List<MetaPreview> =
++        coroutineScope {
++            val keep = items.map { async { isOutAtHome(it, todayIsoDate) } }.awaitAll()
++            items.filterIndexed { index, _ -> keep[index] }
++        }
++
 +    /** Films first released in the last [WINDOW_DAYS] days, or (no full date) this year or last year. */
 +    private fun isCandidate(item: MetaPreview, todayIsoDate: String): Boolean {
 +        if (!item.type.equals("movie", ignoreCase = true)) return false
@@ -293,10 +319,10 @@ index 00000000..df31738d
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
 new file mode 100644
-index 00000000..9d8ec56b
+index 00000000..cfe5f083
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
-@@ -0,0 +1,189 @@
+@@ -0,0 +1,195 @@
 +package com.nuvio.app.features.home
 +
 +import com.nuvio.app.features.catalog.CatalogTarget
@@ -398,10 +424,16 @@ index 00000000..9d8ec56b
 +                listOfNotNull(moreMovies.getOrNull(i), moreShows.getOrNull(i))
 +            }
 +        } else {
++            // Fork: films still in cinemas or not out yet don't count (all of the day's trending
++            // films are checked so ten home releases are usually left).
++            val today = CurrentDateProvider.todayIsoDate()
 +            shows = TmdbMetadataService.trending("tv", "day").take(10)
-+            movies = TmdbMetadataService.trending("movie", "day").take(10)
++            movies = CinemaOnlyReleases.keepingOutAtHome(TmdbMetadataService.trending("movie", "day"), today).take(10)
 +            val topIds = (shows + movies).map { it.id }.toSet()
-+            week = TmdbMetadataService.trending("all", "week").filter { it.id !in topIds }
++            week = CinemaOnlyReleases.keepingOutAtHome(
++                TmdbMetadataService.trending("all", "week").filter { it.id !in topIds },
++                today,
++            )
 +        }
 +        // Fork: check which films are still cinema-only before the rows show, so the
 +        // "Hide unreleased content" filter on Home doesn't drop them after they appear.
@@ -1023,10 +1055,10 @@ index 00000000..6198594f
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
 new file mode 100644
-index 00000000..dac5980e
+index 00000000..fe24b8e6
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
-@@ -0,0 +1,499 @@
+@@ -0,0 +1,506 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1409,6 +1441,13 @@ index 00000000..dac5980e
 +    data class Entry(val id: Int, val date: String, val items: List<String>)
 +
 +    val entries = listOf(
++        Entry(
++            id = 10,
++            date = "Nov 14, 2026",
++            items = listOf(
++                "Top 10 Movies Today and Trending Now only list films you can watch at home (out on digital, disc or TV), not ones still in cinemas or not out yet.",
++            ),
++        ),
 +        Entry(
 +            id = 9,
 +            date = "Nov 13, 2026",
