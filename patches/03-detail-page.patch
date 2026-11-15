@@ -128,7 +128,7 @@ index 00000000..cfa7b21b
 +/** Fork: addon subtitles arrive out of sync in Infuse; it uses its own tracks instead. */
 +internal const val INFUSE_FORWARDS_ADDON_SUBTITLES = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index b4abc5c0..b6be6bca 100644
+index f8794740..56454d23 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -55,6 +55,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -169,7 +169,7 @@ index b4abc5c0..b6be6bca 100644
                  fun runPlayAction(
                      handler: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)?,
                      resumePositionMs: Long?,
-@@ -2627,7 +2651,7 @@ private fun ConfiguredMetaSections(
+@@ -2620,7 +2644,7 @@ private fun ConfiguredMetaSections(
                      }
                      DetailPosterRailSection(
                          title = stringResource(Res.string.details_more_like_this),
@@ -217,10 +217,10 @@ index 22049b9a..fbf4db14 100644
              } else {
                  MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-index e08d1cfa..b4269d26 100644
+index 7dac8558..db2a9e33 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-@@ -277,6 +277,9 @@ fun DetailHero(
+@@ -279,6 +279,9 @@ fun DetailHero(
                          )
                      }
  

@@ -59,7 +59,7 @@ index 9720bed5..7ad810ec 100644
              }
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
-index b376b9f0..65ac27ff 100644
+index 6da6144f..ea305f01 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt
 @@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.CheckCircle
@@ -71,7 +71,7 @@ index b376b9f0..65ac27ff 100644
  import androidx.compose.material.icons.filled.PlayArrow
  import androidx.compose.material.icons.filled.Replay
  import androidx.compose.material3.MaterialTheme
-@@ -105,6 +107,7 @@ import com.nuvio.app.features.cloud.playbackVideoId
+@@ -106,6 +108,7 @@ import com.nuvio.app.features.cloud.playbackVideoId
  import com.nuvio.app.features.cloud.providerPosterUrl
  import com.nuvio.app.features.collection.CollectionRepository
  import com.nuvio.app.features.collection.CollectionSyncService
@@ -79,7 +79,7 @@ index b376b9f0..65ac27ff 100644
  import com.nuvio.app.features.details.MetaDetailsRepository
  import com.nuvio.app.features.details.MetaScreenSettingsRepository
  import com.nuvio.app.features.downloads.DownloadItem
-@@ -146,6 +149,10 @@ import com.nuvio.app.features.party.partyMediaKey
+@@ -148,6 +151,10 @@ import com.nuvio.app.features.party.partyMediaKey
  import com.nuvio.app.features.player.ExternalPlayerIntentResult
  import com.nuvio.app.features.player.externalPlaybackSession
  import com.nuvio.app.features.player.infusePlaybackCallbacks
@@ -90,7 +90,7 @@ index b376b9f0..65ac27ff 100644
  import com.nuvio.app.features.player.recordExternalPlaybackProgress
  import com.nuvio.app.features.player.ExternalPlayerPlatform
  import com.nuvio.app.features.player.PlayerLaunch
-@@ -810,6 +817,8 @@ internal fun MainAppContent(
+@@ -815,6 +822,8 @@ internal fun MainAppContent(
              val fallbackSession = lastExternalPlayerLaunch?.externalPlaybackSession()
              coroutineScope.launch {
                  recordExternalPlaybackProgress(result, fallbackSession)
@@ -99,7 +99,7 @@ index b376b9f0..65ac27ff 100644
                  result.callbackId?.let(infusePlaybackCallbacks::consume)
              }
          }
-@@ -921,7 +930,12 @@ internal fun MainAppContent(
+@@ -929,7 +938,12 @@ internal fun MainAppContent(
              }
  
              val baseRequest = launch.toExternalPlayerPlaybackRequest()
@@ -112,7 +112,7 @@ index b376b9f0..65ac27ff 100644
                  !playerSettingsUiState.preferredSubtitleLanguage.equals(SubtitleLanguageOption.NONE, ignoreCase = true)
              val shouldSendSkipSegments = playerSettingsUiState.externalPlayerSendSkipSegments
              if (shouldForwardSubtitles) {
-@@ -934,14 +948,22 @@ internal fun MainAppContent(
+@@ -942,14 +956,22 @@ internal fun MainAppContent(
                  type = launch.contentType ?: launch.parentMetaType,
                  videoId = launch.videoId ?: launch.parentMetaId,
                  contentId = launch.parentMetaId,
@@ -136,7 +136,7 @@ index b376b9f0..65ac27ff 100644
              return when (
                  val intentResult = ExternalPlayerPlatform.buildIntent(
                      request = enrichedRequest,
-@@ -1672,6 +1694,40 @@ internal fun MainAppContent(
+@@ -1693,6 +1715,40 @@ internal fun MainAppContent(
                              AppTabActions(
                                  onCatalogClick = onCatalogClick,
                                  onPosterClick = navController::openPreview,
@@ -177,7 +177,7 @@ index b376b9f0..65ac27ff 100644
                                  onPosterLongClick = { meta ->
                                      openPosterActions(PosterActionTarget(preview = meta))
                                  },
-@@ -2096,6 +2152,11 @@ internal fun MainAppContent(
+@@ -2117,6 +2173,11 @@ internal fun MainAppContent(
                          item = preview,
                          fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                      )
@@ -189,7 +189,7 @@ index b376b9f0..65ac27ff 100644
                      val removesFromLibrary = isSaved &&
                          (posterActionTarget.libraryItem != null || !isRemoteLibrarySource)
                      NuvioPosterZoomActionOverlay(
-@@ -2111,11 +2172,16 @@ internal fun MainAppContent(
+@@ -2132,11 +2193,16 @@ internal fun MainAppContent(
                          anchor = selectedPosterAnchor,
                          actions = listOf(
                              PosterZoomOverlayAction(
@@ -211,7 +211,7 @@ index b376b9f0..65ac27ff 100644
                                  },
                                  isDestructive = removesFromLibrary,
                                  exitAnimation = if (removesFromLibrary && !isRemoteLibrarySource) {
-@@ -2483,6 +2549,45 @@ internal fun MainAppContent(
+@@ -2504,6 +2570,45 @@ internal fun MainAppContent(
                      .zIndex(15f),
              )
  

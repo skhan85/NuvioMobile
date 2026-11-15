@@ -728,10 +728,10 @@ index 00000000..d492b005
 +    }
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
-index dd9b385c..7899c90d 100644
+index 9b3d0890..2f34a5e1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackPlayerSettings.kt
-@@ -66,7 +66,8 @@ internal fun PlaybackPlayerSettings(
+@@ -67,7 +67,8 @@ internal fun PlaybackPlayerSettings(
                          onClick = { showExternalPlayerAppDialog = true },
                      )
                  }
@@ -741,7 +741,7 @@ index dd9b385c..7899c90d 100644
                      SettingsGroupDivider(isTablet = isTablet)
                      SettingsSwitchRow(
                          title = stringResource(Res.string.settings_playback_external_player_forward_subtitles),
-@@ -75,6 +76,8 @@ internal fun PlaybackPlayerSettings(
+@@ -76,6 +77,8 @@ internal fun PlaybackPlayerSettings(
                          isTablet = isTablet,
                          onCheckedChange = PlayerSettingsRepository::setExternalPlayerForwardSubtitles,
                      )
@@ -788,10 +788,10 @@ index 9b48b7e4..01da05d1 100644
                      settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
                      SettingsGroupDivider(isTablet = isTablet)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-index a95f32b2..d4486daf 100644
+index 70b1764b..2104dff1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-@@ -135,6 +135,12 @@ internal fun StreamCard(
+@@ -137,6 +137,12 @@ internal fun StreamCard(
                  stream = stream,
                  appendInstantServiceToDefaultName = appendInstantServiceToDefaultName,
              ) {
@@ -805,10 +805,10 @@ index a95f32b2..d4486daf 100644
                      Spacer(modifier = Modifier.width(8.dp))
                      CurrentStreamBadge(label = currentLabel)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index f9c97537..ec9e78b3 100644
+index af223cc2..7f28cabd 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -776,7 +776,17 @@ internal fun StreamList(
+@@ -769,7 +769,17 @@ internal fun StreamList(
      resumeProgressFraction: Float?,
      modifier: Modifier = Modifier,
  ) {
@@ -827,8 +827,8 @@ index f9c97537..ec9e78b3 100644
      val hasGroups = filteredGroups.isNotEmpty()
      val hasAnyStreams = filteredGroups.any { it.streams.isNotEmpty() }
      val anyLoading = filteredGroups.any { it.isLoading }
-@@ -795,6 +805,18 @@ internal fun StreamList(
-         splitPinnedSources(filteredGroups, pinnedSourceIds)
+@@ -798,6 +808,18 @@ internal fun StreamList(
+         listState.scrollToItem(0)
      }
  
 +    // Fork: warm the first link of the top two sources so Play hands Infuse a ready link.
@@ -845,8 +845,8 @@ index f9c97537..ec9e78b3 100644
 +
      CompositionLocalProvider(LocalStreamSizeLabelFormat provides formatStreamSize) {
      LazyColumn(
-         modifier = modifier.fillMaxWidth(),
-@@ -911,7 +933,8 @@ private fun LazyListScope.streamSection(
+         state = listState,
+@@ -915,7 +937,8 @@ private fun LazyListScope.streamSection(
      resumePositionMs: Long?,
      resumeProgressFraction: Float?,
  ) {
