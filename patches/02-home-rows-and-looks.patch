@@ -1763,7 +1763,7 @@ index 00000000..c5e28b72
 +    return ForkHomeSettings.styleFor(com.nuvio.app.features.profiles.ProfileRepository.state.value.activeProfile?.profileIndex ?: 1)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-index f43d2623..2c5192bc 100644
+index c93a0eca..965b30fa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 @@ -28,6 +28,8 @@ import kotlinx.coroutines.delay
@@ -2091,7 +2091,7 @@ index e8e2d83b..4872e437 100644
      }
  }
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
-index e8916fa1..8534bbed 100644
+index c0406a9e..c89e05f6 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
 @@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
@@ -2142,7 +2142,7 @@ index e8916fa1..8534bbed 100644
          val imageUrl = collectionFolderCardImageUrl(folder)
          Card(
              modifier = Modifier
-@@ -140,22 +156,91 @@ private fun CollectionFolderCard(
+@@ -140,23 +156,92 @@ private fun CollectionFolderCard(
              elevation = CardDefaults.cardElevation(
                  defaultElevation = 2.dp,
              ),
@@ -2210,6 +2210,7 @@ index e8916fa1..8534bbed 100644
 -                            animateIfPossible = animateGifs &&
 -                                isAnimatedCollectionFolderImage(folder, imageUrl) &&
 -                                LocalScreenActive.current,
+-                            fallbackImageUrl = firstNonBlank(folder.coverImageUrl),
 -                        )
 +                        // Fork: draw the static cover underneath animated folder tiles,
 +                        // normalize .gifv URLs to .gif so iOS recognizes and animates them,
@@ -2238,12 +2239,13 @@ index e8916fa1..8534bbed 100644
 +                                modifier = Modifier.fillMaxSize(),
 +                                contentScale = ContentScale.Crop,
 +                                animateIfPossible = shouldAnimate,
++                                fallbackImageUrl = stillCover,
 +                            )
 +                        }
                      }
                      !folder.coverEmoji.isNullOrBlank() -> {
                          Text(
-@@ -183,7 +268,7 @@ private fun CollectionFolderCard(
+@@ -184,7 +269,7 @@ private fun CollectionFolderCard(
              }
          }
  
@@ -3177,10 +3179,10 @@ index afa51be0..d8fe5175 100644
          if (isCatalogLoading && items.isEmpty()) {
              Box(
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
-index 4a28dd1d..d44d8509 100644
+index 7db39ac7..2f6d85fa 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
 +++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
-@@ -26,22 +26,27 @@ internal actual fun NuvioAsyncImage(
+@@ -32,23 +32,28 @@ internal actual fun NuvioAsyncImage(
      }
  
      BoxWithConstraints(modifier = modifier) {
@@ -3197,15 +3199,17 @@ index 4a28dd1d..d44d8509 100644
          val state = rememberAnimatedFrame(imageUrl, targetWidth, targetHeight)
  
          when {
--            state.unavailable -> AsyncImage(
--                model = imageUrl,
+-            state.unavailable -> StaticImageWithFallback(
+-                imageUrl = imageUrl,
+-                fallbackImageUrl = fallbackImageUrl,
 -                contentDescription = contentDescription,
 -                modifier = Modifier.matchParentSize(),
 -                contentScale = contentScale,
 -            )
 +            state.unavailable -> if (!imageUrl.endsWith(".gif", ignoreCase = true)) {
-+                AsyncImage(
-+                    model = imageUrl,
++                StaticImageWithFallback(
++                    imageUrl = imageUrl,
++                    fallbackImageUrl = fallbackImageUrl,
 +                    contentDescription = contentDescription,
 +                    modifier = Modifier.matchParentSize(),
 +                    contentScale = contentScale,
