@@ -9,7 +9,7 @@ index 00000000..f2ccd0c7
 +/** Android players follow redirects themselves. */
 +internal actual suspend fun resolveExternalStreamUrl(url: String): String = url
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
-index ba2ee16e..bcea4a74 100644
+index 7c8462fa..262f056e 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/AppNavigationSupport.kt
 @@ -7,6 +7,8 @@ import com.nuvio.app.features.collection.CollectionEditorPage
@@ -21,7 +21,7 @@ index ba2ee16e..bcea4a74 100644
  import com.nuvio.app.features.home.MetaPreview
  import com.nuvio.app.features.library.LibraryItem
  import com.nuvio.app.features.player.ExternalPlayerPlaybackRequest
-@@ -88,21 +90,61 @@ internal data class PosterActionTarget(
+@@ -89,21 +91,61 @@ internal data class PosterActionTarget(
      val libraryListKey: String? = null,
  )
  
@@ -751,7 +751,7 @@ index 9b3d0890..2f34a5e1 100644
                      SettingsSwitchRow(
                          title = stringResource(Res.string.settings_playback_external_player_send_skip_segments),
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt
-index 9b48b7e4..01da05d1 100644
+index 829aa0c1..cf6be8fb 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/PlaybackUpNextSettings.kt
 @@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
@@ -761,8 +761,8 @@ index 9b48b7e4..01da05d1 100644
 +import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import com.nuvio.app.features.player.PlayerSettingsRepository
  import com.nuvio.app.features.streams.StreamAutoPlayMode
- import nuvio.composeapp.generated.resources.*
-@@ -51,6 +52,24 @@ internal fun PlaybackUpNextSettings(
+ import com.nuvio.app.features.watching.domain.WatchedThresholdSettings
+@@ -54,6 +55,24 @@ internal fun PlaybackUpNextSettings(
                      isTablet = isTablet,
                      onCheckedChange = PlayerSettingsRepository::setStreamAutoPlayNextEpisodeEnabled,
                  )
@@ -788,7 +788,7 @@ index 9b48b7e4..01da05d1 100644
                      settings.streamAutoPlayMode == StreamAutoPlayMode.MANUAL) {
                      SettingsGroupDivider(isTablet = isTablet)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
-index 70b1764b..2104dff1 100644
+index 615b44ea..a1573c81 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamCard.kt
 @@ -137,6 +137,12 @@ internal fun StreamCard(
@@ -805,12 +805,12 @@ index 70b1764b..2104dff1 100644
                      Spacer(modifier = Modifier.width(8.dp))
                      CurrentStreamBadge(label = currentLabel)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index af223cc2..7f28cabd 100644
+index 9df0fb0f..032dd1a3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -769,7 +769,17 @@ internal fun StreamList(
-     resumeProgressFraction: Float?,
-     modifier: Modifier = Modifier,
+@@ -798,7 +798,17 @@ internal fun StreamList(
+     bestStream: StreamItem? = null,
+     header: (@Composable () -> Unit)? = null,
  ) {
 -    val filteredGroups = uiState.filteredGroups
 +    // Fork: sources in the profile's audio language (when it isn't English) are listed first.
@@ -827,7 +827,7 @@ index af223cc2..7f28cabd 100644
      val hasGroups = filteredGroups.isNotEmpty()
      val hasAnyStreams = filteredGroups.any { it.streams.isNotEmpty() }
      val anyLoading = filteredGroups.any { it.isLoading }
-@@ -798,6 +808,18 @@ internal fun StreamList(
+@@ -831,6 +841,18 @@ internal fun StreamList(
          listState.scrollToItem(0)
      }
  
@@ -846,7 +846,7 @@ index af223cc2..7f28cabd 100644
      CompositionLocalProvider(LocalStreamSizeLabelFormat provides formatStreamSize) {
      LazyColumn(
          state = listState,
-@@ -915,7 +937,8 @@ private fun LazyListScope.streamSection(
+@@ -967,7 +989,8 @@ private fun LazyListScope.streamSection(
      resumePositionMs: Long?,
      resumeProgressFraction: Float?,
  ) {

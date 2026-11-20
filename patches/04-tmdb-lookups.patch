@@ -1,5 +1,5 @@
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
-index 2b8cb3a7..15d16033 100644
+index 57babf0e..ad7d11e1 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/tmdb/TmdbMetadataService.kt
 @@ -1,5 +1,9 @@
@@ -12,7 +12,7 @@ index 2b8cb3a7..15d16033 100644
  import co.touchlab.kermit.Logger
  import com.nuvio.app.features.addons.httpGetText
  import com.nuvio.app.features.details.MetaCompany
-@@ -415,7 +419,9 @@ object TmdbMetadataService {
+@@ -419,7 +423,9 @@ object TmdbMetadataService {
          fallbackName: String? = null,
      ): TmdbEntityBrowseData? = withContext(Dispatchers.Default) {
          val settings = TmdbSettingsRepository.snapshot()
@@ -23,7 +23,7 @@ index 2b8cb3a7..15d16033 100644
          val language = normalizeTmdbLanguage(settings.language)
          val normalizedSourceType = normalizeEntitySourceType(sourceType)
          val cacheKey = "${entityKind.routeValue}:$entityId:$normalizedSourceType:$language"
-@@ -1301,6 +1307,271 @@ object TmdbMetadataService {
+@@ -1305,6 +1311,271 @@ object TmdbMetadataService {
          )
      }
  
@@ -295,7 +295,7 @@ index 2b8cb3a7..15d16033 100644
      private suspend fun fetchMoreLikeThis(
          tmdbId: Int,
          mediaType: String,
-@@ -2129,6 +2400,48 @@ private data class TmdbReleaseDate(
+@@ -2141,6 +2412,48 @@ private data class TmdbReleaseDate(
      val certification: String? = null,
  )
  
@@ -344,7 +344,7 @@ index 2b8cb3a7..15d16033 100644
  @Serializable
  private data class TmdbTvContentRatingsResponse(
      val results: List<TmdbTvContentRating> = emptyList(),
-@@ -2376,3 +2689,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
+@@ -2389,3 +2702,31 @@ private fun originalImagePath(images: List<TmdbImage>?, originalLanguage: String
          ?.filePath
          ?.trim()
  }

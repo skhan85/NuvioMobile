@@ -1,15 +1,15 @@
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-index ce104ddf..3f599f3d 100644
+index 2fb421b8..dcb3fcd7 100644
 --- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
 +++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
-@@ -184,6 +184,7 @@ open class MainActivity : AppCompatActivity() {
+@@ -189,6 +189,7 @@ open class MainActivity : AppCompatActivity() {
          ProfileTitleFactsStorage.initialize(applicationContext)
          PluginStorage.initialize(applicationContext)
          CollectionMobileSettingsStorage.initialize(applicationContext)
 +        com.nuvio.app.features.home.ForkHomeSettingsStorage.initialize(applicationContext)
          CollectionStorage.initialize(applicationContext)
          DownloadsStorage.initialize(applicationContext)
-         DownloadsPlatformDownloader.initialize(applicationContext)
+         DownloadsStoragePlatform.initialize(applicationContext)
 diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt
 new file mode 100644
 index 00000000..e3b665eb
@@ -1763,7 +1763,7 @@ index 00000000..c5e28b72
 +    return ForkHomeSettings.styleFor(com.nuvio.app.features.profiles.ProfileRepository.state.value.activeProfile?.profileIndex ?: 1)
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-index 243e57e5..73e3ee14 100644
+index f43d2623..2c5192bc 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 @@ -28,6 +28,8 @@ import kotlinx.coroutines.delay
@@ -2979,7 +2979,7 @@ index ce9a9f8a..51c05ce0 100644
                  .sortedBy(EpisodeReleaseNotificationRequest::releaseDateIso)
  
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
-index 85e82f32..b7b6b1b3 100644
+index 45a8f657..24f4e129 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/search/SearchScreen.kt
 @@ -2,6 +2,7 @@ package com.nuvio.app.features.search
@@ -2990,7 +2990,7 @@ index 85e82f32..b7b6b1b3 100644
  import androidx.compose.foundation.clickable
  import androidx.compose.foundation.background
  import androidx.compose.foundation.layout.Arrangement
-@@ -199,6 +200,7 @@ fun SearchScreen(
+@@ -200,6 +201,7 @@ fun SearchScreen(
              }
      }
  
@@ -2998,7 +2998,7 @@ index 85e82f32..b7b6b1b3 100644
      ScreenActivityEffect(query, lastRequestedQuery, uiState.isLoading, uiState.sections) { screenActive ->
          if (!screenActive) return@ScreenActivityEffect
          val normalizedQuery = query.trim()
-@@ -424,7 +426,7 @@ fun SearchScreen(
+@@ -426,7 +428,7 @@ fun SearchScreen(
  
                          else -> {
                              items(
@@ -3008,12 +3008,12 @@ index 85e82f32..b7b6b1b3 100644
                              ) { keyedSection ->
                                  val section = keyedSection.value
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-index a2f4a7c3..1d5015e3 100644
+index afa51be0..d8fe5175 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
-@@ -45,6 +45,10 @@ import com.nuvio.app.features.addons.AddonRepository
- import com.nuvio.app.features.home.HomeCatalogSettingsItem
+@@ -46,6 +46,10 @@ import com.nuvio.app.features.home.HomeCatalogSettingsItem
  import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+ import com.nuvio.app.features.home.HomeCatalogRowPlacement
  import com.nuvio.app.features.home.HomeHeroStyle
 +import com.nuvio.app.core.ui.Chip
 +import com.nuvio.app.features.home.ForkHomeSettings
@@ -3022,159 +3022,160 @@ index a2f4a7c3..1d5015e3 100644
  import com.nuvio.app.features.home.components.HomeEmptyStateCard
  import nuvio.composeapp.generated.resources.Res
  import nuvio.composeapp.generated.resources.action_retry
-@@ -85,7 +89,6 @@ import nuvio.composeapp.generated.resources.settings_homescreen_show_hero
- import nuvio.composeapp.generated.resources.settings_homescreen_show_hero_description
- import nuvio.composeapp.generated.resources.settings_homescreen_summary
- import nuvio.composeapp.generated.resources.settings_homescreen_summary_hint
+@@ -93,7 +97,6 @@ import nuvio.composeapp.generated.resources.settings_homescreen_hidden_count
+ import nuvio.composeapp.generated.resources.settings_homescreen_hide_hidden
+ import nuvio.composeapp.generated.resources.settings_homescreen_show_hidden
+ import nuvio.composeapp.generated.resources.settings_homescreen_hidden_rows_title
 -import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import org.jetbrains.compose.resources.stringResource
  import sh.calvin.reorderable.ReorderableCollectionItemScope
  import sh.calvin.reorderable.ReorderableItem
-@@ -257,6 +260,144 @@ internal fun LazyListScope.homescreenSettingsContent(
-                 val hapticFeedback = LocalHapticFeedback.current
-                 val pinToMoveToast = stringResource(Res.string.settings_homescreen_pin_to_move_toast)
- 
-+                // Fork: the "Because you watched" rows aren't an add-on catalog, so they get a switch
-+                // of their own above the catalog list.
-+                val becauseRowsEnabled by remember {
+@@ -222,6 +225,145 @@ internal fun LazyListScope.homescreenSettingsContent(
+             }
+         }
+     }
++    // Fork: the fork's Home switches, in their own section above the rows.
++    item(key = "fork_home_switches") {
++        SettingsSection(title = "Home Extras", isTablet = isTablet) {
++            // Fork: the "Because you watched" rows aren't an add-on catalog, so they get a switch
++            // of their own above the catalog list.
++            val becauseRowsEnabled by remember {
++                ForkHomeSettings.ensureLoaded()
++                ForkHomeSettings.becauseRowsEnabled
++            }.collectAsStateWithLifecycle()
++            SettingsGroup(isTablet = isTablet) {
++                SettingsSwitchRow(
++                    title = "Because You Watched",
++                    description = "Rows of titles like the ones you watched last",
++                    checked = becauseRowsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = ForkHomeSettings::setBecauseRowsEnabled,
++                )
++                // Fork: TMDB trending rows (Top 10 Shows/Movies Today, Trending Now).
++                val trendingRowsEnabled by remember {
 +                    ForkHomeSettings.ensureLoaded()
-+                    ForkHomeSettings.becauseRowsEnabled
++                    ForkHomeSettings.trendingRowsEnabled
 +                }.collectAsStateWithLifecycle()
-+                SettingsGroup(isTablet = isTablet) {
-+                    SettingsSwitchRow(
-+                        title = "Because You Watched",
-+                        description = "Rows of titles like the ones you watched last",
-+                        checked = becauseRowsEnabled,
-+                        isTablet = isTablet,
-+                        onCheckedChange = ForkHomeSettings::setBecauseRowsEnabled,
-+                    )
-+                    // Fork: TMDB trending rows (Top 10 Shows/Movies Today, Trending Now).
-+                    val trendingRowsEnabled by remember {
++                SettingsGroupDivider(isTablet = isTablet)
++                SettingsSwitchRow(
++                    title = "Top 10 & Trending",
++                    description = "Netflix-style Top 10 Shows Today, Top 10 Movies Today and Trending Now rows",
++                    checked = trendingRowsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = ForkHomeSettings::setTrendingRowsEnabled,
++                )
++                // Fork: kid-friendly Top 10 / Trending for this profile only.
++                if (trendingRowsEnabled) {
++                    val forkComingSoon by remember {
 +                        ForkHomeSettings.ensureLoaded()
-+                        ForkHomeSettings.trendingRowsEnabled
++                        ForkHomeSettings.comingSoon
 +                    }.collectAsStateWithLifecycle()
 +                    SettingsGroupDivider(isTablet = isTablet)
 +                    SettingsSwitchRow(
-+                        title = "Top 10 & Trending",
-+                        description = "Netflix-style Top 10 Shows Today, Top 10 Movies Today and Trending Now rows",
-+                        checked = trendingRowsEnabled,
++                        title = "Coming Soon",
++                        description = "A row of films streaming in the next 60 days and new series premiering, soonest first. Hold one for Remind Me",
++                        checked = forkComingSoon,
 +                        isTablet = isTablet,
-+                        onCheckedChange = ForkHomeSettings::setTrendingRowsEnabled,
++                        onCheckedChange = ForkHomeSettings::setComingSoon,
 +                    )
-+                    // Fork: kid-friendly Top 10 / Trending for this profile only.
-+                    if (trendingRowsEnabled) {
-+                        val forkComingSoon by remember {
-+                            ForkHomeSettings.ensureLoaded()
-+                            ForkHomeSettings.comingSoon
-+                        }.collectAsStateWithLifecycle()
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsSwitchRow(
-+                            title = "Coming Soon",
-+                            description = "A row of films streaming in the next 60 days and new series premiering, soonest first. Hold one for Remind Me",
-+                            checked = forkComingSoon,
-+                            isTablet = isTablet,
-+                            onCheckedChange = ForkHomeSettings::setComingSoon,
-+                        )
-+                        val forkProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
-+                            .collectAsStateWithLifecycle()
-+                        val forkProfileIndex = forkProfileState.activeProfile?.profileIndex ?: 1
-+                        val forkProfileName = forkProfileState.activeProfile?.name?.takeIf { it.isNotBlank() }
-+                        val kidsTrendingProfiles by remember {
-+                            ForkHomeSettings.ensureLoaded()
-+                            ForkHomeSettings.kidsTrendingProfiles
-+                        }.collectAsStateWithLifecycle()
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsSwitchRow(
-+                            title = "Kids-Friendly Top 10",
-+                            description = "Only family and kids titles in Top 10 and Trending for " +
-+                                (forkProfileName?.let { "the $it profile" } ?: "this profile"),
-+                            checked = forkProfileIndex in kidsTrendingProfiles,
-+                            isTablet = isTablet,
-+                            onCheckedChange = { ForkHomeSettings.setKidsTrending(forkProfileIndex, it) },
-+                        )
-+                    }
-+                    // Fork: Disney+-style rating limit for this profile only.
-+                    run {
-+                        val forkLimitProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
-+                            .collectAsStateWithLifecycle()
-+                        val forkLimitIndex = forkLimitProfileState.activeProfile?.profileIndex ?: 1
-+                        val forkLimitName = forkLimitProfileState.activeProfile?.name?.takeIf { it.isNotBlank() }
-+                        val kidsLimitProfiles by remember {
-+                            ForkHomeSettings.ensureLoaded()
-+                            ForkHomeSettings.kidsLimitProfiles
-+                        }.collectAsStateWithLifecycle()
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsSwitchRow(
-+                            title = "Kids Rating Limit",
-+                            description = "Hide titles rated above PG / TV-PG everywhere for " +
-+                                (forkLimitName?.let { "the $it profile" } ?: "this profile"),
-+                            checked = forkLimitIndex in kidsLimitProfiles,
-+                            isTablet = isTablet,
-+                            onCheckedChange = { ForkHomeSettings.setKidsLimit(forkLimitIndex, it) },
-+                        )
-+                    }
-+                    // Fork: Netflix Home and card tags.
-+                    run {
-+                        val forkNetflixHome by remember {
-+                            ForkHomeSettings.ensureLoaded()
-+                            ForkHomeSettings.netflixHome
-+                        }.collectAsStateWithLifecycle()
-+                        val forkCardBadges by ForkHomeSettings.cardBadges.collectAsStateWithLifecycle()
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsSwitchRow(
-+                            title = "Netflix Home",
-+                            description = "Genre line on the hero, and \"Continue Watching for\" your name with Netflix-style cards",
-+                            checked = forkNetflixHome,
-+                            isTablet = isTablet,
-+                            onCheckedChange = ForkHomeSettings::setNetflixHome,
-+                        )
-+                        // Fork: Style, per profile: Netflix Style (the default) or Custom.
-+                        val forkStyleProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
-+                            .collectAsStateWithLifecycle()
-+                        val forkStyleIndex = forkStyleProfileState.activeProfile?.profileIndex ?: 1
-+                        val forkStyleProfiles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
-+                        val forkCurrentStyle = forkStyleProfiles[forkStyleIndex] ?: ForkStyle.NETFLIX
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsChipRow(
-+                            title = "Style",
-+                            description = "The look of Home for this profile",
-+                            isTablet = isTablet,
-+                            footer = forkCurrentStyle.summary,
-+                        ) {
-+                            ForkStyle.entries.forEach { style ->
-+                                Chip(
-+                                    label = style.label,
-+                                    selected = forkCurrentStyle == style,
-+                                    onClick = { ForkHomeSettings.setStyle(forkStyleIndex, style) },
-+                                )
-+                            }
-+                        }
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsSwitchRow(
-+                            title = "Card Tags",
-+                            description = "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and the original language (KOREAN, HINDI…) on non-English titles, from TMDB",
-+                            checked = forkCardBadges,
-+                            isTablet = isTablet,
-+                            onCheckedChange = ForkHomeSettings::setCardBadges,
-+                        )
-+                        val forkPlaySomething by ForkHomeSettings.playSomething.collectAsStateWithLifecycle()
-+                        SettingsGroupDivider(isTablet = isTablet)
-+                        SettingsSwitchRow(
-+                            title = "Play Something",
-+                            description = "A shuffle button at the top of Home: resumes something you're watching or plays an unwatched film from your Library or today's Top 10",
-+                            checked = forkPlaySomething,
-+                            isTablet = isTablet,
-+                            onCheckedChange = ForkHomeSettings::setPlaySomething,
-+                        )
-+                    }
++                    val forkProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkProfileIndex = forkProfileState.activeProfile?.profileIndex ?: 1
++                    val forkProfileName = forkProfileState.activeProfile?.name?.takeIf { it.isNotBlank() }
++                    val kidsTrendingProfiles by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.kidsTrendingProfiles
++                    }.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Kids-Friendly Top 10",
++                        description = "Only family and kids titles in Top 10 and Trending for " +
++                            (forkProfileName?.let { "the $it profile" } ?: "this profile"),
++                        checked = forkProfileIndex in kidsTrendingProfiles,
++                        isTablet = isTablet,
++                        onCheckedChange = { ForkHomeSettings.setKidsTrending(forkProfileIndex, it) },
++                    )
 +                }
-+                androidx.compose.foundation.layout.Spacer(
-+                    Modifier.padding(top = if (isTablet) 16.dp else 12.dp),
-+                )
-+
-                 HomescreenCatalogList(
-                     isTablet = isTablet,
-                     items = items,
++                // Fork: Disney+-style rating limit for this profile only.
++                run {
++                    val forkLimitProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkLimitIndex = forkLimitProfileState.activeProfile?.profileIndex ?: 1
++                    val forkLimitName = forkLimitProfileState.activeProfile?.name?.takeIf { it.isNotBlank() }
++                    val kidsLimitProfiles by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.kidsLimitProfiles
++                    }.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Kids Rating Limit",
++                        description = "Hide titles rated above PG / TV-PG everywhere for " +
++                            (forkLimitName?.let { "the $it profile" } ?: "this profile"),
++                        checked = forkLimitIndex in kidsLimitProfiles,
++                        isTablet = isTablet,
++                        onCheckedChange = { ForkHomeSettings.setKidsLimit(forkLimitIndex, it) },
++                    )
++                }
++                // Fork: Netflix Home and card tags.
++                run {
++                    val forkNetflixHome by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.netflixHome
++                    }.collectAsStateWithLifecycle()
++                    val forkCardBadges by ForkHomeSettings.cardBadges.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Netflix Home",
++                        description = "Genre line on the hero, and \"Continue Watching for\" your name with Netflix-style cards",
++                        checked = forkNetflixHome,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setNetflixHome,
++                    )
++                    // Fork: Style, per profile: Netflix Style (the default) or Custom.
++                    val forkStyleProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkStyleIndex = forkStyleProfileState.activeProfile?.profileIndex ?: 1
++                    val forkStyleProfiles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
++                    val forkCurrentStyle = forkStyleProfiles[forkStyleIndex] ?: ForkStyle.NETFLIX
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsChipRow(
++                        title = "Style",
++                        description = "The look of Home for this profile",
++                        isTablet = isTablet,
++                        footer = forkCurrentStyle.summary,
++                    ) {
++                        ForkStyle.entries.forEach { style ->
++                            Chip(
++                                label = style.label,
++                                selected = forkCurrentStyle == style,
++                                onClick = { ForkHomeSettings.setStyle(forkStyleIndex, style) },
++                            )
++                        }
++                    }
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Card Tags",
++                        description = "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and the original language (KOREAN, HINDI…) on non-English titles, from TMDB",
++                        checked = forkCardBadges,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setCardBadges,
++                    )
++                    val forkPlaySomething by ForkHomeSettings.playSomething.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Play Something",
++                        description = "A shuffle button at the top of Home: resumes something you're watching or plays an unwatched film from your Library or today's Top 10",
++                        checked = forkPlaySomething,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setPlaySomething,
++                    )
++                }
++            }
++        }
++    }
+     item {
+         if (isCatalogLoading && items.isEmpty()) {
+             Box(
 diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
 index 4a28dd1d..d44d8509 100644
 --- a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
