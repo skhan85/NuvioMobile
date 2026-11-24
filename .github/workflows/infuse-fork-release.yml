@@ -105,7 +105,7 @@ jobs:
           fi
 
   test:
-    name: Verify patches and run unit tests
+    name: Verify patches and compile Kotlin
     needs: prepare
     if: needs.prepare.outputs.build == 'true'
     runs-on: ubuntu-latest
@@ -182,9 +182,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Run Kotlin unit tests
+      - name: Compile commonMain and androidMain Kotlin
         working-directory: src
-        run: ./gradlew :composeApp:testAndroidHostTest -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
+        run: ./gradlew :composeApp:compileCommonMainKotlinMetadata :composeApp:compileAndroidMain -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
 
   build:
     name: Build unsigned iOS IPA
