@@ -1,0 +1,856 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
+index e8e2d83b..4872e437 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCatalogSection.kt
+@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.remember
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
+ import com.nuvio.app.core.ui.NuvioShelfSection
+ import com.nuvio.app.core.ui.NuvioViewAllPillSize
+ import com.nuvio.app.core.ui.PosterRowImagePrefetchEffect
+@@ -79,9 +80,25 @@ private fun HomeCatalogRowSectionContent(
+         }
+     }
+     PosterRowImagePrefetchEffect(state = rowState, targets = prefetchTargets)
++    val top10Ranks = remember(section.title, entries) {
++        Top10Rank.ranks(section.title, entries.map { it.stableKey() })
++    }
++    val artworkHeight = if (posterCardStyle.catalogLandscapeModeEnabled) {
++        (posterCardStyle.heightDp * 0.56f).dp
++    } else {
++        posterCardStyle.heightDp.dp
++    }
+ 
++    // Fork: Netflix Style drops the " - Movies" / " - Series" type suffix from row names.
++    val forkNetflix = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++        com.nuvio.app.features.home.ForkStyle.NETFLIX
++    val shownTitle = if (forkNetflix) {
++        section.title.replace(Regex("""\s+[-–]\s+(Movies?|Series|Shows?|TV|Anime|Films?)$""", RegexOption.IGNORE_CASE), "")
++    } else {
++        section.title
++    }
+     NuvioShelfSection(
+-        title = section.title,
++        title = shownTitle,
+         entries = entries,
+         modifier = modifier,
+         headerHorizontalPadding = sectionPadding,
+@@ -91,6 +108,7 @@ private fun HomeCatalogRowSectionContent(
+         key = { item -> item.stableKey() },
+         state = rowState,
+     ) { item ->
++        Top10RankedCard(rank = top10Ranks[item.stableKey()], artworkHeight = artworkHeight) {
+         HomePosterCard(
+             item = item,
+             useLandscapeBackdropMode = posterCardStyle.catalogLandscapeModeEnabled,
+@@ -102,5 +120,6 @@ private fun HomeCatalogRowSectionContent(
+             onClick = onPosterClick?.let { { it(item) } },
+             onLongClick = onPosterLongClick?.let { { it(item) } },
+         )
++        }
+     }
+ }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
+index c0406a9e..c89e05f6 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeCollectionRowSection.kt
+@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
+ import androidx.compose.foundation.layout.BoxWithConstraints
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.BorderStroke
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.aspectRatio
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -17,7 +20,9 @@ import androidx.compose.material3.Text
+ import androidx.compose.runtime.Composable
+ import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
++import androidx.compose.runtime.getValue
+ import androidx.compose.ui.layout.ContentScale
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.Dp
+@@ -34,7 +39,9 @@ import com.nuvio.app.core.ui.posterCardClickable
+ import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
+ import com.nuvio.app.features.collection.Collection
+ import com.nuvio.app.features.collection.CollectionFolder
++import com.nuvio.app.features.home.ForkStyle
+ import com.nuvio.app.features.home.PosterShape
++import com.nuvio.app.features.home.rememberForkActiveStyle
+ 
+ @Composable
+ fun HomeCollectionRowSection(
+@@ -123,7 +130,16 @@ private fun CollectionFolderCard(
+         modifier = modifier.width(cardWidth),
+         verticalArrangement = Arrangement.spacedBy(6.dp),
+     ) {
+-        val shapeCorner = RoundedCornerShape(posterCardStyle.cornerRadiusDp.dp)
++        // Fork: Netflix Style frames every catalogue tile the same way (studios and networks included):
++        // a picture from the folder's first title with the name on top.
++        val forkStyle = rememberForkActiveStyle()
++        val shapeCorner = RoundedCornerShape(
++            when (forkStyle) {
++                ForkStyle.NETFLIX -> 4.dp
++                ForkStyle.CUSTOM -> posterCardStyle.cornerRadiusDp.dp
++            },
++        )
++        val forkBorder: BorderStroke? = null
+         val imageUrl = collectionFolderCardImageUrl(folder)
+         Card(
+             modifier = Modifier
+@@ -140,23 +156,92 @@ private fun CollectionFolderCard(
+             elevation = CardDefaults.cardElevation(
+                 defaultElevation = 2.dp,
+             ),
++            border = forkBorder,
+         ) {
+             Box(
+                 modifier = Modifier.fillMaxSize(),
+                 contentAlignment = Alignment.Center,
+             ) {
+                 when {
++                    forkStyle != ForkStyle.CUSTOM -> {
++                        // Fork: Netflix Style shows a plain tile with the name instead of
++                        // the imported cover art (whose baked-in text and outlines don't suit them).
++                        val tileColors = when (forkStyle) {
++                            else -> listOf(androidx.compose.ui.graphics.Color(0xFF2F2F2F), androidx.compose.ui.graphics.Color(0xFF1F1F1F))
++                        }
++                        // The first title's backdrop sits under the name; the plain gradient shows until it loads.
++                        androidx.compose.runtime.LaunchedEffect(folder.id) {
++                            com.nuvio.app.features.home.ForkFolderBackdrops.load(folder)
++                        }
++                        val backdrops by com.nuvio.app.features.home.ForkFolderBackdrops.backdrops.collectAsStateWithLifecycle()
++                        val backdrop = backdrops[folder.id]
++                        Box(
++                            modifier = Modifier
++                                .fillMaxSize()
++                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(tileColors)),
++                            contentAlignment = if (backdrop != null) Alignment.BottomStart else Alignment.Center,
++                        ) {
++                            if (backdrop != null) {
++                                NuvioAsyncImage(
++                                    imageUrl = backdrop,
++                                    contentDescription = folder.title,
++                                    modifier = Modifier.fillMaxSize(),
++                                    contentScale = ContentScale.Crop,
++                                )
++                                Box(
++                                    Modifier
++                                        .fillMaxSize()
++                                        .background(
++                                            androidx.compose.ui.graphics.Brush.verticalGradient(
++                                                0f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.10f),
++                                                0.45f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f),
++                                                1f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.85f),
++                                            ),
++                                        ),
++                                )
++                            }
++                            Text(
++                                text = folder.title,
++                                style = MaterialTheme.typography.titleMedium,
++                                color = androidx.compose.ui.graphics.Color.White,
++                                textAlign = if (backdrop != null) TextAlign.Start else TextAlign.Center,
++                                maxLines = 2,
++                                overflow = TextOverflow.Ellipsis,
++                                modifier = Modifier.padding(12.dp),
++                            )
++                        }
++                    }
+                     !imageUrl.isNullOrBlank() -> {
+-                        NuvioAsyncImage(
+-                            imageUrl = imageUrl,
+-                            contentDescription = folder.title,
+-                            modifier = Modifier.fillMaxSize(),
+-                            contentScale = ContentScale.Crop,
+-                            animateIfPossible = animateGifs &&
+-                                isAnimatedCollectionFolderImage(folder, imageUrl) &&
+-                                LocalScreenActive.current,
+-                            fallbackImageUrl = firstNonBlank(folder.coverImageUrl),
+-                        )
++                        // Fork: draw the static cover underneath animated folder tiles,
++                        // normalize .gifv URLs to .gif so iOS recognizes and animates them,
++                        // and only overlay the GIF when animation is active.
++                        val stillCover = firstNonBlank(folder.coverImageUrl)
++                        val shouldAnimate = animateGifs &&
++                            isAnimatedCollectionFolderImage(folder, imageUrl) &&
++                            LocalScreenActive.current
++                        val resolvedUrl = if (imageUrl.endsWith(".gifv", ignoreCase = true)) {
++                            imageUrl.dropLast(1)
++                        } else {
++                            imageUrl
++                        }
++                        if (stillCover != null && stillCover != imageUrl) {
++                            NuvioAsyncImage(
++                                imageUrl = stillCover,
++                                contentDescription = folder.title,
++                                modifier = Modifier.fillMaxSize(),
++                                contentScale = ContentScale.Crop,
++                            )
++                        }
++                        if (stillCover == null || stillCover == imageUrl || shouldAnimate) {
++                            NuvioAsyncImage(
++                                imageUrl = resolvedUrl,
++                                contentDescription = folder.title,
++                                modifier = Modifier.fillMaxSize(),
++                                contentScale = ContentScale.Crop,
++                                animateIfPossible = shouldAnimate,
++                                fallbackImageUrl = stillCover,
++                            )
++                        }
+                     }
+                     !folder.coverEmoji.isNullOrBlank() -> {
+                         Text(
+@@ -184,7 +269,7 @@ private fun CollectionFolderCard(
+             }
+         }
+ 
+-        if (!folder.hideTitle) {
++        if (!folder.hideTitle && forkStyle == ForkStyle.CUSTOM) {
+             Text(
+                 text = folder.title,
+                 style = MaterialTheme.typography.bodyMedium,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
+index abb8ca38..7b8bb138 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeContinueWatchingSection.kt
+@@ -1,5 +1,10 @@
+ package com.nuvio.app.features.home.components
+ 
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.clickable
++import androidx.compose.material.icons.rounded.MoreVert
++import androidx.compose.material.icons.outlined.Info
+ import androidx.compose.foundation.ExperimentalFoundationApi
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.border
+@@ -27,6 +32,8 @@ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+ import com.nuvio.app.features.shuffle.ShuffleBadge
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import com.nuvio.app.features.details.DetailPreload
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.key
+ import androidx.compose.runtime.remember
+@@ -345,8 +352,37 @@ private fun HomeContinueWatchingSectionContent(
+         }
+         val displayEntries = disintegration.sync(dataSourceKey, items, disintegrationRequest)
+ 
++        // Fork: tapping a card opens the streams screen straight from Home (no detail page), so the
++        // first card (the likeliest tap) starts its source search and subtitle sync ahead of time.
++        val preloadItem = items.firstOrNull()?.takeIf { !it.isCloudLibraryItem() }
++        LaunchedEffect(preloadItem?.let(::continueWatchingItemKey)) {
++            val item = preloadItem ?: return@LaunchedEffect
++            DetailPreload.schedule(
++                DetailPreload.Target(
++                    type = item.parentMetaType,
++                    videoId = item.videoId,
++                    parentMetaId = item.parentMetaId,
++                    season = item.seasonNumber,
++                    episode = item.episodeNumber,
++                ),
++                dwellMs = 1_000L,
++            )
++        }
++
++        // Fork: Netflix Home — "Continue Watching for <name>" and Netflix-style cards.
++        val forkNetflixHome by remember {
++            com.nuvio.app.features.home.ForkHomeSettings.ensureLoaded()
++            com.nuvio.app.features.home.ForkHomeSettings.netflixHome
++        }.collectAsStateWithLifecycle()
++        val forkProfileState by com.nuvio.app.features.profiles.ProfileRepository.state.collectAsStateWithLifecycle()
++        val forkProfileName = forkProfileState.activeProfile?.name?.trim()?.takeIf { it.isNotEmpty() }
++        val defaultTitle = stringResource(Res.string.compose_settings_page_continue_watching)
+         NuvioShelfSection(
+-            title = title ?: stringResource(Res.string.compose_settings_page_continue_watching),
++            title = title ?: if (forkNetflixHome && forkProfileName != null) {
++                "Continue Watching for $forkProfileName"
++            } else {
++                defaultTitle
++            },
+             entries = displayEntries,
+             modifier = modifier,
+             headerHorizontalPadding = sectionPadding,
+@@ -363,7 +399,16 @@ private fun HomeContinueWatchingSectionContent(
+                 disintegrating = entry.exiting,
+                 onDisintegrated = { disintegration.onDisintegrated(entry.key) },
+             ) {
+-                when (style) {
++                if (forkNetflixHome) {
++                    ForkNetflixContinueCard(
++                        item = item,
++                        layout = layout,
++                        useEpisodeThumbnails = useEpisodeThumbnails,
++                        blurNextUp = blurNextUp,
++                        onClick = onClick,
++                        onLongClick = onLongClick,
++                    )
++                } else when (style) {
+                     ContinueWatchingSectionStyle.Card -> ContinueWatchingCard(
+                         item = item,
+                         useEpisodeThumbnails = useEpisodeThumbnails,
+@@ -761,7 +806,7 @@ private fun ContinueWatchingCard(
+                 contentScale = ContentScale.Crop,
+             )
+         }
+-        if (item.shufflePlayback) ShuffleBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
++        ContinueWatchingTopStartBadges(item, Modifier.align(Alignment.TopStart).padding(8.dp))
+         Column(
+             modifier = Modifier
+                 .align(Alignment.BottomStart)
+@@ -954,6 +999,7 @@ private fun ContinueWatchingWideCard(
+                         overflow = TextOverflow.Ellipsis,
+                     )
+                     if (item.shufflePlayback) ShuffleBadge()
++                    RemainingEpisodesBadge(item)
+                     if (item.progressFraction <= 0f && item.seasonNumber != null && item.episodeNumber != null) {
+                         val todayIsoDate = CurrentDateProvider.todayIsoDate()
+                         val badgeText = when {
+@@ -1071,7 +1117,7 @@ private fun ContinueWatchingPosterCard(
+                     contentScale = if (item.isCloudLibraryItem()) ContentScale.Fit else ContentScale.Crop,
+                 )
+             }
+-            if (item.shufflePlayback) ShuffleBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
++            ContinueWatchingTopStartBadges(item, Modifier.align(Alignment.TopStart).padding(8.dp))
+             if (item.progressFraction <= 0f && item.seasonNumber != null && item.episodeNumber != null) {
+                 Box(
+                     modifier = Modifier
+@@ -1155,6 +1201,157 @@ private fun ContinueWatchingPosterCard(
+     }
+ }
+ 
++/**
++ * Fork: Netflix's Continue Watching card — poster with a round play button, "S3:E24" over a red
++ * progress bar at the bottom edge, and ⓘ (details) and ⋮ (more) under it.
++ */
++@Composable
++private fun ForkNetflixContinueCard(
++    item: ContinueWatchingItem,
++    layout: ContinueWatchingLayout,
++    useEpisodeThumbnails: Boolean,
++    blurNextUp: Boolean,
++    onClick: (() -> Unit)?,
++    onLongClick: (() -> Unit)?,
++) {
++    val cornerRadius = rememberPosterCardStyleUiState().cornerRadiusDp.dp
++    val imageUrl = item.continueWatchingPosterArtworkUrl(false)
++    val shape = RoundedCornerShape(cornerRadius)
++    Column(
++        modifier = Modifier
++            .width(layout.posterCardWidth)
++            .clip(shape)
++            .background(MaterialTheme.colorScheme.surfaceVariant),
++    ) {
++        Box(
++            modifier = Modifier
++                .fillMaxWidth()
++                .height(layout.posterCardHeight)
++                .posterCardClickable(
++                    onClick = onClick,
++                    onLongClick = onLongClick,
++                    zoomImageUrl = imageUrl,
++                    zoomCornerRadius = cornerRadius,
++                ),
++        ) {
++            if (imageUrl != null) {
++                AsyncImage(
++                    model = continuewatchingImageModel(
++                        imageUrl = cloudLibraryDisplayArtworkUrl(imageUrl),
++                        fallbackUrl = item.fallbackUrlForArtwork(imageUrl),
++                    ),
++                    contentDescription = item.title,
++                    modifier = Modifier.fillMaxSize(),
++                    contentScale = if (item.isCloudLibraryItem()) ContentScale.Fit else ContentScale.Crop,
++                )
++            }
++            // Gentle scrim so the label and button read over bright art.
++            Box(
++                modifier = Modifier
++                    .matchParentSize()
++                    .background(
++                        androidx.compose.ui.graphics.Brush.verticalGradient(
++                            0.55f to Color.Transparent,
++                            1f to Color.Black.copy(alpha = 0.7f),
++                        ),
++                    ),
++            )
++            val upcoming = item.progressFraction <= 0f && !item.isReleaseAlert &&
++                computeAirDateBadgeText(item.released, CurrentDateProvider.todayIsoDate()) != null
++            if (!upcoming) {
++                com.nuvio.app.features.home.ForkPlayCircle(
++                    size = (layout.posterCardWidth * 0.42f),
++                    modifier = Modifier.align(Alignment.Center),
++                )
++            }
++            if (item.isReleaseAlert || upcoming) {
++                val badge = when {
++                    item.isNewSeasonRelease -> stringResource(Res.string.cw_new_season)
++                    item.isReleaseAlert -> stringResource(Res.string.cw_new_episode)
++                    else -> computeAirDateBadgeText(item.released, CurrentDateProvider.todayIsoDate()).orEmpty()
++                }
++                Text(
++                    text = badge,
++                    color = Color.White,
++                    fontSize = 9.sp,
++                    fontWeight = FontWeight.Bold,
++                    maxLines = 1,
++                    modifier = Modifier
++                        .align(Alignment.TopCenter)
++                        .padding(top = 6.dp)
++                        .clip(RoundedCornerShape(2.dp))
++                        .background(com.nuvio.app.features.home.ForkNetflixHome.NetflixRed)
++                        .padding(horizontal = 5.dp, vertical = 2.dp),
++                )
++            }
++            val label = if (item.seasonNumber != null && item.episodeNumber != null) {
++                "S${item.seasonNumber}:E${item.episodeNumber}"
++            } else {
++                null
++            }
++            if (label != null) {
++                Text(
++                    text = label,
++                    color = Color.White,
++                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
++                    modifier = Modifier
++                        .align(Alignment.BottomCenter)
++                        .padding(bottom = 8.dp),
++                )
++            }
++            if (item.progressFraction > 0f) {
++                Box(
++                    modifier = Modifier
++                        .align(Alignment.BottomStart)
++                        .fillMaxWidth()
++                        .height(3.dp)
++                        .background(Color.White.copy(alpha = 0.3f)),
++                ) {
++                    Box(
++                        modifier = Modifier
++                            .fillMaxHeight()
++                            .fillMaxWidth(item.progressFraction.coerceIn(0f, 1f))
++                            .background(com.nuvio.app.features.home.ForkNetflixHome.NetflixRed),
++                    )
++                }
++            }
++        }
++        Row(
++            modifier = Modifier
++                .fillMaxWidth()
++                .height(34.dp)
++                .padding(horizontal = 6.dp),
++            horizontalArrangement = Arrangement.SpaceBetween,
++            verticalAlignment = Alignment.CenterVertically,
++        ) {
++            Icon(
++                imageVector = androidx.compose.material.icons.Icons.Outlined.Info,
++                contentDescription = "Details",
++                tint = MaterialTheme.colorScheme.onSurfaceVariant,
++                modifier = Modifier
++                    .size(28.dp)
++                    .clip(CircleShape)
++                    .clickable {
++                        val open = com.nuvio.app.features.home.ForkNetflixHome.onCwInfo
++                        if (open != null) open(com.nuvio.app.features.home.ForkNetflixHome.infoPreview(item))
++                        else onLongClick?.invoke()
++                    }
++                    .padding(4.dp),
++            )
++            Icon(
++                imageVector = androidx.compose.material.icons.Icons.Rounded.MoreVert,
++                contentDescription = "More",
++                tint = MaterialTheme.colorScheme.onSurfaceVariant,
++                modifier = Modifier
++                    .size(28.dp)
++                    .clip(CircleShape)
++                    .clickable { onLongClick?.invoke() }
++                    .padding(4.dp),
++            )
++        }
++    }
++}
++
+ @Composable
+ private fun ArtworkPanel(
+     imageUrl: String?,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
+index e575e2d3..d9f007de 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
+@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.Dp
+ import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
+ import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import coil3.SingletonImageLoader
+ import coil3.compose.AsyncImage
+@@ -693,8 +694,10 @@ private fun HeroPageIndicator(
+     pagerState: PagerState,
+     coroutineScope: CoroutineScope,
+ ) {
++    val forkDashes = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++        com.nuvio.app.features.home.ForkStyle.NETFLIX
+     Row(
+-        horizontalArrangement = Arrangement.spacedBy(8.dp),
++        horizontalArrangement = Arrangement.spacedBy(if (forkDashes) 5.dp else 8.dp),
+         verticalAlignment = Alignment.CenterVertically,
+     ) {
+         repeat(itemCount) { index ->
+@@ -708,13 +711,14 @@ private fun HeroPageIndicator(
+                             )
+                         }
+                     }
+-                    .clip(CircleShape)
++                    // Fork: Netflix Style shows short dashes instead of dots.
++                    .clip(if (forkDashes) RoundedCornerShape(1.5.dp) else CircleShape)
+                     .background(MaterialTheme.colorScheme.onBackground)
+                     .graphicsLayer {
+                         alpha = 0.35f + (0.57f * activeFraction)
+                     }
+-                    .width(8.dp + (24.dp * activeFraction))
+-                    .height(8.dp),
++                    .width(if (forkDashes) 14.dp + (14.dp * activeFraction) else 8.dp + (24.dp * activeFraction))
++                    .height(if (forkDashes) 3.dp else 8.dp),
+             )
+         }
+     }
+@@ -822,6 +826,31 @@ private fun HeroContentBlock(
+             .animateContentSize(),
+         horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
+     ) {
++        // Fork: Netflix Style marks the banner FILM / SERIES above the title (a red bar, not the service's mark).
++        val forkNetflixStyle = com.nuvio.app.features.home.rememberForkActiveStyle() ==
++            com.nuvio.app.features.home.ForkStyle.NETFLIX
++        val forkIsSeries = item.type.equals("series", ignoreCase = true) || item.type.equals("tv", ignoreCase = true)
++        if (forkNetflixStyle) {
++            Row(
++                verticalAlignment = Alignment.CenterVertically,
++                horizontalArrangement = Arrangement.spacedBy(6.dp),
++                modifier = Modifier.padding(bottom = 6.dp),
++            ) {
++                Box(
++                    modifier = Modifier
++                        .width(3.dp)
++                        .height(14.dp)
++                        .background(androidx.compose.ui.graphics.Color(0xFFE50914), RoundedCornerShape(1.dp)),
++                )
++                Text(
++                    text = if (forkIsSeries) "SERIES" else "FILM",
++                    style = MaterialTheme.typography.labelMedium,
++                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
++                    fontWeight = FontWeight.SemiBold,
++                    letterSpacing = 2.5.sp,
++                )
++            }
++        }
+         if (logoUrl != null && !logoLoadError) {
+             AsyncImage(
+                 model = logoUrl,
+@@ -892,6 +921,46 @@ private fun HeroContentBlock(
+             showMdbListRatings = showMdbListRatings,
+         )
+ 
++        // Fork: Netflix Home — "Crime  •  Drama  •  Thriller" line under the details.
++        val forkNetflixHome by remember {
++            com.nuvio.app.features.home.ForkHomeSettings.ensureLoaded()
++            com.nuvio.app.features.home.ForkHomeSettings.netflixHome
++        }.collectAsStateWithLifecycle()
++        val forkGenres = item.genres.ifEmpty { details?.genres.orEmpty() }.filter { it.isNotBlank() }
++        if (forkNetflixHome && forkGenres.size > 1) {
++            Spacer(modifier = Modifier.height(8.dp))
++            Text(
++                text = forkGenres.take(5).joinToString("  •  "),
++                modifier = Modifier.fillMaxWidth(),
++                style = MaterialTheme.typography.bodyMedium,
++                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.9f),
++                textAlign = if (layout.isTablet) TextAlign.Start else TextAlign.Center,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis,
++            )
++        }
++
++        // Fork: Netflix Style — "1h 36m  ·  Ends at 9:42 PM" for movies.
++        if (forkNetflixStyle) {
++            val forkRuntime = item.runtime ?: details?.runtime
++            val forkLine = listOfNotNull(
++                com.nuvio.app.features.details.formatRuntimeForDisplay(forkRuntime),
++                com.nuvio.app.features.home.ForkEndsAt.text(forkRuntime, forkIsSeries),
++            ).joinToString("  ·  ")
++            if (forkLine.isNotBlank()) {
++                Spacer(modifier = Modifier.height(6.dp))
++                Text(
++                    text = forkLine,
++                    modifier = Modifier.fillMaxWidth(),
++                    style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f),
++                    textAlign = if (layout.isTablet) TextAlign.Start else TextAlign.Center,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis,
++                )
++            }
++        }
++
+         if (synopsis != null) {
+             Spacer(modifier = Modifier.height(10.dp))
+             Text(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
+index df86bf7b..98b2de88 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomePosterCard.kt
+@@ -8,6 +8,7 @@ import com.nuvio.app.core.ui.NuvioPosterShape
+ import com.nuvio.app.core.ui.PosterCardStyleUiState
+ import com.nuvio.app.core.ui.PosterPrefetchTarget
+ import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
++import com.nuvio.app.features.home.ForkCardBadgeOverlay
+ import com.nuvio.app.features.home.MetaPreview
+ import com.nuvio.app.features.home.PosterShape
+ 
+@@ -26,6 +27,9 @@ fun HomePosterCard(
+     val effectiveLandscapePoster = if (posterCardStyle.alwaysShowLandscapeClearlogo) null else item.landscapePoster
+     val images = item.homePosterImages(posterCardStyle, useLandscapeBackdropMode)
+ 
++    val logoOnArt = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank()) item.logo else null
++    val nameOnArt = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank() && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null
++
+     NuvioPosterCard(
+         title = item.name,
+         imageUrl = images.imageUrl,
+@@ -33,12 +37,16 @@ fun HomePosterCard(
+         fallbackImageUrl = images.fallbackImageUrl,
+         shape = images.shape,
+         detailLine = if (isLandscapeMode || posterCardStyle.hideLabelsEnabled) null else item.releaseInfo?.let { formatReleaseDateForDisplay(it) },
+-        showTitleBelow = !posterCardStyle.hideLabelsEnabled,
+-        bottomLeftLogoUrl = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank()) item.logo else null,
+-        bottomLeftText = if (isLandscapeMode && showLandscapeOverlay && effectiveLandscapePoster.isNullOrBlank() && item.logo.isNullOrBlank() && !posterCardStyle.hideLabelsEnabled) item.name else null,
++        // Fork: don't repeat the title under a wide card that already shows it (logo or name) on the art,
++        // and in Netflix Style show no caption under posters at all (the artwork carries the title).
++        showTitleBelow = !posterCardStyle.hideLabelsEnabled && logoOnArt.isNullOrBlank() && nameOnArt == null &&
++            com.nuvio.app.features.home.rememberForkActiveStyle() != com.nuvio.app.features.home.ForkStyle.NETFLIX,
++        bottomLeftLogoUrl = logoOnArt,
++        bottomLeftText = nameOnArt,
+         isWatched = isWatched,
+         onClick = onClick,
+         onLongClick = onLongClick,
++        overlay = { ForkCardBadgeOverlay(item = item, landscape = isLandscapeMode) },
+     )
+ }
+ 
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/RemainingEpisodes.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/RemainingEpisodes.kt
+new file mode 100644
+index 00000000..26dcc168
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/RemainingEpisodes.kt
+@@ -0,0 +1,136 @@
++package com.nuvio.app.features.home.components
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.nuvio.app.features.details.MetaDetailsRepository
++import com.nuvio.app.features.shuffle.ShuffleBadge
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watchprogress.ContinueWatchingItem
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++import com.nuvio.app.features.watchprogress.WatchProgressRepository
++import kotlin.coroutines.cancellation.CancellationException
++import kotlin.time.TimeMark
++import kotlin.time.TimeSource
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/**
++ * Fork: "N left" on Continue Watching cards — how many aired episodes come after the one on the
++ * card and are not watched yet. Worked out in the background from the series' episode list (the
++ * same metadata the detail page uses); a card shows nothing until its count is known, and nothing
++ * when the count is 0 or the item is a movie.
++ *
++ * Counts are cached per card (series + the episode on it) for half an hour. Watching an episode
++ * moves the card to the next one, which is a new key, so the count follows without a refresh.
++ */
++internal object RemainingEpisodes {
++    private const val MAX_AGE_MS = 30 * 60 * 1_000L
++
++    private val counts = mutableMapOf<String, Pair<Int, TimeMark>>()
++    // One series at a time, so a long row does not fire a burst of metadata requests.
++    private val lock = Mutex()
++
++    fun key(item: ContinueWatchingItem): String? {
++        val s = item.seasonNumber ?: return null
++        val e = item.episodeNumber ?: return null
++        return "${item.parentMetaId}|$s:$e"
++    }
++
++    fun cached(item: ContinueWatchingItem): Int? = key(item)?.let { counts[it]?.first }
++
++    suspend fun count(item: ContinueWatchingItem): Int? {
++        val key = key(item) ?: return null
++        val season = item.seasonNumber ?: return null
++        val episode = item.episodeNumber ?: return null
++        counts[key]?.let { (n, at) -> if (at.elapsedNow().inWholeMilliseconds < MAX_AGE_MS) return n }
++        return lock.withLock {
++            counts[key]?.let { (n, at) -> if (at.elapsedNow().inWholeMilliseconds < MAX_AGE_MS) return@withLock n }
++            val type = item.parentMetaType
++            val meta = MetaDetailsRepository.peek(type, item.parentMetaId)?.takeIf { it.videos.isNotEmpty() }
++                ?: try {
++                    MetaDetailsRepository.fetch(type, item.parentMetaId, cacheResult = true)
++                } catch (e: CancellationException) {
++                    throw e
++                } catch (e: Throwable) {
++                    null
++                }
++            val videos = meta?.videos.orEmpty()
++            if (videos.isEmpty()) return@withLock null
++
++            val today = CurrentDateProvider.todayIsoDate().take(10)
++            val n = videos.count { video ->
++                val s = video.season ?: return@count false
++                val e = video.episode ?: return@count false
++                // Specials only count when the card itself is in the specials season.
++                if (s == 0 && season != 0) return@count false
++                if (s < season || (s == season && e <= episode)) return@count false
++                val released = video.released?.trim()?.takeIf { it.length >= 10 }?.take(10)
++                    ?: return@count false
++                if (released > today) return@count false
++                val watched = WatchedRepository.isWatched(id = item.parentMetaId, type = type, season = s, episode = e) ||
++                    WatchProgressRepository.progressForVideo(
++                        videoId = "${item.parentMetaId}:$s:$e",
++                        parentMetaId = item.parentMetaId,
++                        seasonNumber = s,
++                        episodeNumber = e,
++                    )?.isEffectivelyCompleted == true
++                !watched
++            }
++            counts[key] = n to TimeSource.Monotonic.markNow()
++            n
++        }
++    }
++}
++
++/** The "N left" pill for a card, or nothing. */
++@Composable
++internal fun RemainingEpisodesBadge(item: ContinueWatchingItem, modifier: Modifier = Modifier) {
++    val key = RemainingEpisodes.key(item) ?: return
++    var count by remember(key) { mutableStateOf(RemainingEpisodes.cached(item)) }
++    LaunchedEffect(key) { count = RemainingEpisodes.count(item) }
++    val n = count ?: return
++    if (n <= 0) return
++    Box(
++        modifier = modifier
++            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
++            .padding(horizontal = 8.dp, vertical = 4.dp),
++    ) {
++        Text(
++            text = "$n left",
++            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
++            color = Color.White,
++            maxLines = 1,
++        )
++    }
++}
++
++/** The shuffle badge and the "N left" pill, side by side, for a card's top-left corner. */
++@Composable
++internal fun ContinueWatchingTopStartBadges(item: ContinueWatchingItem, modifier: Modifier = Modifier) {
++    Row(
++        modifier = modifier,
++        horizontalArrangement = Arrangement.spacedBy(6.dp),
++        verticalAlignment = Alignment.CenterVertically,
++    ) {
++        if (item.shufflePlayback) ShuffleBadge()
++        RemainingEpisodesBadge(item)
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/Top10Rank.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/Top10Rank.kt
+new file mode 100644
+index 00000000..03843544
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/Top10Rank.kt
+@@ -0,0 +1,62 @@
++package com.nuvio.app.features.home.components
++
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.height
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.drawscope.Stroke
++import androidx.compose.ui.text.TextStyle
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.em
++import androidx.compose.ui.unit.sp
++
++/** Fork: Netflix-style Top 10 rows — a big outlined rank numeral behind each of the first ten cards. */
++internal object Top10Rank {
++    fun isTop10(title: String): Boolean {
++        val t = title.lowercase()
++        return t.contains("top 10") || t.contains("top ten") || t.contains("top10")
++    }
++
++    fun ranks(title: String, keys: List<String>): Map<String, Int> {
++        if (!isTop10(title)) return emptyMap()
++        val out = LinkedHashMap<String, Int>()
++        keys.take(10).forEachIndexed { i, k -> if (k !in out) out[k] = i + 1 }
++        return out
++    }
++}
++
++@Composable
++internal fun Top10RankedCard(
++    rank: Int?,
++    artworkHeight: Dp,
++    card: @Composable () -> Unit,
++) {
++    if (rank == null) {
++        card()
++        return
++    }
++    val size = (artworkHeight.value * 0.9f).sp
++    Row(
++        verticalAlignment = Alignment.Top,
++        horizontalArrangement = Arrangement.spacedBy(-(artworkHeight * 0.16f)),
++    ) {
++        Box(Modifier.height(artworkHeight), contentAlignment = Alignment.BottomCenter) {
++            val base = TextStyle(
++                fontSize = size,
++                fontWeight = FontWeight.Black,
++                lineHeight = size,
++                letterSpacing = if (rank == 10) (-0.08).em else 0.em,
++            )
++            Text("$rank", style = base.copy(color = Color.Black))
++            Text("$rank", style = base.copy(color = Color.White.copy(alpha = 0.85f), drawStyle = Stroke(width = 6f)))
++        }
++        card()
++    }
++}

@@ -1,0 +1,722 @@
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
+index 2fb421b8..dcb3fcd7 100644
+--- a/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/MainActivity.kt
+@@ -189,6 +189,7 @@ open class MainActivity : AppCompatActivity() {
+         ProfileTitleFactsStorage.initialize(applicationContext)
+         PluginStorage.initialize(applicationContext)
+         CollectionMobileSettingsStorage.initialize(applicationContext)
++        com.nuvio.app.features.home.ForkHomeSettingsStorage.initialize(applicationContext)
+         CollectionStorage.initialize(applicationContext)
+         DownloadsStorage.initialize(applicationContext)
+         DownloadsStoragePlatform.initialize(applicationContext)
+diff --git a/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt
+new file mode 100644
+index 00000000..e3b665eb
+--- /dev/null
++++ b/composeApp/src/androidMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.android.kt
+@@ -0,0 +1,65 @@
++package com.nuvio.app.features.home
++
++import android.content.Context
++import android.content.SharedPreferences
++
++internal actual object ForkHomeSettingsStorage {
++    private const val preferencesName = "nuvio_fork_home_settings"
++    private const val becauseKey = "fork_because_rows"
++    private const val trendingKey = "fork_trending_rows"
++    private const val whitePlayKey = "fork_white_play_button"
++    private const val kidsTrendingKey = "fork_kids_trending_profiles"
++    private const val kidsLimitKey = "fork_kids_limit_profiles"
++    private const val stillWatchingOffKey = "fork_still_watching_off_profiles"
++
++    private var preferences: SharedPreferences? = null
++
++    fun initialize(context: Context) {
++        preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
++    }
++
++    actual fun loadBecauseRowsEnabled(): Boolean? =
++        preferences?.takeIf { it.contains(becauseKey) }?.getBoolean(becauseKey, true)
++
++    actual fun saveBecauseRowsEnabled(enabled: Boolean) {
++        preferences?.edit()?.putBoolean(becauseKey, enabled)?.apply()
++    }
++
++    actual fun loadTrendingRowsEnabled(): Boolean? =
++        preferences?.takeIf { it.contains(trendingKey) }?.getBoolean(trendingKey, true)
++
++    actual fun saveTrendingRowsEnabled(enabled: Boolean) {
++        preferences?.edit()?.putBoolean(trendingKey, enabled)?.apply()
++    }
++
++    actual fun loadWhitePlayButton(): Boolean? =
++        preferences?.takeIf { it.contains(whitePlayKey) }?.getBoolean(whitePlayKey, false)
++
++    actual fun saveWhitePlayButton(enabled: Boolean) {
++        preferences?.edit()?.putBoolean(whitePlayKey, enabled)?.apply()
++    }
++
++    actual fun loadKidsTrendingProfiles(): String? = preferences?.getString(kidsTrendingKey, null)
++
++    actual fun loadForkString(key: String): String? = preferences?.getString(key, null)
++
++    actual fun saveForkString(key: String, value: String) {
++        preferences?.edit()?.putString(key, value)?.apply()
++    }
++
++    actual fun loadStillWatchingOffProfiles(): String? = preferences?.getString(stillWatchingOffKey, null)
++
++    actual fun saveStillWatchingOffProfiles(value: String) {
++        preferences?.edit()?.putString(stillWatchingOffKey, value)?.apply()
++    }
++
++    actual fun loadKidsLimitProfiles(): String? = preferences?.getString(kidsLimitKey, null)
++
++    actual fun saveKidsLimitProfiles(value: String) {
++        preferences?.edit()?.putString(kidsLimitKey, value)?.apply()
++    }
++
++    actual fun saveKidsTrendingProfiles(value: String) {
++        preferences?.edit()?.putString(kidsTrendingKey, value)?.apply()
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
+index ebc28a5a..77016d6e 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/ShelfComponents.kt
+@@ -136,6 +136,8 @@ fun NuvioPosterCard(
+     isWatched: Boolean = false,
+     onClick: (() -> Unit)? = null,
+     onLongClick: (() -> Unit)? = null,
++    // Fork: extra content drawn over the artwork (Netflix TOP 10 / New Episode tags).
++    overlay: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+ ) {
+     val posterCardStyle = rememberPosterCardStyleUiState()
+     val tokens = MaterialTheme.nuvio
+@@ -242,6 +244,7 @@ fun NuvioPosterCard(
+             }
+ 
+             NuvioPosterWatchedOverlay(isWatched = isWatched)
++            overlay()
+         }
+         if (shouldShowTitleBelow) {
+             Text(
+@@ -276,7 +279,9 @@ private fun NuvioShelfSectionHeader(
+     viewAllPillSize: NuvioViewAllPillSize = NuvioViewAllPillSize.Default,
+ ) {
+     val tokens = MaterialTheme.nuvio
+-    val showAccent = rememberShowCatalogAccentEnabled()
++    // Fork: none of Netflix, Disney+ or Max underline their row titles, so only Custom keeps the bar.
++    val showAccent = rememberShowCatalogAccentEnabled() &&
++        com.nuvio.app.features.home.rememberForkActiveStyle() == com.nuvio.app.features.home.ForkStyle.CUSTOM
+     Column(
+         modifier = modifier.fillMaxWidth(),
+     ) {
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
+index 664b15ac..61c800ee 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Theme.kt
+@@ -200,11 +200,13 @@ fun NuvioTheme(
+     customThemeColors: CustomThemeColors = CustomThemeColors.Default,
+     content: @Composable () -> Unit,
+ ) {
+-    val palette = remember(appTheme, customThemeColors) {
+-        ThemeColors.getColorPalette(appTheme, customThemeColors)
++    // Fork: the profile's Style (Netflix / Disney+ / Max) recolours the whole app; Custom leaves the Appearance theme alone.
++    val forkStyle = com.nuvio.app.features.home.rememberForkActiveStyle()
++    val palette = remember(appTheme, customThemeColors, forkStyle) {
++        forkStyle.applyTo(ThemeColors.getColorPalette(appTheme, customThemeColors))
+     }
+-    val colorScheme = buildColorScheme(palette, amoled = amoled)
+-    val tokens = defaultNuvioThemeTokens(palette, amoled = amoled, colorScheme = colorScheme)
++    val colorScheme = buildColorScheme(palette, amoled = amoled && forkStyle == com.nuvio.app.features.home.ForkStyle.CUSTOM)
++    val tokens = defaultNuvioThemeTokens(palette, amoled = amoled && forkStyle == com.nuvio.app.features.home.ForkStyle.CUSTOM, colorScheme = colorScheme)
+ 
+     val density = LocalDensity.current
+     CompositionLocalProvider(
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
+new file mode 100644
+index 00000000..bd9feb01
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeSettings.kt
+@@ -0,0 +1,210 @@
++package com.nuvio.app.features.home
++
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++
++internal expect object ForkHomeSettingsStorage {
++    fun loadBecauseRowsEnabled(): Boolean?
++    fun saveBecauseRowsEnabled(enabled: Boolean)
++    fun loadTrendingRowsEnabled(): Boolean?
++    fun saveTrendingRowsEnabled(enabled: Boolean)
++    fun loadWhitePlayButton(): Boolean?
++    fun saveWhitePlayButton(enabled: Boolean)
++    fun loadKidsTrendingProfiles(): String?
++    fun saveKidsTrendingProfiles(value: String)
++    fun loadKidsLimitProfiles(): String?
++    fun saveKidsLimitProfiles(value: String)
++    fun loadStillWatchingOffProfiles(): String?
++    fun loadForkString(key: String): String?
++    fun saveForkString(key: String, value: String)
++    fun saveStillWatchingOffProfiles(value: String)
++}
++
++/** Fork: on/off switches for the fork's own Home rows. Device-local, not synced. */
++object ForkHomeSettings {
++    private val _becauseRowsEnabled = MutableStateFlow(true)
++    val becauseRowsEnabled: StateFlow<Boolean> = _becauseRowsEnabled.asStateFlow()
++    private val _trendingRowsEnabled = MutableStateFlow(true)
++    val trendingRowsEnabled: StateFlow<Boolean> = _trendingRowsEnabled.asStateFlow()
++    private val _whitePlayButton = MutableStateFlow(false)
++    /** Fork: Netflix-style white Play button on the details page instead of the theme accent. */
++    val whitePlayButton: StateFlow<Boolean> = _whitePlayButton.asStateFlow()
++    private val _kidsTrendingProfiles = MutableStateFlow<Set<Int>>(emptySet())
++    /** Fork: profiles (by profile index) whose Top 10 / Trending rows only show kid-friendly titles. */
++    val kidsTrendingProfiles: StateFlow<Set<Int>> = _kidsTrendingProfiles.asStateFlow()
++    private val _kidsLimitProfiles = MutableStateFlow<Set<Int>>(emptySet())
++    /** Fork: profiles (by profile index) that only see titles rated up to PG / TV-PG. */
++    val kidsLimitProfiles: StateFlow<Set<Int>> = _kidsLimitProfiles.asStateFlow()
++    private val _stillWatchingOffProfiles = MutableStateFlow<Set<Int>>(emptySet())
++    /** Fork: profiles that turned "Are you still watching?" off (it's on by default). */
++    val stillWatchingOffProfiles: StateFlow<Set<Int>> = _stillWatchingOffProfiles.asStateFlow()
++    private var loaded = false
++
++    fun ensureLoaded() {
++        if (loaded) return
++        loaded = true
++        _becauseRowsEnabled.value = ForkHomeSettingsStorage.loadBecauseRowsEnabled() ?: true
++        _trendingRowsEnabled.value = ForkHomeSettingsStorage.loadTrendingRowsEnabled() ?: true
++        _whitePlayButton.value = ForkHomeSettingsStorage.loadWhitePlayButton() ?: false
++        _disneyProfiles.value = ForkHomeSettingsStorage.loadForkString("fork_disney_profiles")
++            ?.split(',')
++            ?.mapNotNull { it.trim().toIntOrNull() }
++            ?.toSet()
++            ?: emptySet()
++        _styleProfiles.value = ForkHomeSettingsStorage.loadForkString("fork_style_profiles")
++            ?.split(',')
++            ?.mapNotNull { part ->
++                val pieces = part.split(':')
++                val index = pieces.getOrNull(0)?.trim()?.toIntOrNull()
++                val style = ForkStyle.fromStored(pieces.getOrNull(1)?.trim())
++                if (index != null && style != null) index to style else null
++            }
++            ?.toMap()
++            ?: emptyMap()
++        _netflixHome.value = ForkHomeSettingsStorage.loadForkString("fork_netflix_home")?.toBooleanStrictOrNull() ?: true
++        _cardBadges.value = ForkHomeSettingsStorage.loadForkString("fork_card_badges")?.toBooleanStrictOrNull() ?: true
++        _comingSoon.value = ForkHomeSettingsStorage.loadForkString("fork_coming_soon")?.toBooleanStrictOrNull() ?: true
++        _playSomething.value = ForkHomeSettingsStorage.loadForkString("fork_play_something")?.toBooleanStrictOrNull() ?: true
++        _stillWatchingOffProfiles.value = ForkHomeSettingsStorage.loadStillWatchingOffProfiles()
++            ?.split(',')
++            ?.mapNotNull { it.trim().toIntOrNull() }
++            ?.toSet()
++            ?: emptySet()
++        _kidsLimitProfiles.value = ForkHomeSettingsStorage.loadKidsLimitProfiles()
++            ?.split(',')
++            ?.mapNotNull { it.trim().toIntOrNull() }
++            ?.toSet()
++            ?: emptySet()
++        _kidsTrendingProfiles.value = ForkHomeSettingsStorage.loadKidsTrendingProfiles()
++            ?.split(',')
++            ?.mapNotNull { it.trim().toIntOrNull() }
++            ?.toSet()
++            ?: emptySet()
++    }
++
++    private val _netflixHome = MutableStateFlow(true)
++    /** Fork: Netflix Home — Shows / Movies switch, genre line, "Continue Watching for <name>". */
++    val netflixHome: StateFlow<Boolean> = _netflixHome.asStateFlow()
++    private val _comingSoon = MutableStateFlow(true)
++    /** Fork: the Coming Soon row on Home (with Trending rows on). */
++    val comingSoon: StateFlow<Boolean> = _comingSoon.asStateFlow()
++
++    fun setComingSoon(enabled: Boolean) {
++        ensureLoaded()
++        _comingSoon.value = enabled
++        ForkHomeSettingsStorage.saveForkString("fork_coming_soon", enabled.toString())
++    }
++
++    private val _playSomething = MutableStateFlow(true)
++    /** Fork: the Play Something (shuffle) button at the top of Home. */
++    val playSomething: StateFlow<Boolean> = _playSomething.asStateFlow()
++
++    fun setPlaySomething(enabled: Boolean) {
++        ensureLoaded()
++        _playSomething.value = enabled
++        ForkHomeSettingsStorage.saveForkString("fork_play_something", enabled.toString())
++    }
++
++    private val _cardBadges = MutableStateFlow(true)
++    /** Fork: TOP 10 and New Episode / New Season / Recently Added tags on posters. */
++    val cardBadges: StateFlow<Boolean> = _cardBadges.asStateFlow()
++
++    private val _disneyProfiles = MutableStateFlow<Set<Int>>(emptySet())
++    /** Fork: profiles that had the old Disney+ look on (retired 2026-11-13; kept so the saved list still loads). */
++    val disneyProfiles: StateFlow<Set<Int>> = _disneyProfiles.asStateFlow()
++
++    private val _styleProfiles = MutableStateFlow<Map<Int, ForkStyle>>(emptyMap())
++    /** Fork: the style chosen per profile (by profile index). A profile with none chosen gets Netflix Style. */
++    val styleProfiles: StateFlow<Map<Int, ForkStyle>> = _styleProfiles.asStateFlow()
++
++    /** The style for a profile: the one chosen, else Netflix Style (the default for every profile). */
++    fun styleFor(profileIndex: Int): ForkStyle =
++        _styleProfiles.value[profileIndex] ?: ForkStyle.NETFLIX
++
++    /** The style of whichever profile was last on Home: the start-up screen uses it, before any profile is chosen. */
++    fun lastStyle(): ForkStyle =
++        ForkStyle.fromStored(ForkHomeSettingsStorage.loadForkString("fork_last_style")) ?: ForkStyle.CUSTOM
++
++    fun rememberLastStyle(style: ForkStyle) {
++        ForkHomeSettingsStorage.saveForkString("fork_last_style", style.name)
++    }
++
++    fun setStyle(profileIndex: Int, style: ForkStyle) {
++        ensureLoaded()
++        val updated = _styleProfiles.value + (profileIndex to style)
++        _styleProfiles.value = updated
++        ForkHomeSettingsStorage.saveForkString(
++            "fork_style_profiles",
++            updated.entries.sortedBy { it.key }.joinToString(",") { "${it.key}:${it.value.name}" },
++        )
++        setDisneyStyle(profileIndex, false) // the old Disney switch is retired
++        if (style == ForkStyle.NETFLIX) {
++            // The Netflix rows are what makes Netflix Style: make sure they are on.
++            setNetflixHome(true)
++            setCardBadges(true)
++            setTrendingRowsEnabled(true)
++        }
++    }
++
++    fun setDisneyStyle(profileIndex: Int, enabled: Boolean) {
++        ensureLoaded()
++        val updated = if (enabled) _disneyProfiles.value + profileIndex else _disneyProfiles.value - profileIndex
++        _disneyProfiles.value = updated
++        ForkHomeSettingsStorage.saveForkString("fork_disney_profiles", updated.sorted().joinToString(","))
++    }
++
++    fun setNetflixHome(enabled: Boolean) {
++        ensureLoaded()
++        _netflixHome.value = enabled
++        ForkHomeSettingsStorage.saveForkString("fork_netflix_home", enabled.toString())
++    }
++
++    fun setCardBadges(enabled: Boolean) {
++        ensureLoaded()
++        _cardBadges.value = enabled
++        ForkHomeSettingsStorage.saveForkString("fork_card_badges", enabled.toString())
++    }
++
++    fun setStillWatching(profileIndex: Int, enabled: Boolean) {
++        ensureLoaded()
++        val updated = if (enabled) _stillWatchingOffProfiles.value - profileIndex
++        else _stillWatchingOffProfiles.value + profileIndex
++        _stillWatchingOffProfiles.value = updated
++        ForkHomeSettingsStorage.saveStillWatchingOffProfiles(updated.sorted().joinToString(","))
++    }
++
++    fun setKidsLimit(profileIndex: Int, enabled: Boolean) {
++        ensureLoaded()
++        val updated = if (enabled) _kidsLimitProfiles.value + profileIndex
++        else _kidsLimitProfiles.value - profileIndex
++        _kidsLimitProfiles.value = updated
++        ForkHomeSettingsStorage.saveKidsLimitProfiles(updated.sorted().joinToString(","))
++    }
++
++    fun setKidsTrending(profileIndex: Int, enabled: Boolean) {
++        ensureLoaded()
++        val updated = if (enabled) _kidsTrendingProfiles.value + profileIndex
++        else _kidsTrendingProfiles.value - profileIndex
++        _kidsTrendingProfiles.value = updated
++        ForkHomeSettingsStorage.saveKidsTrendingProfiles(updated.sorted().joinToString(","))
++    }
++
++    fun setWhitePlayButton(enabled: Boolean) {
++        ensureLoaded()
++        _whitePlayButton.value = enabled
++        ForkHomeSettingsStorage.saveWhitePlayButton(enabled)
++    }
++
++    fun setTrendingRowsEnabled(enabled: Boolean) {
++        ensureLoaded()
++        _trendingRowsEnabled.value = enabled
++        ForkHomeSettingsStorage.saveTrendingRowsEnabled(enabled)
++    }
++
++    fun setBecauseRowsEnabled(enabled: Boolean) {
++        ensureLoaded()
++        _becauseRowsEnabled.value = enabled
++        ForkHomeSettingsStorage.saveBecauseRowsEnabled(enabled)
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
+new file mode 100644
+index 00000000..c5e28b72
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkStyle.kt
+@@ -0,0 +1,81 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.material3.ColorScheme
++import androidx.compose.ui.graphics.Color
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.core.ui.ThemeColorPalette
++import com.nuvio.app.core.ui.ThemeColors
++
++/**
++ * Fork: one look per profile (Settings > Homescreen > Style).
++ *
++ * Netflix Style is the default for every profile (Kids included); Custom changes nothing. Max Style and
++ * Disney+ Style were dropped on 2026-11-13: a saved Max or Disney+ choice, or the old Disney switch, reads as Netflix.
++ */
++enum class ForkStyle(val label: String, val summary: String) {
++    NETFLIX("Netflix Style", "Netflix's own #141414 Home with the billboard, Top 10, card tags and \"Continue Watching for\" rows"),
++    CUSTOM("Custom", "Nothing is changed for you: your theme and switches decide the look");
++
++    /** Colours for this profile's Home; [base] is returned untouched for Custom. */
++    fun colors(base: ColorScheme): ColorScheme = when (this) {
++        NETFLIX -> base.copy(
++            // Netflix's own app colours: #141414 background, #1F1F1F and #2F2F2F raised surfaces
++            background = Color(0xFF141414),
++            surface = Color(0xFF1F1F1F),
++            surfaceVariant = Color(0xFF2F2F2F),
++        )
++        CUSTOM -> base
++    }
++
++    /**
++     * The whole app's palette for this look (Settings, Search, Library, details, the tab bar), not just Home. Custom returns
++     * [base] untouched, so the Appearance theme keeps working as before. Netflix uses a white accent.
++     */
++    fun applyTo(base: ThemeColorPalette): ThemeColorPalette = when (this) {
++        NETFLIX -> ThemeColors.White.copy(
++            background = Color(0xFF141414),
++            backgroundElevated = Color(0xFF1F1F1F),
++            backgroundCard = Color(0xFF2F2F2F),
++        )
++        CUSTOM -> base
++    }
++
++    /**
++     * The one spot colour of this look: progress bars and the TOP 10 / New Episode / Airs Today tags: Netflix red (Custom keeps
++     * the same red the fork always used).
++     */
++    val brandColor: Color
++        get() = when (this) {
++            NETFLIX, CUSTOM -> Color(0xFFE50914)
++        }
++
++    /** The glow behind the wordmark on the start-up screen: Netflix red; null keeps the theme accent. */
++    val splashAccent: Color?
++        get() = when (this) {
++            NETFLIX -> Color(0xFFE50914)
++            CUSTOM -> null
++        }
++
++    companion object {
++        fun fromStored(value: String?): ForkStyle? =
++            if (value == "MAX" || value == "DISNEY") NETFLIX else entries.firstOrNull { it.name == value }
++    }
++}
++
++/** The Style of the profile that is active right now; updates when the profile or its style changes. */
++@Composable
++fun rememberForkActiveStyle(): ForkStyle {
++    androidx.compose.runtime.remember { ForkHomeSettings.ensureLoaded() }
++    val profileState by com.nuvio.app.features.profiles.ProfileRepository.state.collectAsStateWithLifecycle()
++    val styles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
++    val index = profileState.activeProfile?.profileIndex ?: 1
++    return styles[index] ?: ForkStyle.NETFLIX
++}
++
++/** The active profile's [ForkStyle], read outside composition (the tags and progress bars that draw in the style's colour). */
++internal fun forkActiveStyleNow(): ForkStyle {
++    ForkHomeSettings.ensureLoaded()
++    return ForkHomeSettings.styleFor(com.nuvio.app.features.profiles.ProfileRepository.state.value.activeProfile?.profileIndex ?: 1)
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
+index afa51be0..d8fe5175 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/HomescreenSettingsPage.kt
+@@ -46,6 +46,10 @@ import com.nuvio.app.features.home.HomeCatalogSettingsItem
+ import com.nuvio.app.features.home.HomeCatalogSettingsRepository
+ import com.nuvio.app.features.home.HomeCatalogRowPlacement
+ import com.nuvio.app.features.home.HomeHeroStyle
++import com.nuvio.app.core.ui.Chip
++import com.nuvio.app.features.home.ForkHomeSettings
++import com.nuvio.app.features.home.ForkStyle
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import com.nuvio.app.features.home.components.HomeEmptyStateCard
+ import nuvio.composeapp.generated.resources.Res
+ import nuvio.composeapp.generated.resources.action_retry
+@@ -93,7 +97,6 @@ import nuvio.composeapp.generated.resources.settings_homescreen_hidden_count
+ import nuvio.composeapp.generated.resources.settings_homescreen_hide_hidden
+ import nuvio.composeapp.generated.resources.settings_homescreen_show_hidden
+ import nuvio.composeapp.generated.resources.settings_homescreen_hidden_rows_title
+-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+ import org.jetbrains.compose.resources.stringResource
+ import sh.calvin.reorderable.ReorderableCollectionItemScope
+ import sh.calvin.reorderable.ReorderableItem
+@@ -222,6 +225,145 @@ internal fun LazyListScope.homescreenSettingsContent(
+             }
+         }
+     }
++    // Fork: the fork's Home switches, in their own section above the rows.
++    item(key = "fork_home_switches") {
++        SettingsSection(title = "Home Extras", isTablet = isTablet) {
++            // Fork: the "Because you watched" rows aren't an add-on catalog, so they get a switch
++            // of their own above the catalog list.
++            val becauseRowsEnabled by remember {
++                ForkHomeSettings.ensureLoaded()
++                ForkHomeSettings.becauseRowsEnabled
++            }.collectAsStateWithLifecycle()
++            SettingsGroup(isTablet = isTablet) {
++                SettingsSwitchRow(
++                    title = "Because You Watched",
++                    description = "Rows of titles like the ones you watched last",
++                    checked = becauseRowsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = ForkHomeSettings::setBecauseRowsEnabled,
++                )
++                // Fork: TMDB trending rows (Top 10 Shows/Movies Today, Trending Now).
++                val trendingRowsEnabled by remember {
++                    ForkHomeSettings.ensureLoaded()
++                    ForkHomeSettings.trendingRowsEnabled
++                }.collectAsStateWithLifecycle()
++                SettingsGroupDivider(isTablet = isTablet)
++                SettingsSwitchRow(
++                    title = "Top 10 & Trending",
++                    description = "Netflix-style Top 10 Shows Today, Top 10 Movies Today and Trending Now rows",
++                    checked = trendingRowsEnabled,
++                    isTablet = isTablet,
++                    onCheckedChange = ForkHomeSettings::setTrendingRowsEnabled,
++                )
++                // Fork: kid-friendly Top 10 / Trending for this profile only.
++                if (trendingRowsEnabled) {
++                    val forkComingSoon by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.comingSoon
++                    }.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Coming Soon",
++                        description = "A row of films streaming in the next 60 days and new series premiering, soonest first. Hold one for Remind Me",
++                        checked = forkComingSoon,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setComingSoon,
++                    )
++                    val forkProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkProfileIndex = forkProfileState.activeProfile?.profileIndex ?: 1
++                    val forkProfileName = forkProfileState.activeProfile?.name?.takeIf { it.isNotBlank() }
++                    val kidsTrendingProfiles by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.kidsTrendingProfiles
++                    }.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Kids-Friendly Top 10",
++                        description = "Only family and kids titles in Top 10 and Trending for " +
++                            (forkProfileName?.let { "the $it profile" } ?: "this profile"),
++                        checked = forkProfileIndex in kidsTrendingProfiles,
++                        isTablet = isTablet,
++                        onCheckedChange = { ForkHomeSettings.setKidsTrending(forkProfileIndex, it) },
++                    )
++                }
++                // Fork: Disney+-style rating limit for this profile only.
++                run {
++                    val forkLimitProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkLimitIndex = forkLimitProfileState.activeProfile?.profileIndex ?: 1
++                    val forkLimitName = forkLimitProfileState.activeProfile?.name?.takeIf { it.isNotBlank() }
++                    val kidsLimitProfiles by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.kidsLimitProfiles
++                    }.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Kids Rating Limit",
++                        description = "Hide titles rated above PG / TV-PG everywhere for " +
++                            (forkLimitName?.let { "the $it profile" } ?: "this profile"),
++                        checked = forkLimitIndex in kidsLimitProfiles,
++                        isTablet = isTablet,
++                        onCheckedChange = { ForkHomeSettings.setKidsLimit(forkLimitIndex, it) },
++                    )
++                }
++                // Fork: Netflix Home and card tags.
++                run {
++                    val forkNetflixHome by remember {
++                        ForkHomeSettings.ensureLoaded()
++                        ForkHomeSettings.netflixHome
++                    }.collectAsStateWithLifecycle()
++                    val forkCardBadges by ForkHomeSettings.cardBadges.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Netflix Home",
++                        description = "Genre line on the hero, and \"Continue Watching for\" your name with Netflix-style cards",
++                        checked = forkNetflixHome,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setNetflixHome,
++                    )
++                    // Fork: Style, per profile: Netflix Style (the default) or Custom.
++                    val forkStyleProfileState by com.nuvio.app.features.profiles.ProfileRepository.state
++                        .collectAsStateWithLifecycle()
++                    val forkStyleIndex = forkStyleProfileState.activeProfile?.profileIndex ?: 1
++                    val forkStyleProfiles by ForkHomeSettings.styleProfiles.collectAsStateWithLifecycle()
++                    val forkCurrentStyle = forkStyleProfiles[forkStyleIndex] ?: ForkStyle.NETFLIX
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsChipRow(
++                        title = "Style",
++                        description = "The look of Home for this profile",
++                        isTablet = isTablet,
++                        footer = forkCurrentStyle.summary,
++                    ) {
++                        ForkStyle.entries.forEach { style ->
++                            Chip(
++                                label = style.label,
++                                selected = forkCurrentStyle == style,
++                                onClick = { ForkHomeSettings.setStyle(forkStyleIndex, style) },
++                            )
++                        }
++                    }
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Card Tags",
++                        description = "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and the original language (KOREAN, HINDI…) on non-English titles, from TMDB",
++                        checked = forkCardBadges,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setCardBadges,
++                    )
++                    val forkPlaySomething by ForkHomeSettings.playSomething.collectAsStateWithLifecycle()
++                    SettingsGroupDivider(isTablet = isTablet)
++                    SettingsSwitchRow(
++                        title = "Play Something",
++                        description = "A shuffle button at the top of Home: resumes something you're watching or plays an unwatched film from your Library or today's Top 10",
++                        checked = forkPlaySomething,
++                        isTablet = isTablet,
++                        onCheckedChange = ForkHomeSettings::setPlaySomething,
++                    )
++                }
++            }
++        }
++    }
+     item {
+         if (isCatalogLoading && items.isEmpty()) {
+             Box(
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
+index 7db39ac7..2f6d85fa 100644
+--- a/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/core/ui/NuvioAsyncImage.ios.kt
+@@ -32,23 +32,28 @@ internal actual fun NuvioAsyncImage(
+     }
+ 
+     BoxWithConstraints(modifier = modifier) {
++        val maxEdge = 320
+         val targetWidth = constraints.maxWidth
+             .takeIf { it in 1..MaxAnimationTargetEdgePx }
++            ?.coerceAtMost(maxEdge)
+             ?: DefaultAnimationTargetEdgePx
+         val targetHeight = constraints.maxHeight
+             .takeIf { it in 1..MaxAnimationTargetEdgePx }
++            ?.coerceAtMost(maxEdge)
+             ?: DefaultAnimationTargetEdgePx
+ 
+         val state = rememberAnimatedFrame(imageUrl, targetWidth, targetHeight)
+ 
+         when {
+-            state.unavailable -> StaticImageWithFallback(
+-                imageUrl = imageUrl,
+-                fallbackImageUrl = fallbackImageUrl,
+-                contentDescription = contentDescription,
+-                modifier = Modifier.matchParentSize(),
+-                contentScale = contentScale,
+-            )
++            state.unavailable -> if (!imageUrl.endsWith(".gif", ignoreCase = true)) {
++                StaticImageWithFallback(
++                    imageUrl = imageUrl,
++                    fallbackImageUrl = fallbackImageUrl,
++                    contentDescription = contentDescription,
++                    modifier = Modifier.matchParentSize(),
++                    contentScale = contentScale,
++                )
++            }
+ 
+             state.bitmap != null -> Image(
+                 bitmap = state.bitmap,
+diff --git a/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt
+new file mode 100644
+index 00000000..16ee6aab
+--- /dev/null
++++ b/composeApp/src/iosMain/kotlin/com/nuvio/app/features/home/ForkHomeSettingsStorage.ios.kt
+@@ -0,0 +1,67 @@
++package com.nuvio.app.features.home
++
++import platform.Foundation.NSUserDefaults
++
++internal actual object ForkHomeSettingsStorage {
++    private const val becauseKey = "fork_because_rows"
++    private const val trendingKey = "fork_trending_rows"
++    private const val whitePlayKey = "fork_white_play_button"
++    private const val kidsTrendingKey = "fork_kids_trending_profiles"
++    private const val kidsLimitKey = "fork_kids_limit_profiles"
++    private const val stillWatchingOffKey = "fork_still_watching_off_profiles"
++
++    actual fun loadBecauseRowsEnabled(): Boolean? {
++        val defaults = NSUserDefaults.standardUserDefaults
++        return if (defaults.objectForKey(becauseKey) == null) null else defaults.boolForKey(becauseKey)
++    }
++
++    actual fun saveBecauseRowsEnabled(enabled: Boolean) {
++        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = becauseKey)
++    }
++
++    actual fun loadTrendingRowsEnabled(): Boolean? {
++        val defaults = NSUserDefaults.standardUserDefaults
++        return if (defaults.objectForKey(trendingKey) == null) null else defaults.boolForKey(trendingKey)
++    }
++
++    actual fun saveTrendingRowsEnabled(enabled: Boolean) {
++        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = trendingKey)
++    }
++
++    actual fun loadWhitePlayButton(): Boolean? {
++        val defaults = NSUserDefaults.standardUserDefaults
++        return if (defaults.objectForKey(whitePlayKey) == null) null else defaults.boolForKey(whitePlayKey)
++    }
++
++    actual fun saveWhitePlayButton(enabled: Boolean) {
++        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = whitePlayKey)
++    }
++
++    actual fun loadForkString(key: String): String? =
++        NSUserDefaults.standardUserDefaults.stringForKey(key)
++
++    actual fun saveForkString(key: String, value: String) {
++        NSUserDefaults.standardUserDefaults.setObject(value, forKey = key)
++    }
++
++    actual fun loadStillWatchingOffProfiles(): String? =
++        NSUserDefaults.standardUserDefaults.stringForKey(stillWatchingOffKey)
++
++    actual fun saveStillWatchingOffProfiles(value: String) {
++        NSUserDefaults.standardUserDefaults.setObject(value, forKey = stillWatchingOffKey)
++    }
++
++    actual fun loadKidsLimitProfiles(): String? =
++        NSUserDefaults.standardUserDefaults.stringForKey(kidsLimitKey)
++
++    actual fun saveKidsLimitProfiles(value: String) {
++        NSUserDefaults.standardUserDefaults.setObject(value, forKey = kidsLimitKey)
++    }
++
++    actual fun loadKidsTrendingProfiles(): String? =
++        NSUserDefaults.standardUserDefaults.stringForKey(kidsTrendingKey)
++
++    actual fun saveKidsTrendingProfiles(value: String) {
++        NSUserDefaults.standardUserDefaults.setObject(value, forKey = kidsTrendingKey)
++    }
++}

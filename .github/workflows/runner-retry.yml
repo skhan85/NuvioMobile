@@ -1,0 +1,38 @@
+name: Retry Runner Allocation Timeout
+
+# Automatically retries the build job if GitHub Actions hosted macOS runner pool
+# times out before allocating a runner ("The job was not acquired by Runner of type hosted").
+# Retries up to 3 attempts with a 2-minute cooldown.
+
+on:
+  workflow_run:
+    workflows: ["Infuse Fork Release"]
+    types: [completed]
+
+permissions:
+  actions: write
+  checks: read
+
+jobs:
+  auto-retry:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt <= 3
+    steps:
+      - name: Check for runner allocation timeout and retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -uo pipefail
+          job_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[] | select(.name == "Build unsigned iOS IPA" and .conclusion == "cancelled") | .id' 2>/dev/null | head -1 || true)"
+          if [[ -n "${job_id}" ]]; then
+            msg="$(gh api "repos/${GITHUB_REPOSITORY}/check-runs/${job_id}/annotations" --jq '.[].message' 2>/dev/null || true)"
+            if echo "${msg}" | grep -qi "not acquired by Runner"; then
+              echo "Job failed due to GitHub hosted runner pool timeout. Waiting 2 minutes before retrying..."
+              sleep 120
+              echo "Retrying failed jobs for run ${RUN_ID}..."
+              gh run rerun "${RUN_ID}" --failed --repo "${GITHUB_REPOSITORY}"
+              exit 0
+            fi
+          fi
+          echo "Failure was not due to runner allocation timeout; not retrying automatically."

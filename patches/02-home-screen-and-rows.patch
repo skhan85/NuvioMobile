@@ -1,0 +1,1648 @@
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/CinemaOnlyReleases.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/CinemaOnlyReleases.kt
+new file mode 100644
+index 00000000..ef5a3420
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/CinemaOnlyReleases.kt
+@@ -0,0 +1,138 @@
++package com.nuvio.app.features.home
++
++import com.nuvio.app.features.tmdb.TmdbMetadataService
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.async
++import kotlinx.coroutines.awaitAll
++import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withPermit
++import kotlinx.datetime.LocalDate
++import kotlinx.datetime.daysUntil
++
++/**
++ * Fork: "Hide unreleased content" also hides films that are only in cinemas so far (nothing to
++ * stream but cam prints). A recent film counts as cinema-only until TMDB lists a digital,
++ * physical or TV release (types 4-6) on or before today. Verdicts come from TMDB in the
++ * background: a film nobody has checked yet stays visible, and [verdicts] changes once it is
++ * checked so Home can filter again. Films whose first release is more than [WINDOW_DAYS] old
++ * are never hidden (TMDB often has no home-release date for older titles).
++ */
++object CinemaOnlyReleases {
++    private const val WINDOW_DAYS = 150
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val gate = Semaphore(4)
++
++    /** Nuvio id -> true when the film is still cinema-only. */
++    private val _verdicts = MutableStateFlow<Map<String, Boolean>>(emptyMap())
++    val verdicts: StateFlow<Map<String, Boolean>> = _verdicts.asStateFlow()
++    private val pending = MutableStateFlow<Set<String>>(emptySet())
++
++    /** True only when TMDB has confirmed the film is still cinema-only. Unchecked films are queued. */
++    fun isCinemaOnly(item: MetaPreview, todayIsoDate: String): Boolean {
++        if (!isCandidate(item, todayIsoDate)) return false
++        _verdicts.value[item.id]?.let { return it }
++        request(item.id)
++        return false
++    }
++
++    /** Checks the candidates in [items] now and waits for the answers (for rows built off-screen). */
++    suspend fun prefetch(items: List<MetaPreview>, todayIsoDate: String) {
++        val ids = items
++            .filter { isCandidate(it, todayIsoDate) && it.id !in _verdicts.value }
++            .map { it.id }
++            .distinct()
++        if (ids.isEmpty()) return
++        coroutineScope {
++            ids.map { id -> async { verify(id, todayIsoDate) } }.awaitAll()
++        }
++    }
++
++    private fun request(id: String) {
++        var added = false
++        pending.update { current ->
++            added = id !in current
++            if (added) current + id else current
++        }
++        if (!added) return
++        scope.launch { verify(id, todayIsoDate = null) }
++    }
++
++    private suspend fun verify(id: String, todayIsoDate: String?) {
++        try {
++            val verdict = gate.withPermit { lookUp(id, todayIsoDate) }
++            _verdicts.update { it + (id to verdict) }
++        } finally {
++            pending.update { it - id }
++        }
++    }
++
++    private suspend fun lookUp(id: String, todayIsoDate: String?): Boolean {
++        val today = parseDay(todayIsoDate ?: CurrentDateProvider.todayIsoDate()) ?: return false
++        // null: TMDB couldn't be reached or the film isn't on TMDB. Don't hide what can't be checked.
++        val releases = runCatching { TmdbMetadataService.forkMovieReleaseDates(id) }.getOrNull() ?: return false
++        val days = releases.mapNotNull { (type, raw) -> parseDay(raw)?.let { type to it } }
++        if (days.isEmpty()) return false
++        val firstRelease = days.minOf { it.second }
++        if (firstRelease > today) return false // not out at all: the date rule already hides it
++        if (firstRelease.daysUntil(today) > WINDOW_DAYS) return false
++        val atHome = days.any { (type, day) -> type >= 4 && day <= today }
++        return !atHome
++    }
++
++    /**
++     * Fork: the Top 10 Movies and Trending Now rows only list films people can watch at home:
++     * TMDB must show a digital, physical or TV release (types 4-6) on or before today. Films
++     * first out more than [WINDOW_DAYS] ago, and films TMDB can't answer for, stay in.
++     */
++    suspend fun isOutAtHome(item: MetaPreview, todayIsoDate: String): Boolean {
++        if (!item.type.equals("movie", ignoreCase = true)) return true
++        val today = parseDay(todayIsoDate) ?: return true
++        val releases = runCatching {
++            gate.withPermit { TmdbMetadataService.forkMovieReleaseDates(item.id) }
++        }.getOrNull() ?: return true
++        val days = releases.mapNotNull { (type, raw) -> parseDay(raw)?.let { type to it } }
++        if (days.isEmpty()) return true
++        if (days.any { (type, day) -> type >= 4 && day <= today }) return true
++        // Not out anywhere yet, or only in cinemas so far.
++        val firstRelease = days.minOf { it.second }
++        return firstRelease <= today && firstRelease.daysUntil(today) > WINDOW_DAYS
++    }
++
++    /** [items] in their order, films not yet out at home left out (checked all at once). */
++    suspend fun keepingOutAtHome(items: List<MetaPreview>, todayIsoDate: String): List<MetaPreview> =
++        coroutineScope {
++            val keep = items.map { async { isOutAtHome(it, todayIsoDate) } }.awaitAll()
++            items.filterIndexed { index, _ -> keep[index] }
++        }
++
++    /** Films first released in the last [WINDOW_DAYS] days, or (no full date) this year or last year. */
++    private fun isCandidate(item: MetaPreview, todayIsoDate: String): Boolean {
++        if (!item.type.equals("movie", ignoreCase = true)) return false
++        val today = parseDay(todayIsoDate) ?: return false
++        val released = parseDay(item.rawReleaseDate)
++        if (released != null) {
++            if (released > today) return false
++            return released.daysUntil(today) <= WINDOW_DAYS
++        }
++        val year = (item.rawReleaseDate ?: item.releaseInfo)
++            ?.trim()
++            ?.take(4)
++            ?.toIntOrNull()
++            ?: return false
++        return year == today.year || year == today.year - 1
++    }
++
++    private fun parseDay(raw: String?): LocalDate? {
++        val day = raw?.trim()?.takeIf { it.length >= 10 }?.substring(0, 10) ?: return null
++        return runCatching { LocalDate.parse(day) }.getOrNull()
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
+new file mode 100644
+index 00000000..cfe5f083
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
+@@ -0,0 +1,195 @@
++package com.nuvio.app.features.home
++
++import com.nuvio.app.features.catalog.CatalogTarget
++import com.nuvio.app.features.tmdb.TmdbMetadataService
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/**
++ * Fork: extra Netflix-style Home rows built from TMDB, plus the "Remind Me" date check.
++ *  - "Because you watched X": recommendations for the most recently finished titles.
++ *  - "Top 10 Shows Today", "Top 10 Movies Today", "Trending Now": TMDB trending lists
++ *    (the Top 10 rows pick up the big rank numbers because of their names).
++ * Rows come back as ordinary [HomeCatalogSection]s with no "See All" (nothing behind them).
++ */
++object ForkHomeRows {
++    const val BECAUSE_KEY_PREFIX = "fork.because."
++
++    private val mutex = Mutex()
++    private var becauseSignature: String? = null
++    private var becauseRows: List<HomeCatalogSection> = emptyList()
++
++    suspend fun becauseYouWatched(maxRows: Int = 2): List<HomeCatalogSection> {
++        val watched = WatchedRepository.uiState.value.items
++        val seeds = watched
++            .filter { it.type == "movie" || it.type == "series" }
++            .sortedByDescending { it.markedAtEpochMs }
++            .distinctBy { it.id }
++            .take(maxRows)
++        if (seeds.isEmpty()) return emptyList()
++        val signature = seeds.joinToString("|") { it.id }
++        mutex.withLock { if (signature == becauseSignature) return becauseRows }
++
++        val seenIds = watched.map { it.id }.toSet()
++        val seenNames = watched.map { it.name.trim().lowercase() }.toSet()
++        val usedIds = mutableSetOf<String>()
++        val rows = seeds.mapNotNull { seed ->
++            val items = TmdbMetadataService.recommendationsFor(seed.id, seed.type)
++                .filter { it.id !in seenIds && it.name.trim().lowercase() !in seenNames && usedIds.add(it.id) }
++            if (items.size < 4) return@mapNotNull null
++            section(
++                key = BECAUSE_KEY_PREFIX + seed.id,
++                title = "Because you watched ${seed.name}",
++                type = seed.type,
++                items = items,
++            )
++        }
++        mutex.withLock {
++            becauseSignature = signature
++            becauseRows = rows
++        }
++        return rows
++    }
++
++    /** Fork: the TMDB trending rows, refreshed at most every [TRENDING_TTL_MS]. */
++    class TrendingRows(
++        val topShows: HomeCatalogSection?,
++        val topMovies: HomeCatalogSection?,
++        val trendingNow: HomeCatalogSection?,
++        /** Fork: films streaming soon and new series premiering in the next 60 days. */
++        val comingSoon: HomeCatalogSection? = null,
++    )
++
++    const val COMING_SOON_KEY = "fork.trending.coming_soon"
++
++    const val TRENDING_KEY_PREFIX = "fork.trending."
++    private const val TRENDING_TTL_MS = 3 * 60 * 60 * 1000L
++    private var trendingRows: TrendingRows? = null
++    private var trendingFetchedAtMs = 0L
++    private var trendingKids = false
++
++    /** [kids]: kid-friendly lists for a kids profile (see [TmdbMetadataService.kidsPopular]). */
++    suspend fun trending(nowEpochMs: Long, kids: Boolean = false): TrendingRows {
++        mutex.withLock {
++            val cached = trendingRows
++            if (cached != null && trendingKids == kids && nowEpochMs - trendingFetchedAtMs < TRENDING_TTL_MS) {
++                return cached
++            }
++            if (trendingKids != kids) {
++                // Never show the other mode's rows (or Top 10 badges) while these load.
++                trendingRows = null
++                trendingKids = kids
++            }
++        }
++        val comingSoon = runCatching { TmdbMetadataService.forkComingSoon(kids) }.getOrDefault(emptyList())
++        val shows: List<MetaPreview>
++        val movies: List<MetaPreview>
++        val week: List<MetaPreview>
++        if (kids) {
++            val allShows = TmdbMetadataService.kidsPopular("tv")
++            val allMovies = TmdbMetadataService.kidsPopular("movie")
++            shows = allShows.take(10)
++            movies = allMovies.take(10)
++            // Trending Now for kids: the next most popular shows and films, alternating.
++            val moreShows = allShows.drop(10)
++            val moreMovies = allMovies.drop(10)
++            week = (0 until maxOf(moreShows.size, moreMovies.size)).flatMap { i ->
++                listOfNotNull(moreMovies.getOrNull(i), moreShows.getOrNull(i))
++            }
++        } else {
++            // Fork: films still in cinemas or not out yet don't count (all of the day's trending
++            // films are checked so ten home releases are usually left).
++            val today = CurrentDateProvider.todayIsoDate()
++            shows = TmdbMetadataService.trending("tv", "day").take(10)
++            movies = CinemaOnlyReleases.keepingOutAtHome(TmdbMetadataService.trending("movie", "day"), today).take(10)
++            val topIds = (shows + movies).map { it.id }.toSet()
++            week = CinemaOnlyReleases.keepingOutAtHome(
++                TmdbMetadataService.trending("all", "week").filter { it.id !in topIds },
++                today,
++            )
++        }
++        // Fork: check which films are still cinema-only before the rows show, so the
++        // "Hide unreleased content" filter on Home doesn't drop them after they appear.
++        if (HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent) {
++            runCatching {
++                CinemaOnlyReleases.prefetch(movies + week, CurrentDateProvider.todayIsoDate())
++            }
++        }
++        fun row(name: String, title: String, type: String, items: List<MetaPreview>, min: Int) =
++            if (items.size < min) null else section(TRENDING_KEY_PREFIX + name, title, type, items)
++        val rows = TrendingRows(
++            topShows = row("top_shows", "Top 10 Shows Today", "series", shows, 5),
++            topMovies = row("top_movies", "Top 10 Movies Today", "movie", movies, 5),
++            trendingNow = row("now", "Trending Now", "movie", week, 6),
++            comingSoon = row("coming_soon", "Coming Soon", "movie", comingSoon, 4),
++        )
++        // Keep showing the old rows if this refresh came back empty (offline, TMDB down).
++        val usable = rows.topShows != null || rows.topMovies != null || rows.trendingNow != null
++        return mutex.withLock {
++            // The profile switched modes while this loaded: hand back these rows, cache nothing.
++            if (trendingKids != kids) return@withLock rows
++            if (usable || trendingRows == null) {
++                trendingRows = rows
++                trendingFetchedAtMs = if (usable) nowEpochMs else 0L
++            }
++            trendingRows ?: rows
++        }
++    }
++
++    /**
++     * Fork: "#3 in TV Shows Today" for the details page — this title's place in the Top 10 rows
++     * Home last loaded (no network here). Matches TMDB ids directly, else name + year.
++     */
++    fun top10Rank(id: String, name: String, type: String, year: String?): Pair<Int, String>? {
++        val rows = trendingRows ?: return null
++        val isSeries = type.equals("series", true) || type.equals("tv", true)
++        val row = (if (isSeries) rows.topShows else rows.topMovies) ?: return null
++        val wantedName = name.trim().lowercase()
++        val wantedYear = year?.take(4)?.takeIf { it.length == 4 }
++        val index = row.items.indexOfFirst { item ->
++            item.id == id || (
++                item.name.trim().lowercase() == wantedName &&
++                    (wantedYear == null || item.releaseInfo == null || item.releaseInfo.take(4) == wantedYear)
++                )
++        }
++        if (index !in 0..9) return null
++        return (index + 1) to (if (isSeries) "TV Shows" else "Movies")
++    }
++
++    @Throws(Throwable::class)
++    suspend fun becauseYouWatchedChecked(maxRows: Int): List<HomeCatalogSection> = becauseYouWatched(maxRows)
++
++    /** True when the title's release date (yyyy-MM-dd) is after today. */
++    fun isUnreleased(rawReleaseDate: String?, nowEpochMs: Long): Boolean {
++        val date = rawReleaseDate?.takeIf { it.length >= 10 }?.substring(0, 10) ?: return false
++        return date > isoDate(nowEpochMs)
++    }
++
++    private fun section(key: String, title: String, type: String, items: List<MetaPreview>) = HomeCatalogSection(
++        key = key,
++        title = title,
++        subtitle = "",
++        addonName = "TMDB",
++        target = CatalogTarget.Addon(manifestUrl = "", contentType = type, catalogId = key),
++        items = items,
++        availableItemCount = items.size,
++        hasMore = false,
++    )
++
++    /** UTC yyyy-MM-dd for an epoch time (civil-from-days, no datetime library needed). */
++    fun isoDate(epochMs: Long): String {
++        val days = epochMs.floorDiv(86_400_000L)
++        val z = days + 719_468
++        val era = z.floorDiv(146_097L)
++        val doe = z - era * 146_097
++        val yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365
++        val doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
++        val mp = (5 * doy + 2) / 153
++        val d = doy - (153 * mp + 2) / 5 + 1
++        val m = if (mp < 10) mp + 3 else mp - 9
++        val y = yoe + era * 400 + if (m <= 2) 1 else 0
++        return "${y.toString().padStart(4, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}"
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkKidsFilter.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkKidsFilter.kt
+new file mode 100644
+index 00000000..59206924
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkKidsFilter.kt
+@@ -0,0 +1,117 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.profiles.ProfileRepository
++import com.nuvio.app.features.tmdb.TmdbMetadataService
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.async
++import kotlinx.coroutines.awaitAll
++import kotlinx.coroutines.coroutineScope
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.sync.withPermit
++
++/**
++ * Fork: kids rating limit (Disney+-style). On a profile with it on, titles rated above
++ * PG / TV-PG are hidden from Home rows, collections, search and More Like This. Ratings come
++ * from TMDB (US first) and are kept for the session; titles with no known rating stay hidden.
++ */
++object ForkKidsFilter {
++    private val allowedRatings = setOf(
++        "G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG",
++        "U", "UC", "0", "6", "L", "AL", "ALL", "TP", "LIVRE",
++    )
++
++    private val _verdicts = MutableStateFlow<Map<String, Boolean>>(emptyMap())
++    /** Item key → may a kids profile see it. Grows as ratings arrive. */
++    val verdicts: StateFlow<Map<String, Boolean>> = _verdicts.asStateFlow()
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val limiter = Semaphore(6)
++    private val inFlightMutex = Mutex()
++    private val inFlight = mutableSetOf<String>()
++
++    fun isAllowedRating(rating: String?): Boolean {
++        val normalized = rating?.trim()?.uppercase().orEmpty()
++        return normalized.isNotEmpty() && normalized in allowedRatings
++    }
++
++    private fun key(item: MetaPreview) = item.stableKey()
++
++    /** Items a kids profile may see now; unknown ratings are looked up and fill in later. */
++    fun visible(items: List<MetaPreview>, known: Map<String, Boolean>): List<MetaPreview> {
++        val unknown = items.filter { known[key(it)] == null }
++        if (unknown.isNotEmpty()) request(unknown)
++        return items.filter { known[key(it)] == true }
++    }
++
++    private fun request(items: List<MetaPreview>) {
++        scope.launch {
++            val fresh = inFlightMutex.withLock {
++                items.filter { inFlight.add(key(it)) }
++            }
++            fresh.forEach { item ->
++                launch {
++                    val ok = limiter.withPermit {
++                        isAllowedRating(runCatching { TmdbMetadataService.forkAgeRating(item.id, item.type) }.getOrNull())
++                    }
++                    _verdicts.update { it + (key(item) to ok) }
++                    inFlightMutex.withLock { inFlight.remove(key(item)) }
++                }
++            }
++        }
++    }
++
++    /** Waits for every rating first (search: a short list worth a brief wait). */
++    suspend fun resolvedVisible(items: List<MetaPreview>): List<MetaPreview> {
++        val known = _verdicts.value
++        coroutineScope {
++            items.filter { known[key(it)] == null }.take(60).map { item ->
++                async {
++                    val ok = limiter.withPermit {
++                        isAllowedRating(runCatching { TmdbMetadataService.forkAgeRating(item.id, item.type) }.getOrNull())
++                    }
++                    _verdicts.update { it + (key(item) to ok) }
++                }
++            }.awaitAll()
++        }
++        val now = _verdicts.value
++        return items.filter { now[key(it)] == true }
++    }
++}
++
++/** Fork: the active profile's kids filter — returns the list unchanged when the limit is off. */
++@Composable
++fun rememberForkKidsFilter(): (List<MetaPreview>) -> List<MetaPreview> {
++    val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
++    val profileIndex = profileState.activeProfile?.profileIndex ?: 1
++    val limitProfiles by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.kidsLimitProfiles
++    }.collectAsStateWithLifecycle()
++    val known by ForkKidsFilter.verdicts.collectAsStateWithLifecycle()
++    val active = profileIndex in limitProfiles
++    return remember(active, known) {
++        if (!active) { items -> items } else { items -> ForkKidsFilter.visible(items, known) }
++    }
++}
++
++/** Fork: the same filter over catalog sections (empty sections are dropped). */
++fun List<HomeCatalogSection>.forkKids(filter: (List<MetaPreview>) -> List<MetaPreview>): List<HomeCatalogSection> =
++    mapNotNull { section ->
++        val items = filter(section.items)
++        if (items === section.items) section
++        else if (items.isEmpty()) null
++        else section.copy(items = items, availableItemCount = items.size)
++    }
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
+new file mode 100644
+index 00000000..6198594f
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkLanguages.kt
+@@ -0,0 +1,190 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.nuvio.app.features.streams.StreamItem
++
++/**
++ * Fork: audio languages a source says it has, read from its name, text and file name ("Hindi",
++ * "Dual Audio", "🇮🇳 Hindi | English", "MULTi"), shown as small tags on the source card. When the
++ * profile's audio language isn't English, sources in that language are listed first, so Infuse
++ * (which can't be told which audio track to pick) gets the right file. Also the language tag
++ * (KOREAN, HINDI…) on non-English titles' cards (from TMDB's original language).
++ */
++internal object ForkLanguages {
++    data class Tags(val languages: List<String> = emptyList(), val multiAudio: Boolean = false) {
++        val isEmpty get() = languages.isEmpty() && !multiAudio
++    }
++
++    val TagColor = Color(0xFFFFB545)
++
++    /** Name, ISO code and the words or flags that mean it. Order is the order tags are shown in. */
++    private val table: List<Triple<String, String, Regex>> = listOf(
++        Triple("Hindi", "hi", """\bhindi\b|\bhin\b|🇮🇳"""),
++        Triple("Tamil", "ta", """\btamil\b"""),
++        Triple("Telugu", "te", """\btelugu\b"""),
++        Triple("Malayalam", "ml", """\bmalayalam\b"""),
++        Triple("Kannada", "kn", """\bkannada\b"""),
++        Triple("Punjabi", "pa", """\bpunjabi\b"""),
++        Triple("Bengali", "bn", """\bbengali\b"""),
++        Triple("Marathi", "mr", """\bmarathi\b"""),
++        Triple("Urdu", "ur", """\burdu\b"""),
++        Triple("Spanish", "es", """\bspanish\b|\blatino\b|\bcastellano\b|🇪🇸|🇲🇽"""),
++        Triple("French", "fr", """\bfrench\b|\btruefrench\b|\bvff\b|🇫🇷"""),
++        Triple("German", "de", """\bgerman\b|🇩🇪"""),
++        Triple("Italian", "it", """\bitalian\b|🇮🇹"""),
++        Triple("Portuguese", "pt", """\bportuguese\b|🇵🇹|🇧🇷"""),
++        Triple("Russian", "ru", """\brussian\b|🇷🇺"""),
++        Triple("Arabic", "ar", """\barabic\b|🇸🇦"""),
++        Triple("Turkish", "tr", """\bturkish\b|🇹🇷"""),
++        Triple("Japanese", "ja", """\bjapanese\b|🇯🇵"""),
++        Triple("Korean", "ko", """\bkorean\b|🇰🇷"""),
++        Triple("Chinese", "zh", """\bchinese\b|\bmandarin\b|\bcantonese\b|🇨🇳"""),
++    ).map { (name, code, pattern) -> Triple(name, code, Regex(pattern, RegexOption.IGNORE_CASE)) }
++
++    private val english = Regex("""\benglish\b|\beng\b|🇬🇧|🇺🇸""", RegexOption.IGNORE_CASE)
++
++    /** "Multi Audio", "Dual-Audio", "multi lang", or a bare "MULTi" (not "multi sub"). */
++    private val multi = Regex(
++        """\b(multi|dual)[ ._-]?(audio|lang|language)s?\b|\bmulti\b(?![ ._-]?subs?\b)""",
++        RegexOption.IGNORE_CASE,
++    )
++
++    fun tags(stream: StreamItem): Tags = tags(
++        listOfNotNull(stream.name, stream.title, stream.description, stream.behaviorHints.filename)
++            .joinToString("\n"),
++    )
++
++    fun tags(raw: String): Tags {
++        if (raw.isBlank()) return Tags()
++        val text = withAioLanguages(raw)
++        val languages = table.filter { it.third.containsMatchIn(text) }.map { it.first }
++        val hasEnglish = english.containsMatchIn(text)
++        val multiAudio = multi.containsMatchIn(text) || languages.size + (if (hasEnglish) 1 else 0) >= 2
++        return Tags(languages, multiAudio)
++    }
++
++    /**
++     * AIOStreams rewrites each source's text and lists its audio languages as small-caps ISO codes after a
++     * marker ("📣 ᴇɴ • ʜɪ • ᴋᴏ"), which the words and flags above never match. The codes on such a line are
++     * turned back into names ("English Hindi Korean") and added to the text, so tags and the
++     * preferred-language order see them too.
++     */
++    private val smallCaps = mapOf(
++        'ᴀ' to 'a', 'ʙ' to 'b', 'ᴄ' to 'c', 'ᴅ' to 'd', 'ᴇ' to 'e', 'ꜰ' to 'f', 'ɢ' to 'g', 'ʜ' to 'h', 'ɪ' to 'i',
++        'ᴊ' to 'j', 'ᴋ' to 'k', 'ʟ' to 'l', 'ᴍ' to 'm', 'ɴ' to 'n', 'ᴏ' to 'o', 'ᴘ' to 'p', 'ǫ' to 'q', 'ʀ' to 'r',
++        'ꜱ' to 's', 'ᴛ' to 't', 'ᴜ' to 'u', 'ᴠ' to 'v', 'ᴡ' to 'w', 'ʏ' to 'y', 'ᴢ' to 'z',
++    )
++    private val languageMarkers = listOf("📣", "🗣")
++
++    internal fun withAioLanguages(text: String): String {
++        val found = text.lineSequence()
++            .mapNotNull { line -> languageMarkers.map { line.indexOf(it) }.filter { it >= 0 }.minOrNull()?.let { line.substring(it) } }
++            .flatMap { line ->
++                line.map { smallCaps[it] ?: it }.joinToString("").lowercase()
++                    .split(Regex("[^a-z-]+")).asSequence()
++            }
++            .map { it.substringBefore('-') }
++            .filter { it.length in 2..3 }
++            .mapNotNull { code -> if (code == "en" || code == "eng") "English" else table.firstOrNull { it.second == code }?.first }
++            .distinct()
++            .toList()
++        return if (found.isEmpty()) text else text + "\n" + found.joinToString(" ")
++    }
++
++    /** "Korean" for TMDB's "ko"; null for English, "xx" (no language) and codes not listed. */
++    fun originalLabel(code: String?): String? = code?.lowercase()?.let { names[it] }
++
++    private val names = mapOf(
++        "ar" to "Arabic", "bg" to "Bulgarian", "bn" to "Bengali", "ca" to "Catalan", "cn" to "Cantonese",
++        "cs" to "Czech", "da" to "Danish", "de" to "German", "el" to "Greek", "es" to "Spanish",
++        "et" to "Estonian", "fa" to "Persian", "fi" to "Finnish", "fil" to "Filipino", "fr" to "French",
++        "gu" to "Gujarati", "he" to "Hebrew", "hi" to "Hindi", "hr" to "Croatian", "hu" to "Hungarian",
++        "id" to "Indonesian", "is" to "Icelandic", "it" to "Italian", "ja" to "Japanese", "ka" to "Georgian",
++        "kn" to "Kannada", "ko" to "Korean", "lt" to "Lithuanian", "lv" to "Latvian", "ml" to "Malayalam",
++        "mr" to "Marathi", "ms" to "Malay", "nb" to "Norwegian", "nl" to "Dutch", "no" to "Norwegian",
++        "pa" to "Punjabi", "pl" to "Polish", "pt" to "Portuguese", "ro" to "Romanian", "ru" to "Russian",
++        "sk" to "Slovak", "sl" to "Slovenian", "sr" to "Serbian", "sv" to "Swedish", "sw" to "Swahili",
++        "ta" to "Tamil", "te" to "Telugu", "th" to "Thai", "tl" to "Tagalog", "tr" to "Turkish",
++        "uk" to "Ukrainian", "ur" to "Urdu", "vi" to "Vietnamese", "zh" to "Chinese",
++    )
++
++    /**
++     * The original language for the details page ("Korean"), from TMDB's code ("ko") or an add-on's
++     * name ("Korean, English"); null for English, unknown codes or nothing.
++     */
++    fun displayName(value: String?): String? {
++        val first = value?.split(',', '/', '|')?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
++        val lower = first.lowercase()
++        if (lower == "en" || lower == "eng" || lower == "english") return null
++        names[lower]?.let { return it }
++        if (lower.length <= 3 || first.any { !it.isLetter() && it != ' ' }) return null
++        return first.replaceFirstChar { it.uppercaseChar() }
++    }
++
++    /** The language to list first for a profile audio setting ("hi"), or null (English, device, original…). */
++    fun boostLanguage(audioCode: String?): String? {
++        val code = audioCode?.lowercase()?.substringBefore('-')?.takeIf { it.isNotBlank() && it != "en" } ?: return null
++        return table.firstOrNull { it.second == code }?.first
++    }
++
++    /** Sources that list `language` first, keeping everything else in its order. */
++    fun boosted(streams: List<StreamItem>, language: String?): List<StreamItem> {
++        if (language == null || streams.size < 2) return streams
++        val (first, rest) = streams.partition { language in tags(it).languages }
++        return if (first.isEmpty()) streams else first + rest
++    }
++}
++
++/** "KOREAN" on a non-English title's card. */
++@Composable
++internal fun ForkLanguageTag(language: String, modifier: Modifier = Modifier) {
++    Text(
++        text = language.uppercase(),
++        color = Color.Black,
++        fontSize = 7.sp,
++        lineHeight = 9.sp,
++        fontWeight = FontWeight.Black,
++        letterSpacing = 0.4.sp,
++        modifier = modifier
++            .clip(RoundedCornerShape(2.dp))
++            .background(ForkLanguages.TagColor)
++            .padding(horizontal = 4.dp, vertical = 2.dp),
++    )
++}
++
++/** "Hindi" / "Tamil" / "Multi-audio" beside a source's name. */
++@Composable
++internal fun ForkStreamLanguageChips(tags: ForkLanguages.Tags, modifier: Modifier = Modifier) {
++    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
++        tags.languages.take(2).forEach { language -> ForkStreamLanguageChip(language, highlighted = true) }
++        if (tags.multiAudio) ForkStreamLanguageChip("Multi-audio", highlighted = false)
++    }
++}
++
++@Composable
++private fun ForkStreamLanguageChip(text: String, highlighted: Boolean) {
++    Text(
++        text = text,
++        color = if (highlighted) Color.Black else Color.White,
++        fontSize = 10.sp,
++        lineHeight = 12.sp,
++        fontWeight = FontWeight.Bold,
++        maxLines = 1,
++        modifier = Modifier
++            .clip(RoundedCornerShape(50))
++            .background(if (highlighted) ForkLanguages.TagColor else Color.White.copy(alpha = 0.18f))
++            .padding(horizontal = 6.dp, vertical = 1.dp),
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
+new file mode 100644
+index 00000000..fe24b8e6
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkNetflixHome.kt
+@@ -0,0 +1,506 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.border
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.BoxScope
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.asPaddingValues
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.statusBars
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.PlayArrow
++import androidx.compose.material3.Icon
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.setValue
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.collection.findCollectionCatalog
++import com.nuvio.app.features.tmdb.TmdbMetadataService
++import com.nuvio.app.features.watchprogress.ContinueWatchingItem
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.update
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.Semaphore
++import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.sync.withPermit
++import kotlin.time.Clock
++import kotlinx.datetime.toLocalDateTime
++
++/** Fork: Netflix home touches shared by Home, the hero and Continue Watching. */
++internal object ForkNetflixHome {
++    /** Named for Netflix, but it is the active style's spot colour: Netflix red. */
++    val NetflixRed: Color get() = forkActiveStyleNow().brandColor
++
++    /** Home's poster tap, so a Continue Watching card's ⓘ can open the details page. */
++    var onCwInfo: ((MetaPreview) -> Unit)? = null
++
++    fun infoPreview(item: ContinueWatchingItem) = MetaPreview(
++        id = item.parentMetaId,
++        type = item.parentMetaType,
++        name = item.title,
++        poster = item.poster,
++        banner = item.background,
++        logo = item.logo,
++    )
++}
++
++/**
++ * Fork: per-title freshness tags from TMDB, looked up a few at a time and kept for 12 hours.
++ */
++internal object ForkCardBadges {
++    /** `language`: original language when it isn't English ("Korean"), see [ForkLanguages.originalLabel]. */
++    data class Entry(val primary: String?, val secondary: String?, val atMs: Long, val language: String? = null)
++
++    private const val TTL_MS = 12 * 60 * 60 * 1000L
++    private const val KEEP_MS = 4 * TTL_MS
++    private const val STORE_KEY = "fork_card_badges_cache_v4"
++    private val entriesState = MutableStateFlow<Map<String, Entry>>(emptyMap())
++    val entries: StateFlow<Map<String, Entry>>
++        get() {
++            ensureLoaded()
++            return entriesState.asStateFlow()
++        }
++
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++    private val limiter = Semaphore(6)
++    private val inFlightMutex = Mutex()
++    private val inFlight = mutableSetOf<String>()
++    private var loaded = false
++    private var saveScheduled = false
++
++    private fun key(item: MetaPreview) = item.stableKey()
++
++    /** Tags saved by the last session: shown straight away, refreshed in the background when stale. */
++    private fun ensureLoaded() {
++        if (loaded) return
++        loaded = true
++        val raw = runCatching { ForkHomeSettingsStorage.loadForkString(STORE_KEY) }.getOrNull() ?: return
++        val now = Clock.System.now().toEpochMilliseconds()
++        val restored = raw.lineSequence().mapNotNull { line ->
++            val parts = line.split('\t')
++            if (parts.size != 5) return@mapNotNull null
++            val at = parts[3].toLongOrNull() ?: return@mapNotNull null
++            if (now - at > KEEP_MS) return@mapNotNull null
++            parts[0] to Entry(parts[1].ifEmpty { null }, parts[2].ifEmpty { null }, at, parts[4].ifEmpty { null })
++        }.toMap()
++        if (restored.isNotEmpty()) entriesState.update { restored + it }
++    }
++
++    private fun scheduleSave() {
++        if (saveScheduled) return
++        saveScheduled = true
++        scope.launch {
++            kotlinx.coroutines.delay(3_000)
++            saveScheduled = false
++            val now = Clock.System.now().toEpochMilliseconds()
++            val text = entriesState.value.entries
++                .filter { now - it.value.atMs <= KEEP_MS }
++                .sortedByDescending { it.value.atMs }
++                .take(2_500)
++                .joinToString("\n") { (k, e) ->
++                    listOf(k, e.primary.orEmpty(), e.secondary.orEmpty(), e.atMs.toString(), e.language.orEmpty()).joinToString("\t")
++                }
++            runCatching { ForkHomeSettingsStorage.saveForkString(STORE_KEY, text) }
++        }
++    }
++
++    fun request(item: MetaPreview) {
++        ensureLoaded()
++        val now = Clock.System.now().toEpochMilliseconds()
++        val cached = entriesState.value[key(item)]
++        if (cached != null && now - cached.atMs < TTL_MS) return
++        scope.launch {
++            val fresh = inFlightMutex.withLock { inFlight.add(key(item)) }
++            if (!fresh) return@launch
++            val result = limiter.withPermit {
++                runCatching { TmdbMetadataService.forkFreshness(item.id, item.type) }.getOrNull()
++            }
++            // Keep the saved tag when TMDB can't be reached rather than wiping it.
++            if (result != null || cached == null) {
++                val at = Clock.System.now().toEpochMilliseconds()
++                entriesState.update {
++                    it + (key(item) to Entry(result?.first, result?.second, at, ForkLanguages.originalLabel(result?.third)))
++                }
++                scheduleSave()
++            }
++            inFlightMutex.withLock { inFlight.remove(key(item)) }
++        }
++    }
++
++    /** Looks up tags for the start of every row as Home loads, so they're ready before you scroll. */
++    fun prefetch(sections: Collection<HomeCatalogSection>, perRow: Int = 15) {
++        val enabled = runCatching {
++            ForkHomeSettings.ensureLoaded()
++            ForkHomeSettings.cardBadges.value
++        }.getOrDefault(true)
++        if (!enabled) return
++        sections.forEach { section -> section.items.take(perRow).forEach(::request) }
++    }
++}
++
++/** Fork: Netflix TOP 10 tag and New Episode / New Season / Recently Added tag over a poster. */
++@Composable
++internal fun BoxScope.ForkCardBadgeOverlay(item: MetaPreview, landscape: Boolean) {
++    val enabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.cardBadges
++    }.collectAsStateWithLifecycle()
++    if (!enabled) return
++    val entries by ForkCardBadges.entries.collectAsStateWithLifecycle()
++    LaunchedEffect(item.stableKey()) { ForkCardBadges.request(item) }
++    val entry = entries[item.stableKey()]
++    // Cheap (ten items), and the Top 10 rows may load after the card first draws.
++    val isTop10 = ForkHomeRows.top10Rank(item.id, item.name, item.type, item.releaseInfo) != null
++
++    if (isTop10) {
++        ForkTop10Tag(Modifier.align(Alignment.TopEnd).padding(5.dp))
++    }
++    // Fork: tags stack in the top-left corner on every card, clear of the title art and of the
++    // ratings strip some poster services print along the bottom of the poster.
++    if (entry?.primary != null || entry?.language != null) {
++        Column(
++            modifier = Modifier.align(Alignment.TopStart).padding(if (landscape) 6.dp else 5.dp),
++            verticalArrangement = Arrangement.spacedBy(4.dp),
++        ) {
++            entry?.primary?.let { ForkFreshPill(primary = it, secondary = entry.secondary) }
++            entry?.language?.let { ForkLanguageTag(it) }
++        }
++    }
++}
++
++@Composable
++internal fun ForkTop10Tag(modifier: Modifier = Modifier) {
++    Column(
++        modifier = modifier
++            .clip(RoundedCornerShape(2.dp))
++            .background(ForkNetflixHome.NetflixRed)
++            .padding(horizontal = 4.dp, vertical = 2.dp),
++        horizontalAlignment = Alignment.CenterHorizontally,
++    ) {
++        Text("TOP", color = Color.White, fontSize = 6.sp, lineHeight = 7.sp, fontWeight = FontWeight.Black)
++        Text("10", color = Color.White, fontSize = 11.sp, lineHeight = 11.sp, fontWeight = FontWeight.Black)
++    }
++}
++
++@Composable
++internal fun ForkFreshPill(primary: String, secondary: String?, modifier: Modifier = Modifier) {
++    Row(modifier = modifier.clip(RoundedCornerShape(2.dp))) {
++        Text(
++            text = primary,
++            color = Color.White,
++            fontSize = 9.sp,
++            lineHeight = 11.sp,
++            fontWeight = FontWeight.Bold,
++            maxLines = 1,
++            modifier = Modifier.background(ForkNetflixHome.NetflixRed).padding(horizontal = 5.dp, vertical = 2.dp),
++        )
++        if (secondary != null) {
++            Text(
++                text = secondary,
++                color = Color.Black,
++                fontSize = 9.sp,
++                lineHeight = 11.sp,
++                fontWeight = FontWeight.Bold,
++                maxLines = 1,
++                modifier = Modifier.background(Color.White).padding(horizontal = 5.dp, vertical = 2.dp),
++            )
++        }
++    }
++}
++
++/** Fork: Netflix's round play button over a Continue Watching card. */
++@Composable
++internal fun ForkPlayCircle(size: Dp, modifier: Modifier = Modifier) {
++    Box(
++        modifier = modifier
++            .size(size)
++            .clip(CircleShape)
++            .background(Color.Black.copy(alpha = 0.35f))
++            .border(2.dp, Color.White, CircleShape),
++        contentAlignment = Alignment.Center,
++    ) {
++        Icon(
++            imageVector = Icons.Rounded.PlayArrow,
++            contentDescription = null,
++            tint = Color.White,
++            modifier = Modifier.size(size * 0.6f),
++        )
++    }
++}
++
++// MARK: Fork: studio tiles
++
++/** Fork: the Home tab's "open studio" action — (kind "company"/"network", TMDB id, name). */
++internal val LocalForkOpenBrand =
++    androidx.compose.runtime.staticCompositionLocalOf<((String, Int, String) -> Unit)?> { null }
++
++/**
++ * Fork: with a Style, the top of Home fades into the background colour under the status bar,
++ * so rows scrolling up don't run into the clock and battery (as the Netflix app does).
++ */
++@Composable
++internal fun ForkStatusBarFade() {
++    val top = androidx.compose.foundation.layout.WindowInsets.statusBars
++        .asPaddingValues().calculateTopPadding()
++    if (top <= 0.dp) return
++    val bg = MaterialTheme.colorScheme.background
++    Box(
++        // Drawn after the list inside Home's box, so it sits on top at the top edge.
++        Modifier
++            .fillMaxWidth()
++            .height(top + 18.dp)
++            .background(
++                androidx.compose.ui.graphics.Brush.verticalGradient(
++                    0f to bg.copy(alpha = 0.92f),
++                    0.65f to bg.copy(alpha = 0.7f),
++                    1f to Color.Transparent,
++                ),
++            ),
++    )
++}
++
++/**
++ * Fork: a backdrop for each catalogue tile under Netflix Style — the wide picture of
++ * the first title in the folder's first source (the folder's own hero backdrop wins if it has one).
++ * Tiles in the same row don't repeat a picture. Kept for the app session.
++ */
++internal object ForkFolderBackdrops {
++    private val state = MutableStateFlow<Map<String, String>>(emptyMap())
++    val backdrops: StateFlow<Map<String, String>> = state.asStateFlow()
++    private val requested = mutableSetOf<String>()
++    private val lock = Mutex()
++    private val gate = Semaphore(3)
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
++
++    fun load(folder: com.nuvio.app.features.collection.CollectionFolder) {
++        scope.launch {
++            val fresh = lock.withLock { requested.add(folder.id) }
++            if (!fresh) return@launch
++            folder.heroBackdropUrl?.takeIf { it.isNotBlank() }?.let { url ->
++                state.update { it + (folder.id to url) }
++                return@launch
++            }
++            val items = gate.withPermit {
++                runCatching { firstPage(folder) }.getOrNull().orEmpty()
++            }
++            val pictures = items.mapNotNull { item ->
++                item.banner?.takeIf { it.isNotBlank() }
++                    // Smaller TMDB size: tiles are about 230 points wide.
++                    ?.replace("/t/p/w1280/", "/t/p/w780/")
++                    ?.replace("/t/p/original/", "/t/p/w780/")
++            }
++            if (pictures.isEmpty()) return@launch
++            lock.withLock {
++                val used = state.value.values.toSet()
++                val pick = pictures.firstOrNull { it !in used } ?: pictures.first()
++                state.update { it + (folder.id to pick) }
++            }
++        }
++    }
++
++    private suspend fun firstPage(folder: com.nuvio.app.features.collection.CollectionFolder): List<MetaPreview> {
++        val source = folder.resolvedSources.firstOrNull() ?: return emptyList()
++        return when {
++            source.isTmdb -> com.nuvio.app.features.collection.TmdbCollectionSourceResolver.resolve(source).items
++            source.isTrakt -> com.nuvio.app.features.trakt.TraktPublicListSourceResolver.resolve(source).items
++            else -> {
++                val catalogSource = source.addonCatalogSource() ?: return emptyList()
++                val resolved = com.nuvio.app.features.addons.AddonRepository.uiState.value.addons
++                    .findCollectionCatalog(catalogSource) ?: return emptyList()
++                com.nuvio.app.features.catalog.fetchCatalogPage(
++                    manifestUrl = resolved.addon.manifestUrl,
++                    type = catalogSource.type,
++                    catalogId = catalogSource.catalogId,
++                    genre = catalogSource.genre,
++                    maxItems = 12,
++                ).items
++            }
++        }
++    }
++}
++
++/** Fork: "Ends at 9:42 PM" if a movie of this length started now (Netflix Style). */
++internal object ForkEndsAt {
++    /** Minutes from a runtime like "96 min", "1h 36m" or "1:36". */
++    fun minutes(runtime: String?): Int? {
++        val text = runtime?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
++        val numbers = Regex("\\d+").findAll(text).mapNotNull { it.value.toIntOrNull() }.toList()
++        val first = numbers.firstOrNull() ?: return null
++        val hasHours = text.contains("h") || text.contains(":")
++        val total = if (hasHours) first * 60 + (numbers.getOrNull(1) ?: 0) else first
++        return total.takeIf { it > 0 }
++    }
++
++    /** nil for series and unknown lengths. */
++    fun text(runtime: String?, isSeries: Boolean): String? {
++        if (isSeries) return null
++        val minutes = minutes(runtime) ?: return null
++        val end = (kotlin.time.Clock.System.now() + with(kotlin.time.Duration.Companion) { minutes.minutes })
++            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
++        val hour12 = when (val h = end.hour % 12) { 0 -> 12; else -> h }
++        val amPm = if (end.hour < 12) "AM" else "PM"
++        return "Ends at $hour12:${end.minute.toString().padStart(2, '0')} $amPm"
++    }
++}
++
++// MARK: Fork: "What's new in your fork"
++
++/**
++ * Fork: a short note, shown once after an update, listing what's new in this fork. Add an entry
++ * (with a higher id) whenever a fork feature ships; nothing shows until there's an unseen one.
++ */
++internal object ForkWhatsNew {
++    data class Entry(val id: Int, val date: String, val items: List<String>)
++
++    val entries = listOf(
++        Entry(
++            id = 10,
++            date = "Nov 14, 2026",
++            items = listOf(
++                "Top 10 Movies Today and Trending Now only list films you can watch at home (out on digital, disc or TV), not ones still in cinemas or not out yet.",
++            ),
++        ),
++        Entry(
++            id = 9,
++            date = "Nov 13, 2026",
++            items = listOf(
++                "Recently Added / New Episode tags sit in the poster's top-left corner, so they no longer cover the ratings line along the bottom of the poster.",
++                "Netflix Style: row names drop the \" - Movies\" / \" - Series\" ending, and posters have no title and year underneath, as in the Netflix app.",
++            ),
++        ),
++        Entry(
++            id = 8,
++            date = "Nov 13, 2026",
++            items = listOf(
++                "Home's banner is marked FILM or SERIES above the title, shows the length and (for movies) what time it would end if you started now, and uses short dashes for its pages.",
++                "Details page: \"Ends at\" next to the length for movies, the summary right under the info line, then Cast (first three names) and the director.",
++                "Studio and network tiles (Marvel, DC, Disney, Pixar…) now look like the other catalogue tiles: a picture from the first title with the name on top.",
++            ),
++        ),
++        Entry(
++            id = 7,
++            date = "Nov 13, 2026",
++            items = listOf(
++                "One look: Netflix Style is now the default for every profile, Kids included. Disney+ Style and Max Style are gone; Custom is still there if you want your own theme. Kids profiles keep their age-rating limits and kids rows.",
++            ),
++        ),
++        Entry(
++            id = 6,
++            date = "Nov 12, 2026",
++            items = listOf(
++                "With a Style, catalogue tiles (Tonight's Vibe, Genres, Desi Nights…) show a picture from the first title inside, with the name on top.",
++                "Continue Watching no longer shows the same show twice when it was saved under two different ids.",
++            ),
++        ),
++        Entry(
++            id = 5,
++            date = "Nov 12, 2026",
++            items = listOf(
++                "Disney+ and Max studio rows: the Marvel, Warner Bros. and TLC logos show properly instead of as white blocks.",
++                "With a Style, the top of Home fades under the clock so rows no longer run into it.",
++                "Wide cards (Top 10 and others) no longer show the title twice, on the picture and again underneath.",
++                "Turned sideways, Home stays clear of the Dynamic Island.",
++            ),
++        ),
++        Entry(
++            id = 4,
++            date = "Nov 11, 2026",
++            items = listOf(
++                "Style: one choice per profile in Settings > Homescreen replaces the Disney+ switch. Netflix Style, Disney+ Style or Max Style; Custom leaves your own settings alone. A style sets the colours of Home for that profile.",
++            ),
++        ),
++        Entry(
++            id = 3,
++            date = "Nov 6, 2026",
++            items = listOf(
++                "Home cards now tag every non-English title with its language (KOREAN, SPANISH, HINDI…), not just Indian ones.",
++                "The details page shows a title's original language (Korean, Hindi…) in the info line, and the backdrop stays up until a trailer actually starts playing.",
++            ),
++        ),
++        Entry(
++            id = 2,
++            date = "Nov 6, 2026",
++            items = listOf(
++                "Play Something: a shuffle button at the top of Home that resumes something you're watching or plays an unwatched film from your Library or the Top 10.",
++                "Language tags: sources show Hindi, Tamil, Multi-audio and so on, and Indian titles get a HINDI (or Tamil, Telugu…) tag on Home.",
++                "Set a profile's preferred audio language to Hindi (Settings > Playback) and Hindi sources are listed first, so Infuse gets the Hindi file.",
++                "A Remind Me made on the Apple TV now schedules its notification here as soon as it syncs.",
++            ),
++        ),
++        Entry(
++            id = 1,
++            date = "Nov 5, 2026",
++            items = listOf(
++                "Coming Soon row on Home: films streaming in the next 60 days and new series, soonest first. Hold one for Remind Me to get a notification on the day it's out (with Nuvio notifications on).",
++                "Card tags (TOP 10, New Episode, Coming Soon) now show straight away: they're saved between launches and looked up for whole rows ahead.",
++                "Under the hood: the fork's changes are reorganised so Nuvio Enhanced updates break it less often.",
++            ),
++        ),
++    )
++
++    private const val SEEN_KEY = "fork_whats_new_seen"
++
++    fun unseen(): List<Entry> {
++        val seen = runCatching { ForkHomeSettingsStorage.loadForkString(SEEN_KEY)?.toIntOrNull() }.getOrNull() ?: 0
++        return entries.filter { it.id > seen }.sortedByDescending { it.id }.take(3)
++    }
++
++    fun markSeen() {
++        val latest = entries.maxOfOrNull { it.id } ?: return
++        runCatching { ForkHomeSettingsStorage.saveForkString(SEEN_KEY, latest.toString()) }
++    }
++}
++
++@Composable
++internal fun ForkWhatsNewDialog() {
++    var pending by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(ForkWhatsNew.unseen()) }
++    if (pending.isEmpty()) return
++    val dismiss = {
++        ForkWhatsNew.markSeen()
++        pending = emptyList()
++    }
++    androidx.compose.material3.AlertDialog(
++        onDismissRequest = dismiss,
++        title = { Text("What's new in your Nuvio") },
++        text = {
++            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
++                pending.forEach { entry ->
++                    Text(entry.date, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
++                    entry.items.forEach { item ->
++                        Text("•  $item", style = MaterialTheme.typography.bodyMedium)
++                    }
++                }
++            }
++        },
++        confirmButton = {
++            androidx.compose.material3.TextButton(onClick = dismiss) { Text("Got it") }
++        },
++    )
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
+new file mode 100644
+index 00000000..63921435
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
+@@ -0,0 +1,104 @@
++package com.nuvio.app.features.home
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.rounded.Shuffle
++import androidx.compose.material3.Icon
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.staticCompositionLocalOf
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.Dp
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.nuvio.app.features.library.LibraryRepository
++import com.nuvio.app.features.library.toMetaPreview
++import com.nuvio.app.features.watched.WatchedRepository
++import com.nuvio.app.features.watchprogress.ContinueWatchingItem
++import com.nuvio.app.features.watchprogress.CurrentDateProvider
++
++/**
++ * Fork: Play Something (Netflix) — a button at the top of Home that starts something without
++ * browsing: half the time a title you're in the middle of (resumed where you left off), otherwise
++ * an unwatched film from your Library or today's Top 10. Never the same title twice in a row.
++ */
++internal object ForkPlaySomething {
++    sealed interface Pick {
++        data class Resume(val item: ContinueWatchingItem) : Pick
++        data class Movie(val meta: MetaPreview) : Pick
++    }
++
++    private var lastPickedId: String? = null
++
++    fun pick(continueWatching: List<ContinueWatchingItem>, top10: List<MetaPreview>): Pick? {
++        val today = CurrentDateProvider.todayIsoDate()
++        val resumable = continueWatching.filter { it.parentMetaId != lastPickedId }
++        val inProgress = continueWatching.mapTo(mutableSetOf()) { it.parentMetaId }
++        val library = runCatching { LibraryRepository.uiState.value.items.map { it.toMetaPreview() } }
++            .getOrDefault(emptyList())
++        // Films only: they play straight away (a series would need its episode list first).
++        val fresh = (library + top10)
++            .filter { meta ->
++                meta.type.equals("movie", ignoreCase = true) &&
++                    meta.id.startsWith("tt") &&
++                    meta.id != lastPickedId &&
++                    meta.id !in inProgress &&
++                    !meta.isUnreleased(today) &&
++                    !runCatching { WatchedRepository.isWatched(id = meta.id, type = meta.type) }.getOrDefault(false)
++            }
++            .distinctBy { it.id }
++
++        val pick: Pick? = when {
++            resumable.isNotEmpty() && (fresh.isEmpty() || kotlin.random.Random.nextBoolean()) ->
++                Pick.Resume(resumable.random())
++            fresh.isNotEmpty() -> Pick.Movie(fresh.random())
++            else -> null
++        }
++        lastPickedId = when (pick) {
++            is Pick.Resume -> pick.item.parentMetaId
++            is Pick.Movie -> pick.meta.id
++            null -> lastPickedId
++        }
++        return pick
++    }
++}
++
++/** Starts a film from Home (set by the app shell for the Home tab). */
++internal val LocalForkPlayMovie = staticCompositionLocalOf<((MetaPreview) -> Unit)?> { null }
++
++@Composable
++internal fun ForkPlaySomethingButton(horizontalPadding: Dp, onClick: () -> Unit) {
++    Row(
++        modifier = Modifier
++            .padding(horizontal = horizontalPadding, vertical = 6.dp)
++            .clip(RoundedCornerShape(50))
++            .background(Color.White) // solid, so it stands out on any hero tint
++            .clickable(onClick = onClick)
++            .padding(horizontal = 16.dp, vertical = 9.dp),
++        verticalAlignment = Alignment.CenterVertically,
++        horizontalArrangement = Arrangement.spacedBy(8.dp),
++    ) {
++        Icon(
++            imageVector = Icons.Rounded.Shuffle,
++            contentDescription = null,
++            tint = Color.Black,
++            modifier = Modifier.size(18.dp),
++        )
++        Text(
++            text = "Play Something",
++            color = Color.Black,
++            fontSize = 14.sp,
++            fontWeight = FontWeight.SemiBold,
++        )
++    }
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+index c93a0eca..965b30fa 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+@@ -28,6 +28,8 @@ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.flow.MutableStateFlow
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.flow.drop
+ import kotlinx.coroutines.flow.update
+ import kotlinx.coroutines.launch
+ import kotlinx.coroutines.sync.Semaphore
+@@ -60,6 +62,20 @@ object HomeRepository {
+     private var lastRefreshAddonSignature: List<String>? = null
+     private var collectionHeroResolving: Boolean = false
+ 
++    init {
++        // Fork: once TMDB says whether recent films are still cinema-only, filter the rows again.
++        scope.launch {
++            CinemaOnlyReleases.verdicts.drop(1).collectLatest {
++                delay(400)
++                if (!HomeCatalogSettingsRepository.snapshot().hideUnreleasedContent) return@collectLatest
++                publishCurrentState(
++                    isLoading = _uiState.value.isLoading,
++                    requestKey = currentRequestKey,
++                )
++            }
++        }
++    }
++
+     fun preloadSnapshot() {
+         val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
+         preloadedSnapshot = HomeSnapshotStore.load(profileKey)
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
+index 13c4b20a..86e25ea1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
+@@ -1,12 +1,18 @@
+ package com.nuvio.app.features.home
+ 
++import androidx.compose.material3.MaterialTheme
+ import androidx.compose.animation.Crossfade
+ import androidx.compose.animation.core.tween
+ import androidx.compose.foundation.MutatePriority
+ import androidx.compose.foundation.gestures.stopScroll
+ import androidx.compose.foundation.layout.BoxWithConstraints
+ import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.WindowInsets
++import androidx.compose.foundation.layout.WindowInsetsSides
++import androidx.compose.foundation.layout.displayCutout
++import androidx.compose.foundation.layout.only
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.windowInsetsPadding
+ import androidx.compose.foundation.lazy.LazyListScope
+ import androidx.compose.foundation.lazy.LazyListState
+ import androidx.compose.foundation.lazy.rememberLazyListState
+@@ -342,6 +348,47 @@ fun HomeScreen(
+     var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
+     var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }
+ 
++    // Fork: "Because you watched X" rows (see ForkHomeRows). Re-evaluated when the profile or the
++    // watched list changes; the shared side caches by last-watched titles.
++    var forkRows by remember(activeProfileId) { mutableStateOf<List<HomeCatalogSection>>(emptyList()) }
++    val latestWatchedId = watchedUiState.items.maxByOrNull { it.markedAtEpochMs }?.id
++    val becauseRowsEnabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.becauseRowsEnabled
++    }.collectAsStateWithLifecycle()
++    LaunchedEffect(activeProfileId, latestWatchedId, watchedUiState.isLoaded, becauseRowsEnabled) {
++        forkRows = if (!becauseRowsEnabled) emptyList()
++        else runCatching { ForkHomeRows.becauseYouWatched(2) }.getOrDefault(emptyList())
++    }
++
++    val cinemaOnlyVerdicts by CinemaOnlyReleases.verdicts.collectAsStateWithLifecycle()
++
++    // Fork: Netflix-style "Top 10 Shows Today" / "Top 10 Movies Today" / "Trending Now" rows from
++    // TMDB trending, cached on the shared side for a few hours.
++    var forkTrending by remember { mutableStateOf<ForkHomeRows.TrendingRows?>(null) }
++    LaunchedEffect(forkTrending) {
++        forkTrending?.let { rows -> ForkCardBadges.prefetch(listOfNotNull(rows.topShows, rows.topMovies, rows.comingSoon)) }
++    }
++    ForkWhatsNewDialog() // Fork: once after an update with new fork features
++    val forkComingSoonEnabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.comingSoon
++    }.collectAsStateWithLifecycle()
++    val trendingRowsEnabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.trendingRowsEnabled
++    }.collectAsStateWithLifecycle()
++    val kidsTrendingProfiles by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.kidsTrendingProfiles
++    }.collectAsStateWithLifecycle()
++    val kidsTrending = activeProfileId in kidsTrendingProfiles
++    LaunchedEffect(activeProfileId, trendingRowsEnabled, kidsTrending) {
++        forkTrending = null
++        forkTrending = if (!trendingRowsEnabled) null
++        else runCatching { ForkHomeRows.trending(WatchProgressClock.nowEpochMs(), kids = kidsTrending) }.getOrNull()
++    }
++
+     LaunchedEffect(activeProfileId, continueWatchingListState) {
+         snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
+             if (isScrolling) hasUserScrolledContinueWatching = true
+@@ -571,6 +618,20 @@ fun HomeScreen(
+     val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
+         rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
+     }
++    // Fork: this profile's Style (Netflix Style unless Custom was chosen).
++    val forkStyleProfiles by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.styleProfiles
++    }.collectAsStateWithLifecycle()
++    val forkStyle = forkStyleProfiles[activeProfileId] ?: ForkStyle.NETFLIX
++    androidx.compose.runtime.LaunchedEffect(forkStyle) { ForkHomeSettings.rememberLastStyle(forkStyle) }
++    val forkPlaySomethingEnabled by remember {
++        ForkHomeSettings.ensureLoaded()
++        ForkHomeSettings.playSomething
++    }.collectAsStateWithLifecycle()
++    val forkPlayMovie = LocalForkPlayMovie.current
++    // Fork: Netflix Home — ⓘ on Continue Watching opens the details page.
++    androidx.compose.runtime.SideEffect { ForkNetflixHome.onCwInfo = onPosterClick }
+     val (continueWatchingItems, upcomingItems) = remember(
+         shuffledContinueWatchingItems,
+         continueWatchingPreferences.sortMode,
+@@ -919,9 +980,12 @@ fun HomeScreen(
+     val collectionsMap = remember(visibleCollections) {
+         visibleCollections.associateBy { "collection_${it.id}" }
+     }
+-    val sectionsMap = remember(homeUiState.sections) {
+-        homeUiState.sections.associateBy(HomeCatalogSection::key)
++    val forkKidsFilter = rememberForkKidsFilter() // Fork: kids rating limit
++    val sectionsMap = remember(homeUiState.sections, forkKidsFilter) {
++        homeUiState.sections.forkKids(forkKidsFilter).associateBy(HomeCatalogSection::key)
+     }
++    // Fork: card tags for every row's first titles, fetched as soon as Home has its rows.
++    LaunchedEffect(sectionsMap.keys) { ForkCardBadges.prefetch(sectionsMap.values) }
+     val enabledHomeItems = remember(homeSettingsUiState.items) {
+         homeSettingsUiState.items.filter { it.enabled }
+     }
+@@ -1017,9 +1081,16 @@ fun HomeScreen(
+             { url -> activeHeroArtworkUrl = url }
+         }
+ 
+-        DynamicArtworkBackground(artworkUrl = activeHeroArtworkUrl) {
++        // Fork: the Style's colours instead of the artwork wash.
++        val forkDisneyColors = forkStyle.colors(MaterialTheme.colorScheme) // Fork: Style
++        MaterialTheme(colorScheme = forkDisneyColors) {
++        // Fork: Netflix Style has its own flat background; only Custom keeps the artwork tint
++        DynamicArtworkBackground(artworkUrl = if (forkStyle != ForkStyle.CUSTOM) null else activeHeroArtworkUrl) {
+             NuvioScreen(
+-                modifier = Modifier.fillMaxSize().then(heroStretchModifier),
++                // Fork: in landscape, keep Home clear of the camera cut-out / Dynamic Island.
++                modifier = Modifier.fillMaxSize()
++                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
++                    .then(heroStretchModifier),
+                 horizontalPadding = 0.dp,
+                 topPadding = if (showHeroSlot) 0.dp else null,
+                 listState = homeListState,
+@@ -1074,6 +1145,22 @@ fun HomeScreen(
+                     }
+                 }
+ 
++                // Fork: Play Something (shuffle).
++                if (forkPlaySomethingEnabled && !isInitialHomeContentLoading) {
++                    item(key = "fork_play_something") {
++                        ForkPlaySomethingButton(horizontalPadding = homeSectionPadding) {
++                            val top10 = listOfNotNull(forkTrending?.topMovies)
++                                .forkKids(forkKidsFilter)
++                                .flatMap { it.items }
++                            when (val pick = ForkPlaySomething.pick(continueWatchingItems, top10)) {
++                                is ForkPlaySomething.Pick.Resume -> onContinueWatchingClick?.invoke(pick.item)
++                                is ForkPlaySomething.Pick.Movie -> forkPlayMovie?.invoke(pick.meta)
++                                null -> Unit
++                            }
++                        }
++                    }
++                }
++
+                 when {
+                     isInitialHomeContentLoading -> {
+                         homeContinueWatchingSections(
+@@ -1202,6 +1289,47 @@ fun HomeScreen(
+                         disintegrationRequest = continueWatchingDisintegrationRequest,
+                         )
+ 
++                        // Fork: Netflix order — today's top shows, then "Because you watched",
++                        // then today's top movies and what's trending, then the add-on rows.
++                        val forkTrendingRows = forkTrending
++                        val forkRowsInOrder = listOfNotNull(forkTrendingRows?.topShows) +
++                            forkRows +
++                            listOfNotNull(forkTrendingRows?.topMovies) // Fork: no Trending Now row (Trending / New covers it)
++                        // Fork: "Hide unreleased content" covers the Top 10 / Because-you-watched rows too.
++                        val forkFilteredRows = forkRowsInOrder.forkKids(forkKidsFilter).let { rows ->
++                            if (!homeSettingsUiState.hideUnreleasedContent) rows
++                            else {
++                                // Read so the rows filter again when TMDB answers.
++                                @Suppress("UNUSED_VARIABLE") val verdicts = cinemaOnlyVerdicts
++                                val today = CurrentDateProvider.todayIsoDate()
++                                rows.mapNotNull { section ->
++                                    val released = section.filterReleasedItems(today)
++                                    released.takeIf { it.items.isNotEmpty() }
++                                }
++                            }
++                        }
++                        // Fork: Coming Soon after the Top 10 rows (unreleased titles are its point,
++                        // so "Hide unreleased content" leaves it alone). Hold a title for Remind Me.
++                        val forkVisibleRows = forkFilteredRows + if (forkComingSoonEnabled) {
++                            listOfNotNull(forkTrendingRows?.comingSoon).forkKids(forkKidsFilter)
++                        } else {
++                            emptyList()
++                        }
++                        forkVisibleRows.forEach { section ->
++                            item(key = section.key, contentType = "catalog") {
++                                HomeCatalogRowSection(
++                                    section = section,
++                                    entries = section.items.take(HOME_CATALOG_PREVIEW_LIMIT),
++                                    modifier = Modifier.padding(bottom = 12.dp),
++                                    sectionPadding = homeSectionPadding,
++                                    watchedKeys = watchedUiState.watchedKeys,
++                                    fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
++                                    onPosterClick = onPosterClick,
++                                    onPosterLongClick = onPosterLongClick,
++                                )
++                            }
++                        }
++
+                         keyedEnabledHomeItems.forEach { keyedSettingsItem ->
+                             val settingsItem = keyedSettingsItem.value
+                             if (settingsItem.isCollection) {
+@@ -1243,6 +1371,9 @@ fun HomeScreen(
+                     }
+                 }
+             }
++            // Fork: a Style fades the top edge under the status bar so rows don't run into the clock.
++            if (forkStyle != ForkStyle.CUSTOM) ForkStatusBarFade()
++        }
+         }
+     }
+ }
+@@ -1710,6 +1841,19 @@ internal fun buildHomeContinueWatchingItems(
+             val key = candidate.item.parentMetaId.ifBlank { candidate.item.videoId }
+             seen.add(key)
+         }
++        // Fork: the same show can arrive under two ids (IMDb and TMDB) from different sources; the
++        // same name at the same season and episode is one show, so only the most recent card stays.
++        .filter { candidate ->
++            val item = candidate.item
++            val season = item.seasonNumber
++            val episode = item.episodeNumber
++            val name = item.title.lowercase().filter { it.isLetterOrDigit() }
++            if (season == null || episode == null || name.isEmpty()) {
++                true
++            } else {
++                seen.add("fork-name:$name:$season:$episode")
++            }
++        }
+ 
+     return when (sortMode) {
+         ContinueWatchingSortMode.DEFAULT,
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
+index a6269454..333325a1 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ReleaseInfoUtils.kt
+@@ -39,4 +39,7 @@ internal fun HomeCatalogSection.filterReleasedItems(
+ internal fun List<MetaPreview>.filterReleasedItems(
+     todayIsoDate: String,
+     nowEpochMs: Long = EpisodeReleaseDatePlatform.nowEpochMs(),
+-): List<MetaPreview> = filterNot { item -> item.isUnreleased(todayIsoDate, nowEpochMs) }
++): List<MetaPreview> = filterNot { item ->
++    // Fork: films that are only in cinemas so far count as unreleased too (see CinemaOnlyReleases).
++    item.isUnreleased(todayIsoDate, nowEpochMs) || CinemaOnlyReleases.isCinemaOnly(item, todayIsoDate)
++}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt
+index ce9a9f8a..51c05ce0 100644
+--- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/notifications/EpisodeReleaseNotificationsRepository.kt
+@@ -58,6 +58,9 @@ object EpisodeReleaseNotificationsRepository {
+ 
+     private val refreshRequests = Channel<Unit>(Channel.CONFLATED)
+ 
++    @Volatile
++    private var forkMovieReminderSignature: String? = null
++
+     init {
+         scope.launch {
+             for (ignored in refreshRequests) {
+@@ -72,11 +75,20 @@ object EpisodeReleaseNotificationsRepository {
+                 if (!hasLoaded) return@collectLatest
+ 
+                 val changed = reconcileTrackedShows(state)
++                // Fork: a movie Remind Me (made here or synced from the Apple TV) changes only
++                // movies, so watch those too or it waits for the next launch.
++                val movieSignature = if (state.isLoaded) {
++                    movieReminderRequests(state.items).joinToString("|") { it.requestId + "@" + it.releaseDateIso }
++                } else {
++                    forkMovieReminderSignature
++                }
++                val moviesChanged = movieSignature != forkMovieReminderSignature
++                forkMovieReminderSignature = movieSignature
+                 if (changed) {
+                     persist()
+-                    if (_uiState.value.isEnabled) {
+-                        requestRefresh()
+-                    }
++                }
++                if ((changed || moviesChanged) && _uiState.value.isEnabled) {
++                    requestRefresh()
+                 }
+             }
+         }
+@@ -344,6 +356,26 @@ object EpisodeReleaseNotificationsRepository {
+         return changed
+     }
+ 
++    private fun movieReminderRequests(items: List<LibraryItem>): List<EpisodeReleaseNotificationRequest> {
++        val today = CurrentDateProvider.todayIsoDate()
++        val isoDate = Regex("""^\d{4}-\d{2}-\d{2}""")
++        return items
++            .filter { item -> !isSeriesLibraryType(item.type) }
++            .mapNotNull { item ->
++                val date = item.releaseInfo?.trim()?.takeIf { isoDate.containsMatchIn(it) }?.take(10)
++                    ?: return@mapNotNull null
++                if (date <= today) return@mapNotNull null
++                EpisodeReleaseNotificationRequest(
++                    requestId = "movie-release-${ProfileRepository.activeProfileId}-${item.id}",
++                    notificationTitle = item.name,
++                    notificationBody = "Out today. Tap to watch.",
++                    releaseDateIso = date,
++                    deepLinkUrl = buildMetaDeepLinkUrl(type = item.type, id = item.id),
++                    backdropUrl = item.banner ?: item.poster,
++                )
++            }
++    }
++
+     private fun inferFollowedOnIsoDate(item: LibraryItem): String {
+         if (item.savedAtEpochMs >= MinReasonableSavedAtEpochMs) {
+             return EpisodeReleaseNotificationsClock.isoDateFromEpochMs(item.savedAtEpochMs)
+@@ -392,7 +424,11 @@ object EpisodeReleaseNotificationsRepository {
+                 errorMessage = null,
+             )
+ 
+-            if (trackedShowsByKey.isEmpty()) {
++            // Fork: "Remind Me" on a Coming Soon movie saves it to the Library with its full
++            // release date in releaseInfo; each such movie gets a notification on release day.
++            val movieReminders = movieReminderRequests(currentLibraryState.items)
++
++            if (trackedShowsByKey.isEmpty() && movieReminders.isEmpty()) {
+                 runCatching { EpisodeReleaseNotificationPlatform.clearScheduledEpisodeReleaseNotifications() }
+                 _uiState.value = _uiState.value.copy(
+                     isLoading = false,
+@@ -424,8 +460,7 @@ object EpisodeReleaseNotificationsRepository {
+             cachedRequestsByShowKey = requestsByShowKey
+             persist()
+ 
+-            val requests = requestsByShowKey.values
+-                .flatten()
++            val requests = (requestsByShowKey.values.flatten() + movieReminders)
+                 .distinctBy(EpisodeReleaseNotificationRequest::requestId)
+                 .sortedBy(EpisodeReleaseNotificationRequest::releaseDateIso)
+ 

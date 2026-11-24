@@ -805,10 +805,10 @@ index 615b44ea..a1573c81 100644
                      Spacer(modifier = Modifier.width(8.dp))
                      CurrentStreamBadge(label = currentLabel)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-index 9df0fb0f..032dd1a3 100644
+index d0cfdb03..c27ec407 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/streams/StreamsScreen.kt
-@@ -798,7 +798,17 @@ internal fun StreamList(
+@@ -804,7 +804,17 @@ internal fun StreamList(
      bestStream: StreamItem? = null,
      header: (@Composable () -> Unit)? = null,
  ) {
@@ -827,7 +827,7 @@ index 9df0fb0f..032dd1a3 100644
      val hasGroups = filteredGroups.isNotEmpty()
      val hasAnyStreams = filteredGroups.any { it.streams.isNotEmpty() }
      val anyLoading = filteredGroups.any { it.isLoading }
-@@ -831,6 +841,18 @@ internal fun StreamList(
+@@ -837,6 +847,18 @@ internal fun StreamList(
          listState.scrollToItem(0)
      }
  
@@ -846,7 +846,7 @@ index 9df0fb0f..032dd1a3 100644
      CompositionLocalProvider(LocalStreamSizeLabelFormat provides formatStreamSize) {
      LazyColumn(
          state = listState,
-@@ -967,7 +989,8 @@ private fun LazyListScope.streamSection(
+@@ -973,7 +995,8 @@ private fun LazyListScope.streamSection(
      resumePositionMs: Long?,
      resumeProgressFraction: Float?,
  ) {

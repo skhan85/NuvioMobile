@@ -217,10 +217,10 @@ index 22049b9a..fbf4db14 100644
              } else {
                  MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-index 2a271bed..8aabc280 100644
+index 8feaefb0..fc3d99d3 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailHero.kt
-@@ -283,6 +283,9 @@ fun DetailHero(
+@@ -284,6 +284,9 @@ fun DetailHero(
                          )
                      }
  

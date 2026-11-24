@@ -25,7 +25,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: infuse-fork-release
+  group: infuse-fork-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -104,17 +104,97 @@ jobs:
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
 
+  test:
+    name: Verify patches and run unit tests
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out this repo (patches)
+        uses: actions/checkout@v6
+        with:
+          path: fork
+
+      - name: Check out Enhanced source
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          path: src
+          fetch-depth: 0
+
+      - name: Apply fork patches
+        working-directory: src
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          git config user.name "fork-ci"; git config user.email "fork-ci@users.noreply.github.com"
+          mkdir -p "$(git rev-parse --git-dir)/info"
+          echo '**/strings.xml merge=union' >> "$(git rev-parse --git-path info/attributes)"
+          target="$(git rev-parse HEAD)"
+          base="$(tr -d '[:space:]' < "../fork/patches/BASE" 2>/dev/null || true)"
+          if [[ -z "${base}" ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "::warning::patches/BASE is missing or unknown; applying the patches directly."
+            base="${target}"
+          fi
+          git checkout -q -B patched "${base}"
+          for patch in ../fork/patches/*.patch; do
+            name="$(basename "${patch}")"
+            if ! git apply --index "${patch}"; then
+              echo "::error::${name} does not apply to its own base ${base::10}; patches/BASE is out of date."
+              exit 1
+            fi
+            git commit -q --allow-empty -m "${name}"
+          done
+          if [[ "${base}" != "${target}" ]]; then
+            if git rebase -q --empty=drop --onto "${target}" "${base}" patched; then
+              echo "Rebased the patches from ${base::10} onto ${target::10}."
+              git log --format='  %s' "${target}..patched"
+            else
+              conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
+              files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+              git rebase --abort
+              echo "::warning::${conflict} conflicts with the new source (${files}). Waiting for the patch-update task; cancelling this run."
+              {
+                echo "### Patches need updating"
+                echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
+                echo "The scheduled patch-update task will rebase the patches and push them; the next run then builds."
+              } >> "${GITHUB_STEP_SUMMARY}"
+              gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
+              sleep 120
+              exit 1
+            fi
+          fi
+          git reset -q --soft "${target}"
+
+      - name: Prepare runtime config
+        run: touch src/local.properties
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run Kotlin unit tests
+        working-directory: src
+        run: ./gradlew :composeApp:testAndroidHostTest -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
+
   build:
     name: Build unsigned iOS IPA
-    needs: prepare
+    needs: [prepare, test]
     if: needs.prepare.outputs.build == 'true'
     runs-on: xcode-27
 
-    # Enhanced is a much bigger app than official Nuvio; its own release build allows 180 min.
-    timeout-minutes: 180
+    # Enhanced is a much bigger app than official Nuvio; give ample headroom above the ~2.5h build.
+    timeout-minutes: 240
     env:
-      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
-
       GRADLE_OPTS: -Dfile.encoding=UTF-8
       IOS_CONFIGURATION: Release
       # Same memory split as Enhanced's own iOS release build.
@@ -261,6 +341,14 @@ jobs:
             echo "kotlin.native.disableCompilerDaemon=true"
           } >> "${gradle_user_home}/gradle.properties"
           cat "${gradle_user_home}/gradle.properties"
+
+      - name: Select the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "${newest}/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Prepare iOS dependencies
         working-directory: src
