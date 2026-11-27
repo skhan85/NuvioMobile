@@ -157,14 +157,13 @@ jobs:
               conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
               files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
               git rebase --abort
-              echo "::warning::${conflict} conflicts with the new source (${files}). Waiting for the patch-update task; cancelling this run."
+              # Fork: fail (not cancel) so GitHub sends its "run failed" email; a cancelled run is silent.
+              echo "::error::Patches need updating: ${conflict} conflicts with the new source (${files})."
               {
                 echo "### Patches need updating"
                 echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
                 echo "The scheduled patch-update task will rebase the patches and push them; the next run then builds."
               } >> "${GITHUB_STEP_SUMMARY}"
-              gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
-              sleep 120
               exit 1
             fi
           fi
@@ -256,14 +255,13 @@ jobs:
               conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
               files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
               git rebase --abort
-              echo "::warning::${conflict} conflicts with the new source (${files}). Waiting for the patch-update task; cancelling this run."
+              # Fork: fail (not cancel) so GitHub sends its "run failed" email; a cancelled run is silent.
+              echo "::error::Patches need updating: ${conflict} conflicts with the new source (${files})."
               {
                 echo "### Patches need updating"
                 echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
                 echo "The scheduled patch-update task will rebase the patches and push them; the next run then builds."
               } >> "${GITHUB_STEP_SUMMARY}"
-              gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
-              sleep 120
               exit 1
             fi
           fi
