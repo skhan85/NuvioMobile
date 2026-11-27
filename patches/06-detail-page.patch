@@ -128,7 +128,7 @@ index 00000000..cfa7b21b
 +/** Fork: addon subtitles arrive out of sync in Infuse; it uses its own tracks instead. */
 +internal const val INFUSE_FORWARDS_ADDON_SUBTITLES = false
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
-index b06a0cfc..83858d35 100644
+index b06a0cfc..159b7045 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt
 @@ -55,6 +55,7 @@ import com.nuvio.app.core.ui.NuvioLoadingIndicator
@@ -139,7 +139,15 @@ index b06a0cfc..83858d35 100644
  import androidx.compose.runtime.CompositionLocalProvider
  import androidx.compose.runtime.LaunchedEffect
  import androidx.compose.runtime.State
-@@ -885,6 +886,29 @@ fun MetaDetailsScreen(
+@@ -117,6 +118,7 @@ import com.nuvio.app.features.downloads.DownloadsSettingsRepository
+ import com.nuvio.app.features.downloads.BatchQueueResult
+ import com.nuvio.app.features.downloads.BatchDownloadCoordinator
+ import com.nuvio.app.features.details.components.DetailActions
++import com.nuvio.app.features.details.components.ForkFeedbackTarget
+ import com.nuvio.app.features.details.components.CommentDetailSheet
+ import com.nuvio.app.features.details.components.DetailAdditionalInfoSection
+ import com.nuvio.app.features.details.components.DetailCastSection
+@@ -885,6 +887,29 @@ fun MetaDetailsScreen(
                          }
                      }
                  }
@@ -169,7 +177,15 @@ index b06a0cfc..83858d35 100644
                  fun runPlayAction(
                      handler: ((type: String, videoId: String, parentMetaId: String, parentMetaType: String, title: String, logo: String?, poster: String?, background: String?, seasonNumber: Int?, episodeNumber: Int?, episodeTitle: String?, episodeThumbnail: String?, pauseDescription: String?, resumePositionMs: Long?) -> Unit)?,
                      resumePositionMs: Long?,
-@@ -2624,7 +2648,7 @@ private fun ConfiguredMetaSections(
+@@ -2522,6 +2547,7 @@ private fun ConfiguredMetaSections(
+                     iconActionRow = settings.iconActionRow,
+                     userRating = userRating,
+                     onRateClick = onRateClick,
++                    forkFeedback = ForkFeedbackTarget(meta.id, meta.name, meta.type),
+                 )
+             }
+             MetaScreenSectionKey.OVERVIEW -> {
+@@ -2624,7 +2650,7 @@ private fun ConfiguredMetaSections(
                      }
                      DetailPosterRailSection(
                          title = stringResource(Res.string.details_more_like_this),
@@ -179,10 +195,114 @@ index b06a0cfc..83858d35 100644
                          fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                          showHeader = showHeader,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
-index 22049b9a..fbf4db14 100644
+index 22049b9a..9fb48f43 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt
-@@ -725,6 +725,8 @@ private fun PlayButton(
+@@ -79,6 +79,13 @@ import nuvio.composeapp.generated.resources.sidebar_library
+ import nuvio.composeapp.generated.resources.streams_open_external_player
+ import org.jetbrains.compose.resources.stringResource
+ import com.nuvio.app.core.ui.glass.ambientLiquidGlass
++import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutline
++import androidx.compose.material.icons.rounded.ThumbDown
++import androidx.compose.material.icons.rounded.ThumbUp
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.TextButton
++import androidx.lifecycle.compose.collectAsStateWithLifecycle
++import com.nuvio.app.features.home.ForkTitleFeedback
+ import com.nuvio.app.core.ui.glass.isAmbientLiquidGlassActive
+ 
+ data class DetailSecondaryAction(
+@@ -372,6 +379,7 @@ fun DetailActions(
+     iconActionRow: Boolean = false,
+     userRating: Int? = null,
+     onRateClick: (() -> Unit)? = null,
++    forkFeedback: ForkFeedbackTarget? = null,
+ ) {
+     val actionSet = detailActionSet(
+         isSaved = isSaved,
+@@ -388,7 +396,9 @@ fun DetailActions(
+     val shuffleAction = actionSet.shuffle
+     val watchedAction = actionSet.watched
+     val saveAction = actionSet.save
+-    val iconActions = actionSet.icons
++    // Fork: Like / Not interested, for Home's recommendations.
++    val feedbackAction = forkFeedback?.let { rememberForkFeedbackAction(it) }
++    val iconActions = actionSet.icons + listOfNotNull(feedbackAction)
+     DetailActionButtons(
+         playLabel = if (playEnabled) playLabel else stringResource(Res.string.playback_unavailable),
+         playEnabled = playEnabled,
+@@ -399,6 +409,7 @@ fun DetailActions(
+             if (!shuffleEnabled) shuffleAction?.let(::add)
+             add(watchedAction)
+             add(saveAction)
++            feedbackAction?.let(::add)
+         },
+         isTablet = isTablet,
+         onPlayClick = onPlayClick,
+@@ -409,6 +420,62 @@ fun DetailActions(
+     )
+ }
+ 
++/** Fork: the title the Like / Not interested button rates. */
++data class ForkFeedbackTarget(val id: String, val name: String, val type: String)
++
++/**
++ * Fork: the Rate action (thumbs up / down, see [ForkTitleFeedback]) and its choice dialog.
++ * Likes add a "Because you liked" row on Home; "Not for me" keeps a title out of the
++ * recommendations, Coming Soon and Play Something.
++ */
++@Composable
++private fun rememberForkFeedbackAction(target: ForkFeedbackTarget): DetailSecondaryAction {
++    val entries by remember {
++        ForkTitleFeedback.ensureLoaded()
++        ForkTitleFeedback.entries
++    }.collectAsStateWithLifecycle()
++    val value = entries.firstOrNull { ForkTitleFeedback.matches(it.id, target.id) }?.value
++    var showChoices by remember { mutableStateOf(false) }
++    if (showChoices) {
++        val choose: (Int?) -> Unit = { choice ->
++            ForkTitleFeedback.set(target.id, target.name, target.type, choice)
++            showChoices = false
++        }
++        AlertDialog(
++            onDismissRequest = { showChoices = false },
++            title = { Text(target.name) },
++            text = {
++                Column {
++                    Text("Likes add a \"Because you liked\" row on Home. \"Not for me\" keeps a title out of your recommendations and Play Something.")
++                    Spacer(Modifier.height(12.dp))
++                    TextButton(onClick = { choose(ForkTitleFeedback.LIKED) }) { Text("I Like This") }
++                    TextButton(onClick = { choose(ForkTitleFeedback.NOT_INTERESTED) }) { Text("Not for Me") }
++                    if (value != null) {
++                        TextButton(onClick = { choose(null) }) { Text("Clear Rating") }
++                    }
++                }
++            },
++            confirmButton = {
++                TextButton(onClick = { showChoices = false }) { Text("Cancel") }
++            },
++        )
++    }
++    return DetailSecondaryAction(
++        label = when (value) {
++            ForkTitleFeedback.LIKED -> "Liked"
++            ForkTitleFeedback.NOT_INTERESTED -> "Not for Me"
++            else -> "Rate"
++        },
++        icon = when (value) {
++            ForkTitleFeedback.LIKED -> Icons.Rounded.ThumbUp
++            ForkTitleFeedback.NOT_INTERESTED -> Icons.Rounded.ThumbDown
++            else -> Icons.Outlined.ThumbUpOutline
++        },
++        isActive = value != null,
++        onClick = { showChoices = true },
++    )
++}
++
+ private class DetailActionSet(
+     val shuffle: DetailSecondaryAction?,
+     val watched: DetailSecondaryAction,
+@@ -725,6 +792,8 @@ private fun PlayButton(
      onPlayLongClick: (() -> Unit)?,
      modifier: Modifier = Modifier,
  ) {
@@ -191,7 +311,7 @@ index 22049b9a..fbf4db14 100644
          Surface(
              modifier = modifier
                  .height(buttonHeight)
-@@ -732,14 +734,22 @@ private fun PlayButton(
+@@ -732,14 +801,22 @@ private fun PlayButton(
                      if (playEnabled) {
                          Modifier
                              .clip(playShape)

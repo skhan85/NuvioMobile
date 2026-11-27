@@ -144,10 +144,10 @@ index 00000000..ef5a3420
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
 new file mode 100644
-index 00000000..cfe5f083
+index 00000000..7f6d7d6f
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkHomeRows.kt
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,228 @@
 +package com.nuvio.app.features.home
 +
 +import com.nuvio.app.features.catalog.CatalogTarget
@@ -172,27 +172,60 @@ index 00000000..cfe5f083
 +    private var becauseRows: List<HomeCatalogSection> = emptyList()
 +
 +    suspend fun becauseYouWatched(maxRows: Int = 2): List<HomeCatalogSection> {
++        // Fork: Like / Not interested (ForkTitleFeedback) shape the rows too.
++        ForkTitleFeedback.ensureLoaded()
++        val feedback = ForkTitleFeedback.entries.value
 +        val watched = WatchedRepository.uiState.value.items
 +        val seeds = watched
 +            .filter { it.type == "movie" || it.type == "series" }
++            .filterNot { ForkTitleFeedback.isNotInterested(it.id, feedback) }
 +            .sortedByDescending { it.markedAtEpochMs }
 +            .distinctBy { it.id }
 +            .take(maxRows)
-+        if (seeds.isEmpty()) return emptyList()
-+        val signature = seeds.joinToString("|") { it.id }
++        // The newest liked title that isn't already a watched seed starts its own row.
++        val likedSeed = ForkTitleFeedback.liked(feedback)
++            .firstOrNull { liked -> seeds.none { ForkTitleFeedback.matches(it.id, liked.id) } }
++            ?.takeIf { it.type == "movie" || it.type == "series" }
++        if (seeds.isEmpty() && likedSeed == null) return emptyList()
++        val signature = (listOfNotNull(likedSeed?.id) + seeds.map { it.id }).joinToString("|") +
++            "#" + feedback.joinToString(",") { "${it.id}=${it.value}" }
 +        mutex.withLock { if (signature == becauseSignature) return becauseRows }
++
++        // What TMDB recommends for liked titles comes first in every row; what it finds similar
++        // to titles marked "Not interested" goes last.
++        val boosted = ForkTitleFeedback.liked(feedback).take(3)
++            .flatMap { TmdbMetadataService.recommendationsFor(it.id, it.type) }
++            .mapTo(mutableSetOf()) { it.id }
++        val sunk = ForkTitleFeedback.notInterested(feedback).take(3)
++            .filter { it.type == "movie" || it.type == "series" }
++            .flatMap { TmdbMetadataService.recommendationsFor(it.id, it.type) }
++            .mapTo(mutableSetOf()) { it.id }
++        fun ordered(items: List<MetaPreview>): List<MetaPreview> {
++            val visible = ForkTitleFeedback.visible(items, feedback)
++            val first = visible.filter { it.id in boosted && it.id !in sunk }
++            val last = visible.filter { it.id in sunk && it.id !in boosted }
++            return first + visible.filter { it !in first && it !in last } + last
++        }
++
++        class Anchor(val id: String, val name: String, val type: String, val title: String)
++        val anchors = listOfNotNull(
++            likedSeed?.let { Anchor(it.id, it.name, it.type, "Because you liked ${it.name}") },
++        ) + seeds.map { Anchor(it.id, it.name, it.type, "Because you watched ${it.name}") }
 +
 +        val seenIds = watched.map { it.id }.toSet()
 +        val seenNames = watched.map { it.name.trim().lowercase() }.toSet()
 +        val usedIds = mutableSetOf<String>()
-+        val rows = seeds.mapNotNull { seed ->
-+            val items = TmdbMetadataService.recommendationsFor(seed.id, seed.type)
-+                .filter { it.id !in seenIds && it.name.trim().lowercase() !in seenNames && usedIds.add(it.id) }
++        val rows = anchors.mapNotNull { anchor ->
++            val items = ordered(TmdbMetadataService.recommendationsFor(anchor.id, anchor.type))
++                .filter {
++                    it.id !in seenIds && it.id != anchor.id &&
++                        it.name.trim().lowercase() !in seenNames && usedIds.add(it.id)
++                }
 +            if (items.size < 4) return@mapNotNull null
 +            section(
-+                key = BECAUSE_KEY_PREFIX + seed.id,
-+                title = "Because you watched ${seed.name}",
-+                type = seed.type,
++                key = BECAUSE_KEY_PREFIX + anchor.id,
++                title = anchor.title,
++                type = anchor.type,
 +                items = items,
 +            )
 +        }
@@ -1176,10 +1209,10 @@ index 00000000..fe24b8e6
 +}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
 new file mode 100644
-index 00000000..63921435
+index 00000000..236d539d
 --- /dev/null
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkPlaySomething.kt
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,108 @@
 +package com.nuvio.app.features.home
 +
 +import androidx.compose.foundation.background
@@ -1224,7 +1257,10 @@ index 00000000..63921435
 +
 +    fun pick(continueWatching: List<ContinueWatchingItem>, top10: List<MetaPreview>): Pick? {
 +        val today = CurrentDateProvider.todayIsoDate()
-+        val resumable = continueWatching.filter { it.parentMetaId != lastPickedId }
++        // Fork: never a title marked "Not interested".
++        val resumable = continueWatching.filter {
++            it.parentMetaId != lastPickedId && !ForkTitleFeedback.isNotInterested(it.parentMetaId)
++        }
 +        val inProgress = continueWatching.mapTo(mutableSetOf()) { it.parentMetaId }
 +        val library = runCatching { LibraryRepository.uiState.value.items.map { it.toMetaPreview() } }
 +            .getOrDefault(emptyList())
@@ -1234,6 +1270,7 @@ index 00000000..63921435
 +                meta.type.equals("movie", ignoreCase = true) &&
 +                    meta.id.startsWith("tt") &&
 +                    meta.id != lastPickedId &&
++                    !ForkTitleFeedback.isNotInterested(meta.id) &&
 +                    meta.id !in inProgress &&
 +                    !meta.isUnreleased(today) &&
 +                    !runCatching { WatchedRepository.isWatched(id = meta.id, type = meta.type) }.getOrDefault(false)
@@ -1284,6 +1321,109 @@ index 00000000..63921435
 +        )
 +    }
 +}
+diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkTitleFeedback.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkTitleFeedback.kt
+new file mode 100644
+index 00000000..225c6bf7
+--- /dev/null
++++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/ForkTitleFeedback.kt
+@@ -0,0 +1,97 @@
++package com.nuvio.app.features.home
++
++import com.nuvio.app.features.profiles.ProfileRepository
++import com.nuvio.app.features.watchprogress.WatchProgressClock
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.decodeFromString
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++
++/** Fork: one Like / Not interested vote (see [ForkTitleFeedback]). */
++@Serializable
++data class ForkFeedbackEntry(
++    val id: String,
++    val name: String,
++    val type: String,
++    /** [ForkTitleFeedback.LIKED] or [ForkTitleFeedback.NOT_INTERESTED]. */
++    val value: Int,
++    val atEpochMs: Long,
++)
++
++/**
++ * Fork: thumbs up / down per title, from the Rate button on the details page (idea from Notflix).
++ * Per profile, device-local (`fork_title_feedback_<profile index>`).
++ *  - Liked titles get a "Because you liked …" row on Home, and titles TMDB recommends for them
++ *    move to the front of the other "Because you watched" rows.
++ *  - "Not interested" titles leave the Because rows, Coming Soon and Play Something, never start
++ *    a Because row, and titles TMDB finds similar to one sink to the end of the Because rows.
++ */
++object ForkTitleFeedback {
++    const val LIKED = 1
++    const val NOT_INTERESTED = -1
++    private const val MAX_ENTRIES = 300
++    private const val KEY_PREFIX = "fork_title_feedback_"
++
++    private val json = Json { ignoreUnknownKeys = true }
++    private val _entries = MutableStateFlow<List<ForkFeedbackEntry>>(emptyList())
++    /** The active profile's votes, newest first. */
++    val entries: StateFlow<List<ForkFeedbackEntry>> = _entries.asStateFlow()
++    private var loadedProfile: Int? = null
++
++    private fun activeProfile(): Int =
++        runCatching { ProfileRepository.state.value.activeProfile?.profileIndex }.getOrNull() ?: 1
++
++    /** Loads the active profile's votes (again after a profile switch). */
++    fun ensureLoaded(profileIndex: Int = activeProfile()) {
++        if (loadedProfile == profileIndex) return
++        loadedProfile = profileIndex
++        val raw = ForkHomeSettingsStorage.loadForkString(KEY_PREFIX + profileIndex)
++        _entries.value = raw?.let {
++            runCatching { json.decodeFromString<List<ForkFeedbackEntry>>(it) }.getOrNull()
++        } ?: emptyList()
++    }
++
++    /** The ids a title can appear under ("tt123:1:2" also matches "tt123"). */
++    private fun key(id: String): String =
++        if (id.startsWith("tt")) id.substringBefore(':') else id
++
++    fun valueFor(id: String): Int? {
++        ensureLoaded()
++        val k = key(id)
++        return _entries.value.firstOrNull { key(it.id) == k }?.value
++    }
++
++    fun set(id: String, name: String, type: String, value: Int?) {
++        val profile = activeProfile()
++        ensureLoaded(profile)
++        val k = key(id)
++        val kept = _entries.value.filterNot { key(it.id) == k }
++        val updated = (if (value == null) kept else {
++            listOf(ForkFeedbackEntry(id, name, type, value, WatchProgressClock.nowEpochMs())) + kept
++        }).take(MAX_ENTRIES)
++        _entries.value = updated
++        ForkHomeSettingsStorage.saveForkString(KEY_PREFIX + profile, json.encodeToString(updated))
++    }
++
++    fun liked(entries: List<ForkFeedbackEntry>): List<ForkFeedbackEntry> = entries.filter { it.value == LIKED }
++    fun notInterested(entries: List<ForkFeedbackEntry>): List<ForkFeedbackEntry> =
++        entries.filter { it.value == NOT_INTERESTED }
++
++    fun notInterestedKeys(entries: List<ForkFeedbackEntry>): Set<String> =
++        notInterested(entries).mapTo(mutableSetOf()) { key(it.id) }
++
++    fun isNotInterested(id: String, entries: List<ForkFeedbackEntry> = _entries.value): Boolean =
++        key(id) in notInterestedKeys(entries)
++
++    /** Drops the titles marked "Not interested". */
++    fun visible(items: List<MetaPreview>, entries: List<ForkFeedbackEntry> = _entries.value): List<MetaPreview> {
++        val hidden = notInterestedKeys(entries)
++        if (hidden.isEmpty()) return items
++        return items.filterNot { key(it.id) in hidden }
++    }
++
++    internal fun matches(a: String, b: String): Boolean = key(a) == key(b)
++}
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 index c93a0eca..965b30fa 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
@@ -1319,7 +1459,7 @@ index c93a0eca..965b30fa 100644
          val profileKey = HomeSnapshotStore.currentProfileKey() ?: return
          preloadedSnapshot = HomeSnapshotStore.load(profileKey)
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
-index 13c4b20a..86e25ea1 100644
+index 13c4b20a..22f1ba0b 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/HomeScreen.kt
 @@ -1,12 +1,18 @@
@@ -1341,7 +1481,7 @@ index 13c4b20a..86e25ea1 100644
  import androidx.compose.foundation.lazy.LazyListScope
  import androidx.compose.foundation.lazy.LazyListState
  import androidx.compose.foundation.lazy.rememberLazyListState
-@@ -342,6 +348,47 @@ fun HomeScreen(
+@@ -342,6 +348,52 @@ fun HomeScreen(
      var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
      var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }
  
@@ -1353,7 +1493,12 @@ index 13c4b20a..86e25ea1 100644
 +        ForkHomeSettings.ensureLoaded()
 +        ForkHomeSettings.becauseRowsEnabled
 +    }.collectAsStateWithLifecycle()
-+    LaunchedEffect(activeProfileId, latestWatchedId, watchedUiState.isLoaded, becauseRowsEnabled) {
++    // Fork: Like / Not interested votes (re-read after a profile switch).
++    val forkFeedback by remember(activeProfileId) {
++        ForkTitleFeedback.ensureLoaded(activeProfileId)
++        ForkTitleFeedback.entries
++    }.collectAsStateWithLifecycle()
++    LaunchedEffect(activeProfileId, latestWatchedId, watchedUiState.isLoaded, becauseRowsEnabled, forkFeedback) {
 +        forkRows = if (!becauseRowsEnabled) emptyList()
 +        else runCatching { ForkHomeRows.becauseYouWatched(2) }.getOrDefault(emptyList())
 +    }
@@ -1389,7 +1534,7 @@ index 13c4b20a..86e25ea1 100644
      LaunchedEffect(activeProfileId, continueWatchingListState) {
          snapshotFlow { continueWatchingListState.isScrollInProgress }.collect { isScrolling ->
              if (isScrolling) hasUserScrolledContinueWatching = true
-@@ -571,6 +618,20 @@ fun HomeScreen(
+@@ -571,6 +623,20 @@ fun HomeScreen(
      val shuffledContinueWatchingItems = remember(rawShuffledContinueWatchingItems, cwPosterPattern) {
          rawShuffledContinueWatchingItems.withCustomPosterUrls(cwPosterPattern)
      }
@@ -1410,7 +1555,7 @@ index 13c4b20a..86e25ea1 100644
      val (continueWatchingItems, upcomingItems) = remember(
          shuffledContinueWatchingItems,
          continueWatchingPreferences.sortMode,
-@@ -919,9 +980,12 @@ fun HomeScreen(
+@@ -919,9 +985,12 @@ fun HomeScreen(
      val collectionsMap = remember(visibleCollections) {
          visibleCollections.associateBy { "collection_${it.id}" }
      }
@@ -1425,7 +1570,7 @@ index 13c4b20a..86e25ea1 100644
      val enabledHomeItems = remember(homeSettingsUiState.items) {
          homeSettingsUiState.items.filter { it.enabled }
      }
-@@ -1017,9 +1081,16 @@ fun HomeScreen(
+@@ -1017,9 +1086,16 @@ fun HomeScreen(
              { url -> activeHeroArtworkUrl = url }
          }
  
@@ -1444,7 +1589,7 @@ index 13c4b20a..86e25ea1 100644
                  horizontalPadding = 0.dp,
                  topPadding = if (showHeroSlot) 0.dp else null,
                  listState = homeListState,
-@@ -1074,6 +1145,22 @@ fun HomeScreen(
+@@ -1074,6 +1150,22 @@ fun HomeScreen(
                      }
                  }
  
@@ -1467,7 +1612,7 @@ index 13c4b20a..86e25ea1 100644
                  when {
                      isInitialHomeContentLoading -> {
                          homeContinueWatchingSections(
-@@ -1202,6 +1289,47 @@ fun HomeScreen(
+@@ -1202,6 +1294,49 @@ fun HomeScreen(
                          disintegrationRequest = continueWatchingDisintegrationRequest,
                          )
  
@@ -1494,6 +1639,8 @@ index 13c4b20a..86e25ea1 100644
 +                        // so "Hide unreleased content" leaves it alone). Hold a title for Remind Me.
 +                        val forkVisibleRows = forkFilteredRows + if (forkComingSoonEnabled) {
 +                            listOfNotNull(forkTrendingRows?.comingSoon).forkKids(forkKidsFilter)
++                                // Fork: without titles marked "Not interested".
++                                .map { it.copy(items = ForkTitleFeedback.visible(it.items, forkFeedback)) }
 +                        } else {
 +                            emptyList()
 +                        }
@@ -1515,7 +1662,7 @@ index 13c4b20a..86e25ea1 100644
                          keyedEnabledHomeItems.forEach { keyedSettingsItem ->
                              val settingsItem = keyedSettingsItem.value
                              if (settingsItem.isCollection) {
-@@ -1243,6 +1371,9 @@ fun HomeScreen(
+@@ -1243,6 +1378,9 @@ fun HomeScreen(
                      }
                  }
              }
@@ -1525,7 +1672,7 @@ index 13c4b20a..86e25ea1 100644
          }
      }
  }
-@@ -1710,6 +1841,19 @@ internal fun buildHomeContinueWatchingItems(
+@@ -1710,6 +1848,19 @@ internal fun buildHomeContinueWatchingItems(
              val key = candidate.item.parentMetaId.ifBlank { candidate.item.videoId }
              seen.add(key)
          }

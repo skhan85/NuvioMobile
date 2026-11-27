@@ -482,10 +482,10 @@ index abb8ca38..7b8bb138 100644
  private fun ArtworkPanel(
      imageUrl: String?,
 diff --git a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-index e575e2d3..d9f007de 100644
+index 340dccee..3ec6b403 100644
 --- a/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
 +++ b/composeApp/src/commonMain/kotlin/com/nuvio/app/features/home/components/HomeHeroSection.kt
-@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
+@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
  import androidx.compose.ui.text.style.TextOverflow
  import androidx.compose.ui.unit.Dp
  import androidx.compose.ui.unit.dp
@@ -493,7 +493,7 @@ index e575e2d3..d9f007de 100644
  import androidx.lifecycle.compose.collectAsStateWithLifecycle
  import coil3.SingletonImageLoader
  import coil3.compose.AsyncImage
-@@ -693,8 +694,10 @@ private fun HeroPageIndicator(
+@@ -700,8 +701,10 @@ private fun HeroPageIndicator(
      pagerState: PagerState,
      coroutineScope: CoroutineScope,
  ) {
@@ -505,7 +505,7 @@ index e575e2d3..d9f007de 100644
          verticalAlignment = Alignment.CenterVertically,
      ) {
          repeat(itemCount) { index ->
-@@ -708,13 +711,14 @@ private fun HeroPageIndicator(
+@@ -715,13 +718,14 @@ private fun HeroPageIndicator(
                              )
                          }
                      }
@@ -523,7 +523,7 @@ index e575e2d3..d9f007de 100644
              )
          }
      }
-@@ -822,6 +826,31 @@ private fun HeroContentBlock(
+@@ -829,6 +833,31 @@ private fun HeroContentBlock(
              .animateContentSize(),
          horizontalAlignment = if (layout.isTablet) Alignment.Start else Alignment.CenterHorizontally,
      ) {
@@ -555,7 +555,7 @@ index e575e2d3..d9f007de 100644
          if (logoUrl != null && !logoLoadError) {
              AsyncImage(
                  model = logoUrl,
-@@ -892,6 +921,46 @@ private fun HeroContentBlock(
+@@ -899,6 +928,46 @@ private fun HeroContentBlock(
              showMdbListRatings = showMdbListRatings,
          )
  
