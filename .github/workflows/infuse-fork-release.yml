@@ -157,8 +157,29 @@ jobs:
               conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
               files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
               git rebase --abort
-              # Fork: fail (not cancel) so GitHub sends its "run failed" email; a cancelled run is silent.
-              echo "::error::Patches need updating: ${conflict} conflicts with the new source (${files})."
+              # Fork: a clash gets 36 hours for the scheduled patch-update task to fix it. Until then
+              # the run is cancelled quietly (the installed app stays on the last build); after that it
+              # fails, so GitHub sends its "run failed" email. The clock starts at the first upstream
+              # commit not in the newest release.
+              last_sha="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=30" --jq 'sort_by(.published_at)|reverse|.[0].tag_name // ""' | sed -E 's/.*\.([0-9a-f]{7})\.[0-9a-f]+$/\1/')"
+              since="$(git log -1 --format=%ct "${target}")"
+              if [[ -n "${last_sha}" ]] && git cat-file -e "${last_sha}^{commit}" 2>/dev/null; then
+                first="$(git rev-list --reverse "${last_sha}..${target}" | head -1)"
+                [[ -n "${first}" ]] && since="$(git log -1 --format=%ct "${first}")"
+              fi
+              stuck_h=$(( ( $(date +%s) - since ) / 3600 ))
+              if (( stuck_h < 36 )); then
+                echo "::warning::Patches need updating: ${conflict} conflicts with the new source (${files}). Waiting for the patch-update task (${stuck_h} of 36 h); cancelling quietly."
+                {
+                  echo "### Patches need updating"
+                  echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
+                  echo "The scheduled patch-update task will rebase the patches and push them; the next run then builds."
+                } >> "${GITHUB_STEP_SUMMARY}"
+                gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
+                sleep 120
+                exit 1
+              fi
+              echo "::error::Patches need updating: ${conflict} conflicts with the new source (${files}), unfixed for ${stuck_h} h."
               {
                 echo "### Patches need updating"
                 echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
@@ -255,8 +276,29 @@ jobs:
               conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
               files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
               git rebase --abort
-              # Fork: fail (not cancel) so GitHub sends its "run failed" email; a cancelled run is silent.
-              echo "::error::Patches need updating: ${conflict} conflicts with the new source (${files})."
+              # Fork: a clash gets 36 hours for the scheduled patch-update task to fix it. Until then
+              # the run is cancelled quietly (the installed app stays on the last build); after that it
+              # fails, so GitHub sends its "run failed" email. The clock starts at the first upstream
+              # commit not in the newest release.
+              last_sha="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=30" --jq 'sort_by(.published_at)|reverse|.[0].tag_name // ""' | sed -E 's/.*\.([0-9a-f]{7})\.[0-9a-f]+$/\1/')"
+              since="$(git log -1 --format=%ct "${target}")"
+              if [[ -n "${last_sha}" ]] && git cat-file -e "${last_sha}^{commit}" 2>/dev/null; then
+                first="$(git rev-list --reverse "${last_sha}..${target}" | head -1)"
+                [[ -n "${first}" ]] && since="$(git log -1 --format=%ct "${first}")"
+              fi
+              stuck_h=$(( ( $(date +%s) - since ) / 3600 ))
+              if (( stuck_h < 36 )); then
+                echo "::warning::Patches need updating: ${conflict} conflicts with the new source (${files}). Waiting for the patch-update task (${stuck_h} of 36 h); cancelling quietly."
+                {
+                  echo "### Patches need updating"
+                  echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
+                  echo "The scheduled patch-update task will rebase the patches and push them; the next run then builds."
+                } >> "${GITHUB_STEP_SUMMARY}"
+                gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
+                sleep 120
+                exit 1
+              fi
+              echo "::error::Patches need updating: ${conflict} conflicts with the new source (${files}), unfixed for ${stuck_h} h."
               {
                 echo "### Patches need updating"
                 echo "\`${conflict}\` conflicts with ${target::10} in: ${files}"
